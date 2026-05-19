@@ -124,11 +124,7 @@ function PromptWorkbenchApp() {
       <div className="app-frame">
         <header className="global-bar">
           <div className="global-bar__brand">
-            <span className="eyebrow">Codex Prompt Workbench</span>
             <h1 className="global-bar__title">Prompt Workbench</h1>
-            <p className="global-bar__subtitle">
-              用工作台方式组合、预览并应用用户级 Codex 提示词。
-            </p>
           </div>
 
           <div className="global-bar__status" aria-label="当前上下文">
