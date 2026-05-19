@@ -13,6 +13,7 @@ dist-ssr
 *.local
 .playwright-mcp/
 docs/plans/
+src-tauri/gen/
 src-tauri/target/
 
 # Editor directories and files
