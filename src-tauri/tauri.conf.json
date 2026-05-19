@@ -1,0 +1,26 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Prompt Workbench",
+  "version": "0.1.0",
+  "identifier": "com.xinghunm.ai-compose",
+  "build": {
+    "beforeDevCommand": "pnpm dev --host 0.0.0.0 --port 1420",
+    "beforeBuildCommand": "pnpm build",
+    "devUrl": "http://127.0.0.1:1420",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Prompt Workbench",
+        "width": 1440,
+        "height": 960,
+        "minWidth": 1200,
+        "minHeight": 820
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  }
+}
