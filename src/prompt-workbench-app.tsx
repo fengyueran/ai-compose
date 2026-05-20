@@ -1049,6 +1049,7 @@ function PromptWorkbenchApp() {
                         padding: "12px",
                         borderRadius: "8px",
                         overflowX: "auto",
+                        maxWidth: "100%",
                         fontFamily: "monospace",
                         fontSize: "13px",
                         color: "var(--text-bright)",

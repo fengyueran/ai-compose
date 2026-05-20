@@ -516,6 +516,7 @@
   align-self: start;
   height: calc(100dvh - 56px);
   min-height: 0;
+  min-width: 0;
 }
 
 .preview-card {
@@ -524,15 +525,18 @@
   flex-direction: column;
   padding: 18px;
   min-height: 0;
+  min-width: 0;
 }
 
 .preview-card__body {
   flex: 1;
   margin-top: 16px;
   min-height: 0;
+  min-width: 0;
   overflow: auto;
   padding: 18px;
   border-radius: 22px;
+  max-width: 100%;
   background: linear-gradient(
     180deg,
     rgba(255, 255, 255, 0.86) 0%,
