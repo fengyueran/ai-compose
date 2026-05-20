@@ -773,8 +773,8 @@ function PromptWorkbenchApp() {
                           type="button"
                         >
                           {selectedMcpServer.enabled
-                            ? (selectedMcpServer.source === "user" ? "停用该服务" : "从最终 MCP 移除")
-                            : (selectedMcpServer.source === "user" ? "启用该服务" : "加入最终 MCP")}
+                            ? "停用该服务"
+                            : "启用该服务"}
                         </button>
                       )
                     )}
