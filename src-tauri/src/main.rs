@@ -250,8 +250,19 @@ fn apply_mcp_to_editor_target(payload: ApplyMcpPayload) -> Result<ApplyMcpResult
                 }
             }
 
-            let next_content = toml::to_string_pretty(&toml_root)
+            let mut next_content = toml::to_string_pretty(&toml_root)
                 .map_err(|error| format!("序列化 TOML 失败：{error}"))?;
+
+            // 确保输出的文件中必定有 [mcp_servers] 这个总表头
+            if !next_content.contains("[mcp_servers]") {
+                if next_content.contains("[mcp_servers.") {
+                    next_content = next_content.replace("[mcp_servers.", "[mcp_servers]\n\n[mcp_servers.");
+                } else if next_content.contains("mcp_servers = {}") {
+                    next_content = next_content.replace("mcp_servers = {}", "[mcp_servers]");
+                } else {
+                    next_content.push_str("\n[mcp_servers]\n");
+                }
+            }
 
             fs::write(&target_path, next_content)
                 .map_err(|error| format!("写入 Codex 配置文件失败：{error}"))?;
