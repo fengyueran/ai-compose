@@ -253,10 +253,10 @@ fn apply_mcp_to_editor_target(payload: ApplyMcpPayload) -> Result<ApplyMcpResult
             let mut next_content = toml::to_string_pretty(&toml_root)
                 .map_err(|error| format!("序列化 TOML 失败：{error}"))?;
 
-            // 确保输出的文件中必定有 [mcp_servers] 这个总表头
+            // 确保输出的文件中级联只在最上方第一个服务前有唯一的 [mcp_servers] 总表头
             if !next_content.contains("[mcp_servers]") {
                 if next_content.contains("[mcp_servers.") {
-                    next_content = next_content.replace("[mcp_servers.", "[mcp_servers]\n\n[mcp_servers.");
+                    next_content = next_content.replacen("[mcp_servers.", "[mcp_servers]\n\n[mcp_servers.", 1);
                 } else if next_content.contains("mcp_servers = {}") {
                     next_content = next_content.replace("mcp_servers = {}", "[mcp_servers]");
                 } else {
