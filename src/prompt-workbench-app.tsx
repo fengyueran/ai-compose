@@ -932,8 +932,8 @@ function PromptWorkbenchApp() {
                               style={{
                                 alignSelf: "flex-start",
                                 background: "rgba(255, 140, 0, 0.1)",
-                                border: "1px dashed var(--accent-color)",
-                                color: "var(--accent-color)",
+                                border: "1px dashed var(--accent)",
+                                color: "var(--accent)",
                                 padding: "4px 8px",
                                 borderRadius: "4px",
                                 fontSize: "12px",
@@ -972,7 +972,7 @@ function PromptWorkbenchApp() {
                           style={{
                             background: isExternalServer 
                               ? "var(--surface-container-high)" 
-                              : "linear-gradient(135deg, var(--accent-color) 0%, #ff8c00 100%)",
+                              : "linear-gradient(135deg, var(--accent) 0%, #ff8c00 100%)",
                             border: "none",
                             color: isExternalServer ? "var(--text-faint)" : "#fff",
                             padding: "6px 12px",

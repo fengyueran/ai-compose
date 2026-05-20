@@ -66,5 +66,31 @@ describe('Prompt Workbench', () => {
     expect(screen.getByText(/\[mcp_servers\.context7\]/)).toBeInTheDocument()
     expect(screen.getByText(/\[mcp_servers\.playwright\]/)).toBeInTheDocument()
   })
+
+  test('adds a custom MCP server and saves it with correct style variables', async () => {
+    render(<PromptWorkbenchApp />)
+
+    // 切换到 MCP 配置域
+    await userEvent.click(screen.getByRole('button', { name: 'MCP' }))
+
+    // 点击 “+ 添加自定义” 按钮
+    const addBtn = screen.getByRole('button', { name: '+ 添加自定义' })
+    await userEvent.click(addBtn)
+
+    // 此时表单应该呈现 “添加自定义 MCP” 的标题
+    expect(screen.getByText('添加自定义 MCP')).toBeInTheDocument()
+
+    // 检查 “+ 添加环境变量” 按钮的 style 是否使用了正确的变量，避免 `--accent-color`
+    const addEnvBtn = screen.getByRole('button', { name: '+ 添加环境变量' })
+    expect(addEnvBtn).toBeInTheDocument()
+    expect(addEnvBtn.style.color).toBe('var(--accent)')
+    expect(addEnvBtn.style.border).toContain('var(--accent)')
+
+    // 检查 “创建服务” 按钮的 style 是否使用了正确的变量
+    const createBtn = screen.getByRole('button', { name: '创建服务' })
+    expect(createBtn).toBeInTheDocument()
+    expect(createBtn.style.background).toContain('var(--accent)')
+  })
 })
+
 
