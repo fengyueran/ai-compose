@@ -241,13 +241,6 @@ fn apply_mcp_to_editor_target(payload: ApplyMcpPayload) -> Result<ApplyMcpResult
             let begin_marker = "# === BEGIN AI-COMPOSE MCP ===";
             let end_marker = "# === END AI-COMPOSE MCP ===";
 
-            // 构造需要写入的受管标记块
-            let block_to_write = if fragment.is_empty() {
-                format!("{}\n{}", begin_marker, end_marker)
-            } else {
-                format!("{}\n{}\n{}", begin_marker, fragment, end_marker)
-            };
-
             let mut toml_str = if target_path.exists() {
                 fs::read_to_string(&target_path)
                     .map_err(|error| format!("读取 Codex 配置文件失败：{error}"))?
@@ -256,46 +249,63 @@ fn apply_mcp_to_editor_target(payload: ApplyMcpPayload) -> Result<ApplyMcpResult
             };
 
             if toml_str.contains(begin_marker) && toml_str.contains(end_marker) {
-                // 分支 1：存在边界标记，直接进行无痛局部字符串范围替换，保留 100% 原始注释与格式
+                // 分支 1：存在边界标记
                 let start_idx = toml_str.find(begin_marker).unwrap();
                 let end_idx = toml_str.find(end_marker).unwrap() + end_marker.len();
-                toml_str.replace_range(start_idx..end_idx, &block_to_write);
-            } else {
-                // 分支 2：没有标记，先做一次性的清理并创建标记块，以保证兼容升级
-                let mut toml_root = toml::from_str::<toml::Value>(&toml_str)
-                    .unwrap_or_else(|_| toml::Value::Table(toml::map::Map::new()));
                 
-                if let Some(root_table) = toml_root.as_table_mut() {
-                    if let Some(mcp_servers_val) = root_table.get_mut("mcp_servers") {
-                        if let Some(mcp_servers_table) = mcp_servers_val.as_table_mut() {
-                            for name in &managed_names {
-                                mcp_servers_table.remove(name);
+                if fragment.is_empty() {
+                    // 如果要写入的配置为空，说明需要全部清除。我们直接把整个包含边界的块全部抹除！
+                    let mut delete_range = start_idx..end_idx;
+                    // 防御性处理：顺便删掉末尾多余的一个换行
+                    if end_idx < toml_str.len() && toml_str.as_bytes()[end_idx] == b'\n' {
+                        delete_range = start_idx..(end_idx + 1);
+                    }
+                    toml_str.replace_range(delete_range, "");
+                } else {
+                    // 有内容，正常更新受管块
+                    let block_to_write = format!("{}\n{}\n{}", begin_marker, fragment, end_marker);
+                    toml_str.replace_range(start_idx..end_idx, &block_to_write);
+                }
+            } else {
+                // 分支 2：没有标记，只有在需要写入内容时才创建标记块
+                if !fragment.is_empty() {
+                    let block_to_write = format!("{}\n{}\n{}", begin_marker, fragment, end_marker);
+                    
+                    let mut toml_root = toml::from_str::<toml::Value>(&toml_str)
+                        .unwrap_or_else(|_| toml::Value::Table(toml::map::Map::new()));
+                    
+                    if let Some(root_table) = toml_root.as_table_mut() {
+                        if let Some(mcp_servers_val) = root_table.get_mut("mcp_servers") {
+                            if let Some(mcp_servers_table) = mcp_servers_val.as_table_mut() {
+                                for name in &managed_names {
+                                    mcp_servers_table.remove(name);
+                                }
                             }
                         }
                     }
-                }
-                
-                let mut clean_toml = toml::to_string_pretty(&toml_root)
-                    .map_err(|error| format!("序列化 TOML 失败：{error}"))?;
-                
-                if !clean_toml.contains("[mcp_servers]") {
-                    if clean_toml.contains("[mcp_servers.") {
-                        clean_toml = clean_toml.replacen("[mcp_servers.", "[mcp_servers]\n\n[mcp_servers.", 1);
-                    } else if clean_toml.contains("mcp_servers = {}") {
-                        clean_toml = clean_toml.replace("mcp_servers = {}", "[mcp_servers]");
-                    } else {
-                        clean_toml.push_str("\n[mcp_servers]\n");
+                    
+                    let mut clean_toml = toml::to_string_pretty(&toml_root)
+                        .map_err(|error| format!("序列化 TOML 失败：{error}"))?;
+                    
+                    if !clean_toml.contains("[mcp_servers]") {
+                        if clean_toml.contains("[mcp_servers.") {
+                            clean_toml = clean_toml.replacen("[mcp_servers.", "[mcp_servers]\n\n[mcp_servers.", 1);
+                        } else if clean_toml.contains("mcp_servers = {}") {
+                            clean_toml = clean_toml.replace("mcp_servers = {}", "[mcp_servers]");
+                        } else {
+                            clean_toml.push_str("\n[mcp_servers]\n");
+                        }
                     }
-                }
 
-                if let Some(idx) = clean_toml.find("[mcp_servers]") {
-                    let insert_pos = idx + "[mcp_servers]".len();
-                    clean_toml.insert_str(insert_pos, &format!("\n{}", block_to_write));
-                } else {
-                    clean_toml.push_str(&format!("\n{}", block_to_write));
+                    if let Some(idx) = clean_toml.find("[mcp_servers]") {
+                        let insert_pos = idx + "[mcp_servers]".len();
+                        clean_toml.insert_str(insert_pos, &format!("\n{}", block_to_write));
+                    } else {
+                        clean_toml.push_str(&format!("\n{}", block_to_write));
+                    }
+                    
+                    toml_str = clean_toml;
                 }
-                
-                toml_str = clean_toml;
             }
 
             fs::write(&target_path, toml_str)
