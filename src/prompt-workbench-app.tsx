@@ -194,9 +194,15 @@ function PromptWorkbenchApp() {
     }
   };
 
-  const handleDeleteMcp = (id: string) => {
+  const handleDeleteMcp = async (id: string) => {
     deleteMcpServer(id);
-    messageApi.success("删除 MCP 服务成功！请点击右侧“应用配置”写入编辑器");
+    messageApi.loading({ content: "正在同步删除至编辑器配置...", key: "delete-mcp" });
+    try {
+      await applyToEditor(activeEditorId, isCurrentEditorEnabled);
+      messageApi.success({ content: "删除 MCP 服务成功并已自动同步物理文件！", key: "delete-mcp" });
+    } catch (err: any) {
+      messageApi.error({ content: `删除成功，但物理文件同步失败: ${err.message}`, key: "delete-mcp" });
+    }
   };
 
   useEffect(() => {
@@ -383,10 +389,23 @@ function PromptWorkbenchApp() {
       });
 
       try {
+        const latestMcpServers = usePromptWorkbenchStore.getState().mcpServers;
+        const enabledMcpLatest = latestMcpServers.filter((s) => s.enabled);
+        
+        const payloadMcpServers: Record<string, any> = {};
+        enabledMcpLatest.forEach((s) => {
+          payloadMcpServers[s.name] = {
+            command: s.command,
+            args: s.args,
+            env: s.env,
+          };
+        });
+
         const payloadData = {
-          mcpServers: JSON.parse(generatedMcpJson).mcpServers || {},
-          managedNames: mcpServers.map((s) => s.name),
+          mcpServers: payloadMcpServers,
+          managedNames: latestMcpServers.map((s) => s.name),
         };
+
         const result = await applyMcpToEditorTarget({
           editorId,
           enabled: targetEnabled,
@@ -404,7 +423,7 @@ function PromptWorkbenchApp() {
           status: "success",
           message:
             result.action === "updated"
-              ? `已成功写入 ${result.targetPath}，当前共更新 ${enabledMcp.length} 个 MCP 服务。`
+              ? `已成功写入 ${result.targetPath}，当前共更新 ${enabledMcpLatest.length} 个 MCP 服务。`
               : result.action === "removed"
                 ? `已从 ${result.targetPath} 清除 AI-COMPOSE 受管 MCP 配置。`
                 : `${result.targetPath} 当前无改动。`,
