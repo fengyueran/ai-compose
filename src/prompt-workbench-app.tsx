@@ -22,32 +22,16 @@ const configurationDomains = [
 const editorMeta: Record<
   EditorId,
   {
-    applyLabel: string;
-    clearingLabel: string;
-    description: string;
-    targetPathLabel: string;
     title: string;
   }
 > = {
   antigravity: {
-    applyLabel: "应用到用户级 Antigravity",
-    clearingLabel: "清除 Antigravity 配置",
-    description: "通过桌面宿主将当前最终 Prompt 写入用户级 Antigravity 配置。",
-    targetPathLabel: "~/.gemini/GEMINI.md",
     title: "Antigravity",
   },
   codex: {
-    applyLabel: "应用到用户级 Codex",
-    clearingLabel: "清除 Codex 配置",
-    description: "通过桌面宿主将当前最终 Prompt 写入用户级 Codex 配置。",
-    targetPathLabel: "~/.codex/AGENTS.md",
     title: "Codex",
   },
   cursor: {
-    applyLabel: "应用到用户级 Cursor",
-    clearingLabel: "清除 Cursor 配置",
-    description: "通过桌面宿主将当前最终 Prompt 写入用户级 Cursor 配置。",
-    targetPathLabel: "~/.cursor/AGENTS.md",
     title: "Cursor",
   },
 };
@@ -57,13 +41,10 @@ function PromptWorkbenchApp() {
 
   const {
     activeEditorId,
-    applyMessage,
-    applyStatus,
     editorStates,
     enabledFragmentIds,
     hydrateEditorStates,
     isHydratingEditorStates,
-    lastAppliedAt,
     presetFragments,
     selectEditor,
     selectedFragmentId,
@@ -85,9 +66,6 @@ function PromptWorkbenchApp() {
       ),
     [enabledFragmentIds, presetFragments],
   );
-
-  const activeEditor = editorStates[activeEditorId];
-  const activeEditorMeta = editorMeta[activeEditorId];
 
   useEffect(() => {
     let isSubscribed = true;
@@ -141,13 +119,6 @@ function PromptWorkbenchApp() {
       isSubscribed = false;
     };
   }, [hydrateEditorStates, setApplyFeedback, setEditorHydrationPending]);
-
-  const applyStatusText = {
-    idle: "未执行",
-    pending: "应用中",
-    success: "已写入",
-    error: "应用失败",
-  } satisfies Record<typeof applyStatus, string>;
 
   const applyToEditor = async (
     editorId: EditorId,
@@ -243,10 +214,6 @@ function PromptWorkbenchApp() {
     }
   };
 
-  const handleApply = async () => {
-    await applyToEditor(activeEditorId, activeEditor.enabled);
-  };
-
   const handleToggleEditor = async (editorId: EditorId) => {
     const nextEnabled = !editorStates[editorId].enabled;
     selectEditor(editorId);
@@ -283,21 +250,13 @@ function PromptWorkbenchApp() {
       <div className="app-frame">
         <header className="global-bar">
           <div className="global-bar__brand">
-            <h1 className="global-bar__title">Prompt Workbench</h1>
+            <h1 className="global-bar__title">AI Compose</h1>
           </div>
 
           <div className="global-bar__status" aria-label="当前上下文">
-            <span className="chip chip--accent">
-              <span className="chip__label">目标编辑器</span>
-              {activeEditorMeta.title}
-            </span>
             <span className="chip">
               <span className="chip__label">配置域</span>
               Prompt
-            </span>
-            <span className="chip">
-              <span className="chip__label">应用状态</span>
-              {applyStatusText[applyStatus]}
             </span>
           </div>
         </header>
@@ -453,7 +412,11 @@ function PromptWorkbenchApp() {
                   </p>
                 </div>
                 <button
-                  className="chip"
+                  className={`fragment-action-btn${
+                    enabledFragmentIds.includes(selectedFragment.id)
+                      ? " fragment-action-btn--active"
+                      : ""
+                  }`}
                   onClick={() => toggleFragment(selectedFragment.id)}
                   type="button"
                 >
@@ -512,70 +475,6 @@ function PromptWorkbenchApp() {
                     </section>
                   ))
                 )}
-              </div>
-            </section>
-
-            <section className="panel apply-card" aria-labelledby="apply-title">
-              <div className="panel__header">
-                <div>
-                  <h2 className="panel__title" id="apply-title">
-                    {activeEditorMeta.applyLabel}
-                  </h2>
-                  <p className="panel__subtitle">
-                    {activeEditorMeta.description}
-                  </p>
-                </div>
-              </div>
-
-              <div className="apply-card__body">
-                <div className="apply-card__status">
-                  <div className="apply-card__row">
-                    <span>目标编辑器</span>
-                    <strong>{activeEditorMeta.title}</strong>
-                  </div>
-                  <div className="apply-card__row">
-                    <span>编辑器开关</span>
-                    <strong>{activeEditor.enabled ? "启用" : "关闭"}</strong>
-                  </div>
-                  <div className="apply-card__row">
-                    <span>配置域</span>
-                    <strong>Prompt</strong>
-                  </div>
-                  <div className="apply-card__row">
-                    <span>状态</span>
-                    <strong>{applyStatusText[applyStatus]}</strong>
-                  </div>
-                  <div className="apply-card__row">
-                    <span>目标文件</span>
-                    <strong>{activeEditorMeta.targetPathLabel}</strong>
-                  </div>
-                  <div className="apply-card__row">
-                    <span>最近触发</span>
-                    <strong>{lastAppliedAt ?? "尚未触发"}</strong>
-                  </div>
-                </div>
-
-                <button
-                  className="apply-button"
-                  disabled={applyStatus === "pending"}
-                  onClick={() => {
-                    void handleApply();
-                  }}
-                  type="button"
-                >
-                  {applyStatus === "pending"
-                    ? "应用中..."
-                    : activeEditor.enabled
-                      ? activeEditorMeta.applyLabel
-                      : activeEditorMeta.clearingLabel}
-                </button>
-
-                <div
-                  className={`apply-card__feedback apply-card__feedback--${applyStatus}`}
-                  role="status"
-                >
-                  {applyMessage}
-                </div>
               </div>
             </section>
           </aside>
