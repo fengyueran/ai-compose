@@ -57,14 +57,16 @@ describe('Prompt Workbench', () => {
     // 应切换为 active，且中间区域应当显示 MCP 相关的标题
     expect(screen.getByText('官方预设 MCP 服务')).toBeInTheDocument()
 
-    // 预设列表中应展示 context7, playwright 等
+    // 预设列表中应展示 context7, playwright, memory 等
     expect(screen.getAllByText('context7').length).toBeGreaterThan(0)
     expect(screen.getAllByText('playwright').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('memory').length).toBeGreaterThan(0)
 
     // 默认右侧预览区应该展示 MCP TOML 格式（因为默认编辑器是 codex）
     expect(screen.getByText(/\[mcp_servers\]/)).toBeInTheDocument()
     expect(screen.getByText(/\[mcp_servers\.context7\]/)).toBeInTheDocument()
     expect(screen.getByText(/\[mcp_servers\.playwright\]/)).toBeInTheDocument()
+    expect(screen.getByText(/\[mcp_servers\.memory\]/)).toBeInTheDocument()
   })
 
   test('adds a custom MCP server and saves it with correct style variables', async () => {

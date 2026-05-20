@@ -31,4 +31,13 @@ export const presetMcpServers: McpServer[] = [
     source: 'preset',
     description: '允许模型执行 Playwright 浏览器自动化操作，包括访问网页、交互、抓取 DOM 结构及捕获截图等。',
   },
+  {
+    id: 'memory',
+    name: 'memory',
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-memory'],
+    enabled: true,
+    source: 'preset',
+    description: '使用轻量级本地知识图谱为模型提供持久化长期记忆，能够跨会话记住用户偏好、习惯与技术架构决策。',
+  },
 ]
