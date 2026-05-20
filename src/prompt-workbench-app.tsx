@@ -429,6 +429,19 @@ function PromptWorkbenchApp() {
     }
   };
 
+  const isCurrentEditorEnabled = editorStates[activeEditorId]?.enabled;
+
+  const handleApplyClick = async () => {
+    if (!isCurrentEditorEnabled) {
+      messageApi.warning(`请先在左侧侧边栏中启用 ${editorMeta[activeEditorId].title}`);
+      return;
+    }
+    const result = await applyToEditor(activeEditorId, true);
+    if (result) {
+      messageApi.success(`已将最新配置成功应用到 ${editorMeta[activeEditorId].title}！`);
+    }
+  };
+
   const handleToggleEditor = async (editorId: EditorId) => {
     const nextEnabled = !editorStates[editorId].enabled;
     selectEditor(editorId);
@@ -789,7 +802,7 @@ function PromptWorkbenchApp() {
 
                     {selectedMcpServerId !== "__new__" && selectedMcpServer?.source === "user" && (
                       <p style={{ margin: "-8px 0 16px 0", fontSize: "12px", color: "var(--text-faint)", background: "rgba(255, 140, 0, 0.04)", border: "1px dashed rgba(255, 140, 0, 0.15)", padding: "8px 12px", borderRadius: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
-                        💡 <strong>小提示：</strong> “停用服务”仅改变工作台中的状态，在<strong>应用配置后</strong>才会从配置文件中移出；“删除服务”则会彻底从工作台列表中移除。
+                        💡 <strong>小提示：</strong> 工作台的修改（启用、停用、删除、编辑等）均为临时保存，需点击右侧预览区的<strong>“应用配置”</strong>按钮后才真正写入到本地配置文件。
                       </p>
                     )}
 
@@ -956,7 +969,7 @@ function PromptWorkbenchApp() {
                 className="panel preview-card"
                 aria-labelledby="preview-title"
               >
-                <div className="panel__header">
+                <div className="panel__header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
                   <div>
                     <h2 className="panel__title" id="preview-title">
                       最终 Prompt 预览
@@ -965,6 +978,14 @@ function PromptWorkbenchApp() {
                       右侧始终展示当前启用片段的最终组合结果。
                     </p>
                   </div>
+                  <button
+                    className={`preview-apply-btn${isCurrentEditorEnabled ? "" : " preview-apply-btn--disabled"}`}
+                    onClick={handleApplyClick}
+                    disabled={!isCurrentEditorEnabled}
+                    title={isCurrentEditorEnabled ? `应用 Prompt 配置到 ${editorMeta[activeEditorId].title}` : `请先启用左侧 ${editorMeta[activeEditorId].title}`}
+                  >
+                    应用配置
+                  </button>
                 </div>
 
                 <div className="preview-card__body">
@@ -997,7 +1018,7 @@ function PromptWorkbenchApp() {
                 className="panel preview-card"
                 aria-labelledby="preview-title"
               >
-                <div className="panel__header">
+                <div className="panel__header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
                   <div>
                     <h2 className="panel__title" id="preview-title">
                       最终 MCP 配置预览
@@ -1006,6 +1027,14 @@ function PromptWorkbenchApp() {
                       右侧始终展示当前启用 MCP 服务的最终 {activeEditorId === "codex" ? "TOML" : "JSON"} 配置。
                     </p>
                   </div>
+                  <button
+                    className={`preview-apply-btn${isCurrentEditorEnabled ? "" : " preview-apply-btn--disabled"}`}
+                    onClick={handleApplyClick}
+                    disabled={!isCurrentEditorEnabled}
+                    title={isCurrentEditorEnabled ? `应用 MCP 配置到 ${editorMeta[activeEditorId].title}` : `请先启用左侧 ${editorMeta[activeEditorId].title}`}
+                  >
+                    应用配置
+                  </button>
                 </div>
 
                 <div className="preview-card__body" style={{ padding: "0 16px 16px 16px" }}>
