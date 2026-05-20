@@ -212,59 +212,93 @@ fn apply_mcp_to_editor_target(payload: ApplyMcpPayload) -> Result<ApplyMcpResult
 
     match payload.editor_id {
         EditorId::Codex => {
-            // TOML 处理逻辑 (config.toml)
-            let mut toml_root = if target_path.exists() {
-                let toml_str = fs::read_to_string(&target_path)
-                    .map_err(|error| format!("读取 Codex 配置文件失败：{error}"))?;
-                toml::from_str::<toml::Value>(&toml_str)
-                    .unwrap_or_else(|_| toml::Value::Table(toml::map::Map::new()))
-            } else {
-                toml::Value::Table(toml::map::Map::new())
-            };
-
-            // 确保有 mcp_servers table
-            if !toml_root.is_table() {
-                toml_root = toml::Value::Table(toml::map::Map::new());
-            }
-            let root_table = toml_root.as_table_mut().unwrap();
-
-            if !root_table.contains_key("mcp_servers") {
-                root_table.insert("mcp_servers".to_string(), toml::Value::Table(toml::map::Map::new()));
-            }
-            let mcp_servers_table = root_table.get_mut("mcp_servers")
-                .and_then(|v| v.as_table_mut())
-                .ok_or_else(|| "config.toml 中的 mcp_servers 不是一个 Table。".to_string())?;
-
+            // TOML 处理逻辑 (config.toml) - 外科手术式局部标记块替换
+            let mut enabled_servers = toml::map::Map::new();
             if payload.enabled {
-                // 合并启用项：先从 mcp_servers 里删掉所有 managed_names，再重新插入在 config_json 里启用的服务
                 for name in &managed_names {
-                    mcp_servers_table.remove(name);
                     if let Some(json_val) = mcp_servers_json.get(name) {
-                        mcp_servers_table.insert(name.clone(), json_to_toml(json_val));
+                        enabled_servers.insert(name.clone(), json_to_toml(json_val));
                     }
                 }
+            }
+
+            let fragment = if !enabled_servers.is_empty() {
+                let mut dummy_root = toml::map::Map::new();
+                dummy_root.insert("mcp_servers".to_string(), toml::Value::Table(enabled_servers));
+                let mut serialized = toml::to_string_pretty(&toml::Value::Table(dummy_root))
+                    .map_err(|error| format!("序列化 TOML 失败：{error}"))?;
+                
+                if serialized.starts_with("[mcp_servers]\n") {
+                    serialized = serialized.replacen("[mcp_servers]\n", "", 1);
+                } else if serialized.starts_with("mcp_servers = {}") {
+                    serialized = "".to_string();
+                }
+                serialized.trim().to_string()
             } else {
-                // 彻底移除：从 mcp_servers 里移除所有 managed_names
-                for name in &managed_names {
-                    mcp_servers_table.remove(name);
+                "".to_string()
+            };
+
+            let begin_marker = "# === BEGIN AI-COMPOSE MCP ===";
+            let end_marker = "# === END AI-COMPOSE MCP ===";
+
+            // 构造需要写入的受管标记块
+            let block_to_write = if fragment.is_empty() {
+                format!("{}\n{}", begin_marker, end_marker)
+            } else {
+                format!("{}\n{}\n{}", begin_marker, fragment, end_marker)
+            };
+
+            let mut toml_str = if target_path.exists() {
+                fs::read_to_string(&target_path)
+                    .map_err(|error| format!("读取 Codex 配置文件失败：{error}"))?
+            } else {
+                "".to_string()
+            };
+
+            if toml_str.contains(begin_marker) && toml_str.contains(end_marker) {
+                // 分支 1：存在边界标记，直接进行无痛局部字符串范围替换，保留 100% 原始注释与格式
+                let start_idx = toml_str.find(begin_marker).unwrap();
+                let end_idx = toml_str.find(end_marker).unwrap() + end_marker.len();
+                toml_str.replace_range(start_idx..end_idx, &block_to_write);
+            } else {
+                // 分支 2：没有标记，先做一次性的清理并创建标记块，以保证兼容升级
+                let mut toml_root = toml::from_str::<toml::Value>(&toml_str)
+                    .unwrap_or_else(|_| toml::Value::Table(toml::map::Map::new()));
+                
+                if let Some(root_table) = toml_root.as_table_mut() {
+                    if let Some(mcp_servers_val) = root_table.get_mut("mcp_servers") {
+                        if let Some(mcp_servers_table) = mcp_servers_val.as_table_mut() {
+                            for name in &managed_names {
+                                mcp_servers_table.remove(name);
+                            }
+                        }
+                    }
                 }
-            }
+                
+                let mut clean_toml = toml::to_string_pretty(&toml_root)
+                    .map_err(|error| format!("序列化 TOML 失败：{error}"))?;
+                
+                if !clean_toml.contains("[mcp_servers]") {
+                    if clean_toml.contains("[mcp_servers.") {
+                        clean_toml = clean_toml.replacen("[mcp_servers.", "[mcp_servers]\n\n[mcp_servers.", 1);
+                    } else if clean_toml.contains("mcp_servers = {}") {
+                        clean_toml = clean_toml.replace("mcp_servers = {}", "[mcp_servers]");
+                    } else {
+                        clean_toml.push_str("\n[mcp_servers]\n");
+                    }
+                }
 
-            let mut next_content = toml::to_string_pretty(&toml_root)
-                .map_err(|error| format!("序列化 TOML 失败：{error}"))?;
-
-            // 确保输出的文件中级联只在最上方第一个服务前有唯一的 [mcp_servers] 总表头
-            if !next_content.contains("[mcp_servers]") {
-                if next_content.contains("[mcp_servers.") {
-                    next_content = next_content.replacen("[mcp_servers.", "[mcp_servers]\n\n[mcp_servers.", 1);
-                } else if next_content.contains("mcp_servers = {}") {
-                    next_content = next_content.replace("mcp_servers = {}", "[mcp_servers]");
+                if let Some(idx) = clean_toml.find("[mcp_servers]") {
+                    let insert_pos = idx + "[mcp_servers]".len();
+                    clean_toml.insert_str(insert_pos, &format!("\n{}", block_to_write));
                 } else {
-                    next_content.push_str("\n[mcp_servers]\n");
+                    clean_toml.push_str(&format!("\n{}", block_to_write));
                 }
+                
+                toml_str = clean_toml;
             }
 
-            fs::write(&target_path, next_content)
+            fs::write(&target_path, toml_str)
                 .map_err(|error| format!("写入 Codex 配置文件失败：{error}"))?;
         }
         _ => {
