@@ -182,7 +182,7 @@ function PromptWorkbenchApp() {
         env: envObj,
         enabled: true,
       });
-      messageApi.success("添加 MCP 服务成功");
+      messageApi.success("添加 MCP 服务成功！请点击右侧“应用配置”写入编辑器");
     } else {
       updateMcpServer(selectedMcpServer.id, {
         name: formName.trim(),
@@ -190,13 +190,13 @@ function PromptWorkbenchApp() {
         args: parsedArgs,
         env: envObj,
       });
-      messageApi.success("修改 MCP 服务成功");
+      messageApi.success("修改 MCP 服务成功！请点击右侧“应用配置”写入编辑器");
     }
   };
 
   const handleDeleteMcp = (id: string) => {
     deleteMcpServer(id);
-    messageApi.success("删除 MCP 服务成功");
+    messageApi.success("删除 MCP 服务成功！请点击右侧“应用配置”写入编辑器");
   };
 
   useEffect(() => {
