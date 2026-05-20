@@ -789,7 +789,7 @@ function PromptWorkbenchApp() {
 
                     {selectedMcpServerId !== "__new__" && selectedMcpServer?.source === "user" && (
                       <p style={{ margin: "-8px 0 16px 0", fontSize: "12px", color: "var(--text-faint)", background: "rgba(255, 140, 0, 0.04)", border: "1px dashed rgba(255, 140, 0, 0.15)", padding: "8px 12px", borderRadius: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
-                        💡 <strong>小提示：</strong> 停用服务只会将其从编辑器配置中移出，您随时可以在工作台重新启用它；“删除服务”则会永久销毁此项配置。
+                        💡 <strong>小提示：</strong> “停用服务”仅改变工作台中的状态，在<strong>应用配置后</strong>才会从配置文件中移出；“删除服务”则会彻底从工作台列表中移除。
                       </p>
                     )}
 
