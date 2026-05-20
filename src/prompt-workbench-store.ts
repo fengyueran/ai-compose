@@ -86,7 +86,8 @@ const syncMcpServersWithLocal = (
   // 1. 用本地配置更新已有的服务启用状态和配置内容
   let nextServers = mcpServers.map((server) => {
     const localVal = localMcp[server.name]
-    if (localVal) {
+    // 必须要含有 command 字段才认为是真正有效启用的服务，否则如果是空对象或只有辅助子表则视为未启用
+    if (localVal && typeof localVal === 'object' && 'command' in localVal) {
       return {
         ...server,
         enabled: true,
