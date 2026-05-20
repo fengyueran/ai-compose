@@ -110,23 +110,28 @@ const syncMcpServersWithLocal = (
   }
 
   // 1. 用本地配置更新已有的服务启用状态和配置内容
-  let nextServers: McpServer[] = []
+  const nextServers: McpServer[] = []
   mcpServers.forEach((server) => {
     const localVal = localMcp[server.name]
-    // 必须要含有 command 字段才认为是真正有效启用的服务
-    if (localVal && typeof localVal === 'object' && 'command' in localVal) {
+    // 必须要含有 command 字段或 url 字段才认为是真正有效启用的服务
+    if (localVal && typeof localVal === 'object' && ('command' in localVal || 'url' in localVal)) {
       let source = server.source
       if (source !== 'preset') {
         const isManaged = managedMcp && server.name in managedMcp
         source = isManaged ? 'user' : 'external'
       }
 
+      const transportType = 'url' in localVal ? 'http' : 'stdio'
+
       nextServers.push({
         ...server,
         enabled: true,
-        command: localVal.command ?? server.command,
-        args: localVal.args ?? server.args,
-        env: localVal.env ?? server.env,
+        transportType,
+        command: (localVal as any).command ?? server.command,
+        args: (localVal as any).args ?? server.args,
+        env: (localVal as any).env ?? server.env,
+        type: (localVal as any).type ?? server.type,
+        url: (localVal as any).url ?? server.url,
         source,
       })
     } else {
@@ -147,7 +152,7 @@ const syncMcpServersWithLocal = (
     if (!val || typeof val !== 'object' || Array.isArray(val)) {
       return
     }
-    if (!('command' in val)) {
+    if (!('command' in val) && !('url' in val)) {
       return
     }
 
@@ -156,13 +161,17 @@ const syncMcpServersWithLocal = (
       const newId = name.toLowerCase().replace(/\s+/g, '-')
       const isManaged = managedMcp && name in managedMcp
       const source = isManaged ? 'user' : 'external'
+      const transportType = 'url' in val ? 'http' : 'stdio'
 
       nextServers.push({
         id: newId,
         name,
-        command: (val as any).command ?? '',
-        args: (val as any).args ?? [],
+        transportType,
+        command: (val as any).command,
+        args: (val as any).args,
         env: (val as any).env,
+        type: (val as any).type,
+        url: (val as any).url,
         enabled: true,
         source,
         description: source === 'external' 

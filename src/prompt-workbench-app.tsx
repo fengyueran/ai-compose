@@ -94,12 +94,19 @@ function PromptWorkbenchApp() {
   const generatedMcpJson = useMemo(() => {
     const mcpServersObj: Record<string, any> = {};
     enabledMcp.forEach((server) => {
-      mcpServersObj[server.name] = {
-        command: server.command,
-        args: server.args,
-      };
-      if (server.env && Object.keys(server.env).length > 0) {
-        mcpServersObj[server.name].env = server.env;
+      if (server.transportType === 'http') {
+        mcpServersObj[server.name] = {
+          type: server.type || 'streamable_http',
+          url: server.url || '',
+        };
+      } else {
+        mcpServersObj[server.name] = {
+          command: server.command || '',
+          args: server.args || [],
+        };
+        if (server.env && Object.keys(server.env).length > 0) {
+          mcpServersObj[server.name].env = server.env;
+        }
       }
     });
     return JSON.stringify({ mcpServers: mcpServersObj }, null, 2);
@@ -111,17 +118,22 @@ function PromptWorkbenchApp() {
       tomlStr += "[mcp_servers]\n";
       enabledMcp.forEach((server) => {
         tomlStr += `\n[mcp_servers.${server.name}]\n`;
-        tomlStr += `command = "${server.command}"\n`;
-        if (server.args.length > 0) {
-          tomlStr += `args = ${JSON.stringify(server.args)}\n`;
-        }
-        if (server.env && Object.keys(server.env).length > 0) {
-          tomlStr += "env = { ";
-          const envPairs = Object.entries(server.env)
-            .map(([k, v]) => `${k} = "${v}"`)
-            .join(", ");
-          tomlStr += envPairs;
-          tomlStr += " }\n";
+        if (server.transportType === 'http') {
+          tomlStr += `type = "${server.type || 'streamable_http'}"\n`;
+          tomlStr += `url = "${server.url || ''}"\n`;
+        } else {
+          tomlStr += `command = "${server.command || ''}"\n`;
+          if (server.args && server.args.length > 0) {
+            tomlStr += `args = ${JSON.stringify(server.args)}\n`;
+          }
+          if (server.env && Object.keys(server.env).length > 0) {
+            tomlStr += "env = { ";
+            const envPairs = Object.entries(server.env)
+              .map(([k, v]) => `${k} = "${v}"`)
+              .join(", ");
+            tomlStr += envPairs;
+            tomlStr += " }\n";
+          }
         }
       });
     } else {
@@ -132,34 +144,55 @@ function PromptWorkbenchApp() {
 
   // 表单状态，用于编辑/创建 MCP
   const [formName, setFormName] = useState("");
+  const [formTransportType, setFormTransportType] = useState<'stdio' | 'http'>("stdio");
   const [formCommand, setFormCommand] = useState("");
   const [formArgs, setFormArgs] = useState("");
   const [formEnv, setFormEnv] = useState<{ key: string; value: string }[]>([]);
+  const [formType, setFormType] = useState("");
+  const [formUrl, setFormUrl] = useState("");
 
   // 当选中的 MCP 发生变化时，同步表单
   useEffect(() => {
     if (selectedMcpServer && selectedMcpServerId !== "__new__") {
       setFormName(selectedMcpServer.name);
-      setFormCommand(selectedMcpServer.command);
-      setFormArgs(selectedMcpServer.args.join("\n"));
+      setFormTransportType(selectedMcpServer.transportType ?? "stdio");
+      setFormCommand(selectedMcpServer.command ?? "");
+      setFormArgs((selectedMcpServer.args ?? []).join("\n"));
       setFormEnv(
         Object.entries(selectedMcpServer.env ?? {}).map(([key, value]) => ({
           key,
           value,
         })),
       );
+      setFormType(selectedMcpServer.type ?? "");
+      setFormUrl(selectedMcpServer.url ?? "");
     } else if (selectedMcpServerId === "__new__") {
       setFormName("");
+      setFormTransportType("stdio");
       setFormCommand("npx");
       setFormArgs("");
       setFormEnv([]);
+      setFormType("streamable_http");
+      setFormUrl("");
     }
   }, [selectedMcpServerId, selectedMcpServer]);
 
   const handleSaveMcp = () => {
-    if (!formName.trim() || !formCommand.trim()) {
-      messageApi.error("名称和命令不能为空");
+    if (!formName.trim()) {
+      messageApi.error("名称不能为空");
       return;
+    }
+
+    if (formTransportType === "stdio") {
+      if (!formCommand.trim()) {
+        messageApi.error("命令不能为空");
+        return;
+      }
+    } else {
+      if (!formType.trim() || !formUrl.trim()) {
+        messageApi.error("类型和 URL 不能为空");
+        return;
+      }
     }
 
     const envObj: Record<string, string> = {};
@@ -184,22 +217,32 @@ function PromptWorkbenchApp() {
       return;
     }
 
+    const mcpData = formTransportType === "stdio"
+      ? {
+          name: formName.trim(),
+          transportType: "stdio" as const,
+          command: formCommand.trim(),
+          args: parsedArgs,
+          env: envObj,
+        }
+      : {
+          name: formName.trim(),
+          transportType: "http" as const,
+          type: formType.trim(),
+          url: formUrl.trim(),
+          command: "",
+          args: [],
+          env: {},
+        };
+
     if (selectedMcpServerId === "__new__") {
       addMcpServer({
-        name: formName.trim(),
-        command: formCommand.trim(),
-        args: parsedArgs,
-        env: envObj,
+        ...mcpData,
         enabled: true,
       });
       messageApi.success("添加 MCP 服务成功！请点击右侧“应用配置”写入编辑器");
     } else {
-      updateMcpServer(selectedMcpServer.id, {
-        name: formName.trim(),
-        command: formCommand.trim(),
-        args: parsedArgs,
-        env: envObj,
-      });
+      updateMcpServer(selectedMcpServer.id, mcpData);
       messageApi.success("修改 MCP 服务成功！请点击右侧“应用配置”写入编辑器");
     }
   };
@@ -404,11 +447,20 @@ function PromptWorkbenchApp() {
         
         const payloadMcpServers: Record<string, any> = {};
         enabledMcpLatest.forEach((s) => {
-          payloadMcpServers[s.name] = {
-            command: s.command,
-            args: s.args,
-            env: s.env,
-          };
+          if (s.transportType === 'http') {
+            payloadMcpServers[s.name] = {
+              type: s.type || 'streamable_http',
+              url: s.url || '',
+            };
+          } else {
+            payloadMcpServers[s.name] = {
+              command: s.command || '',
+              args: s.args || [],
+            };
+            if (s.env && Object.keys(s.env).length > 0) {
+              payloadMcpServers[s.name].env = s.env;
+            }
+          }
         });
 
         const payloadData = {
@@ -762,7 +814,9 @@ function PromptWorkbenchApp() {
                             </div>
                             <div className="fragment-list__item-meta-row">
                               <span className="fragment-list__item-meta">
-                                {server.args.length} 个参数
+                                {server.transportType === 'http'
+                                  ? server.url
+                                  : `${(server.args ?? []).length} 个参数`}
                               </span>
                             </div>
                           </div>
@@ -849,103 +903,180 @@ function PromptWorkbenchApp() {
                         />
                       </div>
 
+                      {/* 传输协议类型选择 */}
                       <div className="mcp-form__field" style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                         <label className="mcp-form__label" style={{ fontSize: "12px", color: "var(--text-faint)", fontWeight: 500 }}>
-                          启动命令 (Command)
+                          传输协议类型 (Transport Type)
                         </label>
-                        <input
-                          className="form-input"
-                          placeholder="例如: npx, python, uv"
-                          value={formCommand}
-                          disabled={isPresetServer || isExternalServer}
-                          onChange={(e) => setFormCommand(e.target.value)}
-                        />
+                        <div style={{ display: "flex", gap: "12px", marginTop: "4px" }}>
+                          <button
+                            type="button"
+                            disabled={isPresetServer || isExternalServer}
+                            style={{
+                              flex: 1,
+                              padding: "8px 12px",
+                              borderRadius: "8px",
+                              border: formTransportType === "stdio" ? "1px solid var(--accent)" : "1px solid var(--panel-border)",
+                              background: formTransportType === "stdio" ? "var(--accent-soft)" : "rgba(255,255,255,0.4)",
+                              color: formTransportType === "stdio" ? "var(--accent-strong)" : "var(--text-main)",
+                              fontWeight: formTransportType === "stdio" ? 600 : 400,
+                              cursor: (isPresetServer || isExternalServer) ? "not-allowed" : "pointer",
+                              fontSize: "13px",
+                            }}
+                            onClick={() => setFormTransportType("stdio")}
+                          >
+                            本地进程 (Stdio)
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isPresetServer || isExternalServer}
+                            style={{
+                              flex: 1,
+                              padding: "8px 12px",
+                              borderRadius: "8px",
+                              border: formTransportType === "http" ? "1px solid var(--accent)" : "1px solid var(--panel-border)",
+                              background: formTransportType === "http" ? "var(--accent-soft)" : "rgba(255,255,255,0.4)",
+                              color: formTransportType === "http" ? "var(--accent-strong)" : "var(--text-main)",
+                              fontWeight: formTransportType === "http" ? 600 : 400,
+                              cursor: (isPresetServer || isExternalServer) ? "not-allowed" : "pointer",
+                              fontSize: "13px",
+                            }}
+                            onClick={() => setFormTransportType("http")}
+                          >
+                            直连服务 (HTTP/SSE)
+                          </button>
+                        </div>
                       </div>
 
-                      <div className="mcp-form__field" style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                        <label className="mcp-form__label" style={{ fontSize: "12px", color: "var(--text-faint)", fontWeight: 500 }}>
-                          启动参数 (Arguments, 一行一个)
-                        </label>
-                        <textarea
-                          className="form-textarea"
-                          rows={4}
-                          placeholder="例如:
+                      {formTransportType === "stdio" ? (
+                        <>
+                          <div className="mcp-form__field" style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                            <label className="mcp-form__label" style={{ fontSize: "12px", color: "var(--text-faint)", fontWeight: 500 }}>
+                              启动命令 (Command)
+                            </label>
+                            <input
+                              className="form-input"
+                              placeholder="例如: npx, python, uv"
+                              value={formCommand}
+                              disabled={isPresetServer || isExternalServer}
+                              onChange={(e) => setFormCommand(e.target.value)}
+                            />
+                          </div>
+
+                          <div className="mcp-form__field" style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                            <label className="mcp-form__label" style={{ fontSize: "12px", color: "var(--text-faint)", fontWeight: 500 }}>
+                              启动参数 (Arguments, 一行一个)
+                            </label>
+                            <textarea
+                              className="form-textarea"
+                              rows={4}
+                              placeholder="例如:
 -y
 @modelcontextprotocol/server-sqlite"
-                          value={formArgs}
-                          disabled={isPresetServer || isExternalServer}
-                          onChange={(e) => setFormArgs(e.target.value)}
-                        />
-                      </div>
+                              value={formArgs}
+                              disabled={isPresetServer || isExternalServer}
+                              onChange={(e) => setFormArgs(e.target.value)}
+                            />
+                          </div>
 
-                      <div className="mcp-form__field" style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                        <label className="mcp-form__label" style={{ fontSize: "12px", color: "var(--text-faint)", fontWeight: 500 }}>
-                          环境变量 (Environment Variables)
-                        </label>
-                        <div className="env-editor" style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                          {formEnv.map((pair, index) => (
-                            <div key={index} className="env-editor__row" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                              <input
-                                className="form-input env-input"
-                                placeholder="KEY"
-                                value={pair.key}
-                                disabled={isExternalServer}
-                                onChange={(e) => {
-                                  const next = [...formEnv];
-                                  next[index].key = e.target.value;
-                                  setFormEnv(next);
-                                }}
-                              />
-                              <input
-                                className="form-input env-input"
-                                placeholder="VALUE"
-                                value={pair.value}
-                                disabled={isExternalServer}
-                                onChange={(e) => {
-                                  const next = [...formEnv];
-                                  next[index].value = e.target.value;
-                                  setFormEnv(next);
-                                }}
-                              />
+                          <div className="mcp-form__field" style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                            <label className="mcp-form__label" style={{ fontSize: "12px", color: "var(--text-faint)", fontWeight: 500 }}>
+                              环境变量 (Environment Variables)
+                            </label>
+                            <div className="env-editor" style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                              {formEnv.map((pair, index) => (
+                                <div key={index} className="env-editor__row" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                                  <input
+                                    className="form-input env-input"
+                                    placeholder="KEY"
+                                    value={pair.key}
+                                    disabled={isExternalServer}
+                                    onChange={(e) => {
+                                      const next = [...formEnv];
+                                      next[index].key = e.target.value;
+                                      setFormEnv(next);
+                                    }}
+                                  />
+                                  <input
+                                    className="form-input env-input"
+                                    placeholder="VALUE"
+                                    value={pair.value}
+                                    disabled={isExternalServer}
+                                    onChange={(e) => {
+                                      const next = [...formEnv];
+                                      next[index].value = e.target.value;
+                                      setFormEnv(next);
+                                    }}
+                                  />
+                                  {!isExternalServer && (
+                                    <button
+                                      type="button"
+                                      className="env-editor__delete-btn"
+                                      style={{
+                                        background: "none",
+                                        border: "none",
+                                        color: "#ff4d4f",
+                                        cursor: "pointer",
+                                        fontSize: "12px",
+                                      }}
+                                      onClick={() => setFormEnv(formEnv.filter((_, i) => i !== index))}
+                                    >
+                                      删除
+                                    </button>
+                                  )}
+                                </div>
+                              ))}
                               {!isExternalServer && (
                                 <button
                                   type="button"
-                                  className="env-editor__delete-btn"
+                                  className="env-editor__add-btn"
                                   style={{
-                                    background: "none",
-                                    border: "none",
-                                    color: "#ff4d4f",
-                                    cursor: "pointer",
+                                    alignSelf: "flex-start",
+                                    background: "rgba(255, 140, 0, 0.1)",
+                                    border: "1px dashed var(--accent)",
+                                    color: "var(--accent)",
+                                    padding: "4px 8px",
+                                    borderRadius: "4px",
                                     fontSize: "12px",
+                                    cursor: "pointer",
                                   }}
-                                  onClick={() => setFormEnv(formEnv.filter((_, i) => i !== index))}
+                                  onClick={() => setFormEnv([...formEnv, { key: "", value: "" }])}
                                 >
-                                  删除
+                                  + 添加环境变量
                                 </button>
                               )}
                             </div>
-                          ))}
-                          {!isExternalServer && (
-                            <button
-                              type="button"
-                              className="env-editor__add-btn"
-                              style={{
-                                alignSelf: "flex-start",
-                                background: "rgba(255, 140, 0, 0.1)",
-                                border: "1px dashed var(--accent)",
-                                color: "var(--accent)",
-                                padding: "4px 8px",
-                                borderRadius: "4px",
-                                fontSize: "12px",
-                                cursor: "pointer",
-                              }}
-                              onClick={() => setFormEnv([...formEnv, { key: "", value: "" }])}
-                            >
-                              + 添加环境变量
-                            </button>
-                          )}
-                        </div>
-                      </div>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="mcp-form__field" style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                            <label className="mcp-form__label" style={{ fontSize: "12px", color: "var(--text-faint)", fontWeight: 500 }}>
+                              直连类型 (Type)
+                            </label>
+                            <input
+                              className="form-input"
+                              placeholder="例如: streamable_http, sse"
+                              value={formType}
+                              disabled={isPresetServer || isExternalServer}
+                              onChange={(e) => setFormType(e.target.value)}
+                            />
+                          </div>
+
+                          <div className="mcp-form__field" style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                            <label className="mcp-form__label" style={{ fontSize: "12px", color: "var(--text-faint)", fontWeight: 500 }}>
+                              服务 URL (URL)
+                            </label>
+                            <input
+                              className="form-input"
+                              placeholder="例如: http://127.0.0.1:3845/mcp"
+                              value={formUrl}
+                              disabled={isPresetServer || isExternalServer}
+                              onChange={(e) => setFormUrl(e.target.value)}
+                            />
+                          </div>
+                        </>
+                      )}
 
                       <div className="mcp-form__actions" style={{ display: "flex", gap: "12px", marginTop: "12px", justifyContent: "flex-end" }}>
                         {selectedMcpServerId !== "__new__" && selectedMcpServer?.source === "user" && (

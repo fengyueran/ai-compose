@@ -1,12 +1,15 @@
 export type McpServer = {
   id: string
   name: string
-  command: string
-  args: string[]
-  env?: Record<string, string>
   enabled: boolean
   source: 'preset' | 'user' | 'external'
   description?: string
+  transportType?: 'stdio' | 'http'
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+  type?: string
+  url?: string
 }
 
 export const presetMcpServers: McpServer[] = [

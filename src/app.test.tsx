@@ -93,6 +93,41 @@ describe('Prompt Workbench', () => {
     expect(createBtn).toBeInTheDocument()
     expect(createBtn.style.background).toContain('var(--accent)')
   })
+
+  test('adds a custom HTTP/SSE direct MCP server and updates configuration preview', async () => {
+    render(<PromptWorkbenchApp />)
+
+    // 切换到 MCP 配置域
+    await userEvent.click(screen.getByRole('button', { name: 'MCP' }))
+
+    // 点击 “+ 添加自定义” 按钮
+    const addBtn = screen.getByRole('button', { name: '+ 添加自定义' })
+    await userEvent.click(addBtn)
+
+    // 输入服务名称
+    const nameInput = screen.getByPlaceholderText('例如: weather')
+    await userEvent.type(nameInput, 'figma_local')
+
+    // 切换传输协议类型为 “直连服务 (HTTP/SSE)”
+    const httpTabBtn = screen.getByRole('button', { name: '直连服务 (HTTP/SSE)' })
+    await userEvent.click(httpTabBtn)
+
+    // 输入 URL
+    const urlInput = screen.getByPlaceholderText('例如: http://127.0.0.1:3845/mcp')
+    await userEvent.type(urlInput, 'http://127.0.0.1:3845/mcp')
+
+    // 点击创建服务
+    const createBtn = screen.getByRole('button', { name: '创建服务' })
+    await userEvent.click(createBtn)
+
+    // 断言 figma_local 已在左侧列表中展示
+    expect(screen.getAllByText('figma_local').length).toBeGreaterThan(0)
+
+    // 默认展示的 TOML 预览中，应包含 type 和 url 的定义
+    expect(screen.getByText(/\[mcp_servers\.figma_local\]/)).toBeInTheDocument()
+    expect(screen.getByText(/type = "streamable_http"/)).toBeInTheDocument()
+    expect(screen.getByText(/url = "http:\/\/127.0.0.1:3845\/mcp"/)).toBeInTheDocument()
+  })
 })
 
 
