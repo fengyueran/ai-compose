@@ -80,13 +80,13 @@ const syncMcpServersWithLocal = (
   localMcp: Record<string, any> | undefined
 ): McpServer[] => {
   if (!localMcp) {
-    return mcpServers.map((s) => ({ ...s, enabled: false }))
+    return mcpServers
   }
 
   // 1. 用本地配置更新已有的服务启用状态和配置内容
   let nextServers = mcpServers.map((server) => {
     const localVal = localMcp[server.name]
-    // 必须要含有 command 字段才认为是真正有效启用的服务，否则如果是空对象或只有辅助子表则视为未启用
+    // 必须要含有 command 字段才认为是真正有效启用的服务
     if (localVal && typeof localVal === 'object' && 'command' in localVal) {
       return {
         ...server,
@@ -96,10 +96,9 @@ const syncMcpServersWithLocal = (
         env: localVal.env ?? server.env,
       }
     } else {
-      return {
-        ...server,
-        enabled: false,
-      }
+      // ！！！关键：如果本地没有，不要把 server.enabled 强行重置为 false！！！
+      // 保持它在工作台原本的启用状态不变，以体现用户在界面上的操作意图。
+      return server
     }
   })
 
