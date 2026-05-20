@@ -10,6 +10,29 @@ import {
   presetMcpServers,
 } from './mcp-servers'
 
+// 从 localStorage 加载自定义服务
+const loadCustomServersFromStorage = (): McpServer[] => {
+  try {
+    const data = typeof window !== 'undefined' ? localStorage.getItem('ai-compose:custom-mcp-servers') : null
+    return data ? JSON.parse(data) : []
+  } catch (e) {
+    console.error('Failed to load custom MCP servers from storage', e)
+    return []
+  }
+}
+
+// 保存自定义服务到 localStorage
+const saveCustomServersToStorage = (servers: McpServer[]) => {
+  try {
+    if (typeof window !== 'undefined') {
+      const customServers = servers.filter(s => s.source === 'user')
+      localStorage.setItem('ai-compose:custom-mcp-servers', JSON.stringify(customServers))
+    }
+  } catch (e) {
+    console.error('Failed to save custom MCP servers to storage', e)
+  }
+}
+
 type ApplyStatus = 'idle' | 'pending' | 'success' | 'error'
 
 type EditorState = {
@@ -85,7 +108,8 @@ const syncMcpServersWithLocal = (
   }
 
   // 1. 用本地配置更新已有的服务启用状态和配置内容
-  let nextServers = mcpServers.map((server) => {
+  let nextServers: McpServer[] = []
+  mcpServers.forEach((server) => {
     const localVal = localMcp[server.name]
     // 必须要含有 command 字段才认为是真正有效启用的服务
     if (localVal && typeof localVal === 'object' && 'command' in localVal) {
@@ -95,17 +119,24 @@ const syncMcpServersWithLocal = (
         source = isManaged ? 'user' : 'external'
       }
 
-      return {
+      nextServers.push({
         ...server,
         enabled: true,
         command: localVal.command ?? server.command,
         args: localVal.args ?? server.args,
         env: localVal.env ?? server.env,
         source,
-      }
+      })
     } else {
-      // 保持原本的启用状态不变，保障操作意图
-      return server
+      // 外部服务只要本地配置文件中不存在，即直接丢弃（不显示在列表中）
+      if (server.source === 'external') {
+        return
+      }
+      // 预设服务或自定义服务（user）即使本地不存在（即从物理文件中移出了），依然在工作台列表中保留草稿，只是 enabled 置为 false
+      nextServers.push({
+        ...server,
+        enabled: false,
+      })
     }
   })
 
@@ -156,7 +187,7 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
     presetFragments: presetPromptFragments,
     selectedFragmentId: defaultSelectedFragmentId,
     enabledFragmentIds: defaultEnabledFragmentIds,
-    mcpServers: presetMcpServers,
+    mcpServers: [...presetMcpServers, ...loadCustomServersFromStorage()],
     selectedMcpServerId: defaultSelectedMcpServerId,
     
     selectDomain: (domain) => {
@@ -170,6 +201,7 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
         }
       }
 
+      saveCustomServersToStorage(nextMcpServers)
       set({
         activeDomain: domain,
         editorStates: domain === 'Prompt' ? promptEditorStates : mcpEditorStates,
@@ -218,6 +250,7 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
         updatedServers = syncMcpServersWithLocal(mcpServers, targetState.mcpServers, targetState.managedMcpServers)
       }
 
+      saveCustomServersToStorage(updatedServers)
       set((state) => ({
         mcpEditorStates: nextMcpStates,
         editorStates: state.activeDomain === 'MCP' ? nextMcpStates : state.editorStates,
@@ -240,6 +273,7 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
         }
       }
 
+      saveCustomServersToStorage(nextMcpServers)
       set({
         activeEditorId: editorId,
         mcpServers: nextMcpServers,
@@ -302,11 +336,13 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
     },
     
     toggleMcpServer: (serverId) => {
-      set((state) => ({
-        mcpServers: state.mcpServers.map((server) =>
+      set((state) => {
+        const nextServers = state.mcpServers.map((server) =>
           server.id === serverId ? { ...server, enabled: !server.enabled } : server
-        ),
-      }))
+        )
+        saveCustomServersToStorage(nextServers)
+        return { mcpServers: nextServers }
+      })
     },
     
     addMcpServer: (server) => {
@@ -316,18 +352,24 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
         id: newId,
         source: 'user',
       }
-      set((state) => ({
-        mcpServers: [...state.mcpServers, newServer],
-        selectedMcpServerId: newId,
-      }))
+      set((state) => {
+        const nextServers = [...state.mcpServers, newServer]
+        saveCustomServersToStorage(nextServers)
+        return {
+          mcpServers: nextServers,
+          selectedMcpServerId: newId,
+        }
+      })
     },
     
     updateMcpServer: (id, serverUpdate) => {
-      set((state) => ({
-        mcpServers: state.mcpServers.map((server) =>
+      set((state) => {
+        const nextServers = state.mcpServers.map((server) =>
           server.id === id ? { ...server, ...serverUpdate } : server
-        ),
-      }))
+        )
+        saveCustomServersToStorage(nextServers)
+        return { mcpServers: nextServers }
+      })
     },
     
     deleteMcpServer: (id) => {
@@ -337,6 +379,7 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
       if (selectedMcpServerId === id) {
         nextSelectedId = nextServers[0]?.id ?? ''
       }
+      saveCustomServersToStorage(nextServers)
       set({
         mcpServers: nextServers,
         selectedMcpServerId: nextSelectedId,
