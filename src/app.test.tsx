@@ -61,10 +61,10 @@ describe('Prompt Workbench', () => {
     expect(screen.getAllByText('context7').length).toBeGreaterThan(0)
     expect(screen.getAllByText('playwright').length).toBeGreaterThan(0)
 
-    // 默认右侧预览区应该展示 MCP JSON 格式
-    expect(screen.getByText(/"mcpServers"/)).toBeInTheDocument()
-    expect(screen.getByText(/"context7"/)).toBeInTheDocument()
-    expect(screen.getByText(/"playwright"/)).toBeInTheDocument()
+    // 默认右侧预览区应该展示 MCP TOML 格式（因为默认编辑器是 codex）
+    expect(screen.getByText(/\[mcp_servers\]/)).toBeInTheDocument()
+    expect(screen.getByText(/\[mcp_servers\.context7\]/)).toBeInTheDocument()
+    expect(screen.getByText(/\[mcp_servers\.playwright\]/)).toBeInTheDocument()
   })
 })
 

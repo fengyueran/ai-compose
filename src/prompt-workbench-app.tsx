@@ -102,6 +102,31 @@ function PromptWorkbenchApp() {
     return JSON.stringify({ mcpServers: mcpServersObj }, null, 2);
   }, [enabledMcp]);
 
+  const generatedMcpToml = useMemo(() => {
+    let tomlStr = "";
+    if (enabledMcp.length > 0) {
+      tomlStr += "[mcp_servers]\n";
+      enabledMcp.forEach((server) => {
+        tomlStr += `\n[mcp_servers.${server.name}]\n`;
+        tomlStr += `command = "${server.command}"\n`;
+        if (server.args.length > 0) {
+          tomlStr += `args = ${JSON.stringify(server.args)}\n`;
+        }
+        if (server.env && Object.keys(server.env).length > 0) {
+          tomlStr += "env = { ";
+          const envPairs = Object.entries(server.env)
+            .map(([k, v]) => `${k} = "${v}"`)
+            .join(", ");
+          tomlStr += envPairs;
+          tomlStr += " }\n";
+        }
+      });
+    } else {
+      tomlStr += "# 还没有启用任何 MCP 服务";
+    }
+    return tomlStr.trim();
+  }, [enabledMcp]);
+
   // 表单状态，用于编辑/创建 MCP
   const [formName, setFormName] = useState("");
   const [formCommand, setFormCommand] = useState("");
@@ -355,10 +380,14 @@ function PromptWorkbenchApp() {
       });
 
       try {
+        const payloadData = {
+          mcpServers: JSON.parse(generatedMcpJson).mcpServers || {},
+          managedNames: mcpServers.map((s) => s.name),
+        };
         const result = await applyMcpToEditorTarget({
           editorId,
           enabled: targetEnabled,
-          configJson: generatedMcpJson,
+          configJson: JSON.stringify(payloadData),
         });
 
         const lastAppliedTime = new Intl.DateTimeFormat("zh-CN", {
@@ -948,7 +977,7 @@ function PromptWorkbenchApp() {
                       最终 MCP 配置预览
                     </h2>
                     <p className="panel__subtitle">
-                      右侧始终展示当前启用 MCP 服务的最终 JSON 配置。
+                      右侧始终展示当前启用 MCP 服务的最终 {activeEditorId === "codex" ? "TOML" : "JSON"} 配置。
                     </p>
                   </div>
                 </div>
@@ -971,7 +1000,7 @@ function PromptWorkbenchApp() {
                         lineHeight: 1.5,
                       }}
                     >
-                      <code>{generatedMcpJson}</code>
+                      <code>{activeEditorId === "codex" ? generatedMcpToml : generatedMcpJson}</code>
                     </pre>
                   )}
                 </div>

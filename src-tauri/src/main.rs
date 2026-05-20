@@ -70,6 +70,34 @@ struct ApplyMcpResult {
     updated_at: String,
 }
 
+fn json_to_toml(json: &serde_json::Value) -> toml::Value {
+    match json {
+        serde_json::Value::Null => toml::Value::String("".to_string()),
+        serde_json::Value::Bool(b) => toml::Value::Boolean(*b),
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                toml::Value::Integer(i)
+            } else if let Some(f) = n.as_f64() {
+                toml::Value::Float(f)
+            } else {
+                toml::Value::String(n.to_string())
+            }
+        }
+        serde_json::Value::String(s) => toml::Value::String(s.clone()),
+        serde_json::Value::Array(arr) => {
+            let toml_arr = arr.iter().map(json_to_toml).collect();
+            toml::Value::Array(toml_arr)
+        }
+        serde_json::Value::Object(obj) => {
+            let mut toml_table = toml::map::Map::new();
+            for (k, v) in obj {
+                toml_table.insert(k.clone(), json_to_toml(v));
+            }
+            toml::Value::Table(toml_table)
+        }
+    }
+}
+
 #[tauri::command]
 fn apply_prompt_to_editor_target(payload: ApplyPromptPayload) -> Result<ApplyPromptResult, String> {
     let target_path = resolve_editor_agents_path(payload.editor_id)?;
@@ -135,22 +163,121 @@ fn apply_mcp_to_editor_target(payload: ApplyMcpPayload) -> Result<ApplyMcpResult
     fs::create_dir_all(parent_directory)
         .map_err(|error| format!("创建编辑器目标目录失败：{error}"))?;
 
-    let (action, next_content) = if payload.enabled {
-        let parsed: serde_json::Value = serde_json::from_str(&payload.config_json)
-            .map_err(|error| format!("非法的 MCP JSON 配置：{error}"))?;
-        let pretty_json = serde_json::to_string_pretty(&parsed)
-            .map_err(|error| format!("格式化 MCP JSON 失败：{error}"))?;
-        (ApplyAction::Updated, pretty_json)
+    // 解析配置 JSON，包含 mcpServers 以及 managedNames
+    let parsed: serde_json::Value = serde_json::from_str(&payload.config_json)
+        .map_err(|error| format!("非法的 MCP JSON 配置：{error}"))?;
+
+    let mcp_servers_json = parsed.get("mcpServers")
+        .and_then(|v| v.as_object())
+        .ok_or_else(|| "缺少 mcpServers 配置项。".to_string())?;
+
+    let managed_names: Vec<String> = parsed.get("managedNames")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let action = if payload.enabled {
+        ApplyAction::Updated
     } else {
-        let empty_config = serde_json::json!({
-            "mcpServers": {}
-        });
-        let empty_json = serde_json::to_string_pretty(&empty_config).unwrap();
-        (ApplyAction::Removed, empty_json)
+        ApplyAction::Removed
     };
 
-    fs::write(&target_path, next_content)
-        .map_err(|error| format!("写入编辑器目标 MCP 配置失败：{error}"))?;
+    match payload.editor_id {
+        EditorId::Codex => {
+            // TOML 处理逻辑 (config.toml)
+            let mut toml_root = if target_path.exists() {
+                let toml_str = fs::read_to_string(&target_path)
+                    .map_err(|error| format!("读取 Codex 配置文件失败：{error}"))?;
+                toml::from_str::<toml::Value>(&toml_str)
+                    .unwrap_or_else(|_| toml::Value::Table(toml::map::Map::new()))
+            } else {
+                toml::Value::Table(toml::map::Map::new())
+            };
+
+            // 确保有 mcp_servers table
+            if !toml_root.is_table() {
+                toml_root = toml::Value::Table(toml::map::Map::new());
+            }
+            let root_table = toml_root.as_table_mut().unwrap();
+
+            if !root_table.contains_key("mcp_servers") {
+                root_table.insert("mcp_servers".to_string(), toml::Value::Table(toml::map::Map::new()));
+            }
+            let mcp_servers_table = root_table.get_mut("mcp_servers")
+                .and_then(|v| v.as_table_mut())
+                .ok_or_else(|| "config.toml 中的 mcp_servers 不是一个 Table。".to_string())?;
+
+            if payload.enabled {
+                // 合并启用项：先从 mcp_servers 里删掉所有 managed_names，再重新插入在 config_json 里启用的服务
+                for name in &managed_names {
+                    mcp_servers_table.remove(name);
+                    if let Some(json_val) = mcp_servers_json.get(name) {
+                        mcp_servers_table.insert(name.clone(), json_to_toml(json_val));
+                    }
+                }
+            } else {
+                // 彻底移除：从 mcp_servers 里移除所有 managed_names
+                for name in &managed_names {
+                    mcp_servers_table.remove(name);
+                }
+            }
+
+            let next_content = toml::to_string_pretty(&toml_root)
+                .map_err(|error| format!("序列化 TOML 失败：{error}"))?;
+
+            fs::write(&target_path, next_content)
+                .map_err(|error| format!("写入 Codex 配置文件失败：{error}"))?;
+        }
+        _ => {
+            // JSON 处理逻辑 (mcp.json)
+            let mut json_root = if target_path.exists() {
+                let json_str = fs::read_to_string(&target_path)
+                    .map_err(|error| format!("读取编辑器配置文件失败：{error}"))?;
+                serde_json::from_str::<serde_json::Value>(&json_str)
+                    .unwrap_or_else(|_| serde_json::json!({}))
+            } else {
+                serde_json::json!({})
+            };
+
+            // 确保有 mcpServers object
+            if !json_root.is_object() {
+                json_root = serde_json::json!({});
+            }
+            let root_obj = json_root.as_object_mut().unwrap();
+
+            if !root_obj.contains_key("mcpServers") {
+                root_obj.insert("mcpServers".to_string(), serde_json::json!({}));
+            }
+            let mcp_servers_obj = root_obj.get_mut("mcpServers")
+                .and_then(|v| v.as_object_mut())
+                .ok_or_else(|| "配置文件中的 mcpServers 不是一个 Object。".to_string())?;
+
+            if payload.enabled {
+                // 合并启用项：先从 mcpServers 中删除所有 managed_names，再从 mcp_servers_json 中取启用值插入
+                for name in &managed_names {
+                    mcp_servers_obj.remove(name);
+                    if let Some(json_val) = mcp_servers_json.get(name) {
+                        mcp_servers_obj.insert(name.clone(), json_val.clone());
+                    }
+                }
+            } else {
+                // 移除所有 managed_names
+                for name in &managed_names {
+                    mcp_servers_obj.remove(name);
+                }
+            }
+
+            let next_content = serde_json::to_string_pretty(&json_root)
+                .map_err(|error| format!("序列化 JSON 失败：{error}"))?;
+
+            fs::write(&target_path, next_content)
+                .map_err(|error| format!("写入编辑器配置文件失败：{error}"))?;
+        }
+    }
 
     Ok(ApplyMcpResult {
         action,
@@ -179,7 +306,7 @@ fn resolve_editor_mcp_path(editor_id: EditorId) -> Result<PathBuf, String> {
             Ok(home_path.join(".gemini").join("mcp.json"))
         }
         EditorId::Codex => {
-            Ok(home_path.join(".codex").join("mcp.json"))
+            Ok(home_path.join(".codex").join("config.toml"))
         }
         EditorId::Cursor => {
             #[cfg(target_os = "macos")]
@@ -228,21 +355,22 @@ fn upsert_managed_block(original_content: &str, managed_block: &str) -> String {
         let mut next_content = String::with_capacity(
             original_content.len() - (end - start) + managed_block.len() + 1,
         );
-
         next_content.push_str(&original_content[..start]);
         next_content.push_str(managed_block);
         next_content.push_str(&original_content[end..]);
-
-        return normalize_trailing_newline(&next_content);
+        return next_content;
     }
 
-    let normalized_original = original_content.trim_end();
-
-    if normalized_original.is_empty() {
-        return format!("{managed_block}\n");
+    let mut next_content =
+        String::with_capacity(original_content.len() + managed_block.len() + 2);
+    let normalized = normalize_trailing_newline(original_content);
+    next_content.push_str(&normalized);
+    if !normalized.is_empty() && !normalized.ends_with("\n\n") {
+        next_content.push('\n');
     }
-
-    format!("{normalized_original}\n\n{managed_block}\n")
+    next_content.push_str(managed_block);
+    next_content.push('\n');
+    next_content
 }
 
 fn remove_managed_block(original_content: &str) -> (ApplyAction, String) {
@@ -285,18 +413,37 @@ fn build_editor_mcp_state(editor_id: EditorId) -> Result<EditorTargetState, Stri
         let content = fs::read_to_string(&target_path)
             .map_err(|error| format!("读取编辑器目标 MCP 配置失败：{error}"))?;
         
-        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) {
-            if let Some(servers) = parsed.get("mcpServers") {
-                if let Some(obj) = servers.as_object() {
-                    !obj.is_empty()
+        match editor_id {
+            EditorId::Codex => {
+                if let Ok(parsed) = toml::from_str::<toml::Value>(&content) {
+                    if let Some(servers) = parsed.get("mcp_servers") {
+                        if let Some(obj) = servers.as_table() {
+                            !obj.is_empty()
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    }
                 } else {
                     false
                 }
-            } else {
-                false
             }
-        } else {
-            false
+            _ => {
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if let Some(servers) = parsed.get("mcpServers") {
+                        if let Some(obj) = servers.as_object() {
+                            !obj.is_empty()
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            }
         }
     } else {
         false
