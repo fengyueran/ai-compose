@@ -182,10 +182,26 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
     hydrateMcpEditorStates: (editorStates) => {
       const { activeEditorId, mcpServers } = get()
       const nextMcpStates = {
-        antigravity: editorStates.antigravity,
-        codex: editorStates.codex,
-        cursor: editorStates.cursor,
+        antigravity: { ...editorStates.antigravity },
+        codex: { ...editorStates.codex },
+        cursor: { ...editorStates.cursor },
       }
+
+      // 根据是否有本地启用且被当前工作台管理（在 mcpServers 中）的有效配置，重新判定大开关的开启状态
+      const managedNames = mcpServers.map((s) => s.name)
+      const checkEditorEnabled = (targetState: typeof editorStates.codex) => {
+        const localMcp = targetState.mcpServers
+        if (!localMcp) return false
+        return Object.entries(localMcp).some(([name, val]) => {
+          if (!managedNames.includes(name)) return false
+          return val && typeof val === 'object' && 'command' in val
+        })
+      }
+
+      Object.keys(nextMcpStates).forEach((key) => {
+        const k = key as EditorId
+        nextMcpStates[k].enabled = checkEditorEnabled(nextMcpStates[k])
+      })
       
       const targetState = nextMcpStates[activeEditorId]
       let updatedServers = mcpServers
@@ -239,7 +255,10 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
       } else {
         const nextMcpStates = {
           ...mcpEditorStates,
-          [editorId]: { enabled },
+          [editorId]: {
+            ...mcpEditorStates[editorId],
+            enabled,
+          },
         }
         set({
           mcpEditorStates: nextMcpStates,
