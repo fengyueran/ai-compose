@@ -11,8 +11,6 @@ Prompt Workbench 是一个面向开发者的非聊天工作台，用于按语义
 ## 目录说明
 
 - [docs/prd.md](/Users/xinghunm/my-house/ai-compose/docs/prd.md)：产品需求文档
-- [docs/preset-fragments-draft.md](/Users/xinghunm/my-house/ai-compose/docs/preset-fragments-draft.md)：首批预设片段草案
-- `docs/plans/`：本地计划类文档，已加入忽略
 - `src/`：前端工作台
 - `src-tauri/`：桌面宿主层
 

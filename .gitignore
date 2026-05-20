@@ -13,7 +13,12 @@ dist-ssr
 *.local
 .playwright-mcp/
 docs/plans/
+src-tauri/gen/
 src-tauri/target/
+src-tauri/icons/android/
+src-tauri/icons/ios/
+src-tauri/icons/StoreLogo.png
+src-tauri/icons/Square*.png
 
 # Editor directories and files
 .vscode/*
