@@ -1,8 +1,9 @@
 import { Message } from "@xinghunm/compass-ui";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 
 import {
   applyPromptToEditorTarget,
+  loadEditorTargetStates,
   type ApplyPromptResult,
   type EditorId,
   isTauriRuntime,
@@ -60,12 +61,15 @@ function PromptWorkbenchApp() {
     applyStatus,
     editorStates,
     enabledFragmentIds,
+    hydrateEditorStates,
+    isHydratingEditorStates,
     lastAppliedAt,
     presetFragments,
     selectEditor,
     selectedFragmentId,
     selectFragment,
     setEditorEnabled,
+    setEditorHydrationPending,
     setApplyFeedback,
     toggleFragment,
   } = usePromptWorkbenchStore();
@@ -84,6 +88,59 @@ function PromptWorkbenchApp() {
 
   const activeEditor = editorStates[activeEditorId];
   const activeEditorMeta = editorMeta[activeEditorId];
+
+  useEffect(() => {
+    let isSubscribed = true;
+
+    async function syncEditorStates() {
+      if (!isTauriRuntime()) {
+        setEditorHydrationPending(false);
+        setApplyFeedback({
+          status: "idle",
+          message:
+            "当前不在 Tauri 桌面宿主中运行。请使用 `pnpm dev:desktop` 启动后再读取真实的编辑器配置状态。",
+          lastAppliedAt: null,
+        });
+        return;
+      }
+
+      try {
+        const nextEditorStates = await loadEditorTargetStates();
+
+        if (!isSubscribed) {
+          return;
+        }
+
+        hydrateEditorStates(nextEditorStates);
+        setApplyFeedback({
+          status: "idle",
+          message:
+            "已从本地编辑器目标文件同步 AI-COMPOSE 受管状态。切换开关会立即写入或清除对应配置。",
+          lastAppliedAt: null,
+        });
+      } catch (error) {
+        if (!isSubscribed) {
+          return;
+        }
+
+        setEditorHydrationPending(false);
+        setApplyFeedback({
+          status: "error",
+          message:
+            error instanceof Error
+              ? error.message
+              : "读取本地编辑器配置状态时发生未知错误。",
+          lastAppliedAt: null,
+        });
+      }
+    }
+
+    void syncEditorStates();
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [hydrateEditorStates, setApplyFeedback, setEditorHydrationPending]);
 
   const applyStatusText = {
     idle: "未执行",
@@ -278,6 +335,7 @@ function PromptWorkbenchApp() {
                           ? " editor-toggle--enabled"
                           : ""
                       }`}
+                      disabled={isHydratingEditorStates}
                       onClick={() => {
                         void handleToggleEditor(editorId);
                       }}

@@ -8,6 +8,11 @@ type ApplyPromptPayload = {
   managedBlock: string
 }
 
+export type EditorTargetState = {
+  enabled: boolean
+  targetPath: string
+}
+
 export type ApplyPromptResult = {
   action: 'removed' | 'unchanged' | 'updated'
   editorId: EditorId
@@ -35,4 +40,13 @@ export async function applyPromptToEditorTarget(
   payload: ApplyPromptPayload,
 ): Promise<ApplyPromptResult> {
   return invoke<ApplyPromptResult>('apply_prompt_to_editor_target', { payload })
+}
+
+/**
+ * Load editor enablement states from their managed target files.
+ */
+export async function loadEditorTargetStates(): Promise<
+  Record<EditorId, EditorTargetState>
+> {
+  return invoke<Record<EditorId, EditorTargetState>>('load_editor_target_states')
 }

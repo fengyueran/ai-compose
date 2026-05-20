@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-import type { EditorId } from './editor-target-command'
+import type { EditorId, EditorTargetState } from './editor-target-command'
 import {
   type PromptFragment,
   presetPromptFragments,
@@ -17,10 +17,13 @@ type PromptWorkbenchState = {
   applyStatus: ApplyStatus
   applyMessage: string
   editorStates: Record<EditorId, EditorState>
+  isHydratingEditorStates: boolean
   lastAppliedAt: string | null
   presetFragments: PromptFragment[]
   selectedFragmentId: string
   enabledFragmentIds: string[]
+  hydrateEditorStates: (editorStates: Record<EditorId, EditorTargetState>) => void
+  setEditorHydrationPending: (pending: boolean) => void
   selectEditor: (editorId: EditorId) => void
   selectFragment: (fragmentId: string) => void
   setEditorEnabled: (editorId: EditorId, enabled: boolean) => void
@@ -41,22 +44,42 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
   (set, get) => ({
     activeEditorId: 'codex',
     applyStatus: 'idle',
-    applyMessage: '请通过桌面端运行当前工作台，以启用真实的编辑器配置写入能力。',
+    applyMessage: '正在从本地编辑器目标文件读取 AI-COMPOSE 受管状态。',
     editorStates: {
       antigravity: {
         enabled: false,
       },
       codex: {
-        enabled: true,
+        enabled: false,
       },
       cursor: {
         enabled: false,
       },
     },
+    isHydratingEditorStates: true,
     lastAppliedAt: null,
     presetFragments: presetPromptFragments,
     selectedFragmentId: defaultSelectedFragmentId,
     enabledFragmentIds: defaultEnabledFragmentIds,
+    hydrateEditorStates: (editorStates) => {
+      set({
+        editorStates: {
+          antigravity: {
+            enabled: editorStates.antigravity.enabled,
+          },
+          codex: {
+            enabled: editorStates.codex.enabled,
+          },
+          cursor: {
+            enabled: editorStates.cursor.enabled,
+          },
+        },
+        isHydratingEditorStates: false,
+      })
+    },
+    setEditorHydrationPending: (pending) => {
+      set({ isHydratingEditorStates: pending })
+    },
     selectEditor: (editorId) => {
       set({ activeEditorId: editorId })
     },

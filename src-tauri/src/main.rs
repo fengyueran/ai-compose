@@ -38,6 +38,21 @@ struct ApplyPromptResult {
     updated_at: String,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EditorTargetState {
+    enabled: bool,
+    target_path: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EditorTargetStates {
+    antigravity: EditorTargetState,
+    codex: EditorTargetState,
+    cursor: EditorTargetState,
+}
+
 #[tauri::command]
 fn apply_prompt_to_editor_target(payload: ApplyPromptPayload) -> Result<ApplyPromptResult, String> {
     let target_path = resolve_editor_agents_path(payload.editor_id)?;
@@ -72,6 +87,15 @@ fn apply_prompt_to_editor_target(payload: ApplyPromptPayload) -> Result<ApplyPro
         editor_id: payload.editor_id,
         target_path: target_path.display().to_string(),
         updated_at: current_timestamp(),
+    })
+}
+
+#[tauri::command]
+fn load_editor_target_states() -> Result<EditorTargetStates, String> {
+    Ok(EditorTargetStates {
+        antigravity: build_editor_target_state(EditorId::Antigravity)?,
+        codex: build_editor_target_state(EditorId::Codex)?,
+        cursor: build_editor_target_state(EditorId::Cursor)?,
     })
 }
 
@@ -144,6 +168,22 @@ fn remove_managed_block(original_content: &str) -> (ApplyAction, String) {
     (ApplyAction::Unchanged, normalize_trailing_newline(original_content))
 }
 
+fn build_editor_target_state(editor_id: EditorId) -> Result<EditorTargetState, String> {
+    let target_path = resolve_editor_agents_path(editor_id)?;
+    let enabled = if target_path.exists() {
+        let content = fs::read_to_string(&target_path)
+            .map_err(|error| format!("读取编辑器目标状态失败：{error}"))?;
+        find_managed_block_range(&content).is_some()
+    } else {
+        false
+    };
+
+    Ok(EditorTargetState {
+        enabled,
+        target_path: target_path.display().to_string(),
+    })
+}
+
 fn find_managed_block_range(content: &str) -> Option<(usize, usize)> {
     let start = content.find(MANAGED_BLOCK_START)?;
     let end_marker_start = content[start..].find(MANAGED_BLOCK_END)? + start;
@@ -171,7 +211,10 @@ fn current_timestamp() -> String {
 
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![apply_prompt_to_editor_target])
+        .invoke_handler(tauri::generate_handler![
+            apply_prompt_to_editor_target,
+            load_editor_target_states
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
