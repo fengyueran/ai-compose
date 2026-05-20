@@ -1,10 +1,16 @@
 import { invoke } from '@tauri-apps/api/core'
 
+export type EditorId = 'codex' | 'cursor'
+
 type ApplyPromptPayload = {
+  editorId: EditorId
+  enabled: boolean
   managedBlock: string
 }
 
 export type ApplyPromptResult = {
+  action: 'removed' | 'unchanged' | 'updated'
+  editorId: EditorId
   targetPath: string
   updatedAt: string
 }
@@ -23,10 +29,10 @@ export function isTauriRuntime(): boolean {
 }
 
 /**
- * Apply the generated managed prompt block to the user-level Codex AGENTS file.
+ * Apply the generated managed prompt block to the configured editor target.
  */
-export async function applyPromptToUserCodex(
+export async function applyPromptToEditorTarget(
   payload: ApplyPromptPayload,
 ): Promise<ApplyPromptResult> {
-  return invoke<ApplyPromptResult>('apply_prompt_to_user_codex', { payload })
+  return invoke<ApplyPromptResult>('apply_prompt_to_editor_target', { payload })
 }

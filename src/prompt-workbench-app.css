@@ -12,16 +12,23 @@
   --accent-soft: rgba(197, 93, 51, 0.14);
   --success: #2f7d57;
   --shadow:
-    0 18px 42px rgba(53, 37, 20, 0.08),
-    0 2px 10px rgba(53, 37, 20, 0.05);
+    0 18px 42px rgba(53, 37, 20, 0.08), 0 2px 10px rgba(53, 37, 20, 0.05);
   --radius-xl: 28px;
   --radius-lg: 20px;
   --radius-md: 14px;
   --workspace-max: 1600px;
   min-height: 100dvh;
   background:
-    radial-gradient(circle at top left, rgba(242, 204, 120, 0.32), transparent 28%),
-    radial-gradient(circle at top right, rgba(152, 197, 170, 0.22), transparent 26%),
+    radial-gradient(
+      circle at top left,
+      rgba(242, 204, 120, 0.32),
+      transparent 28%
+    ),
+    radial-gradient(
+      circle at top right,
+      rgba(152, 197, 170, 0.22),
+      transparent 26%
+    ),
     linear-gradient(180deg, #f9f4eb 0%, var(--app-bg) 100%);
   color: var(--text-main);
 }
@@ -55,7 +62,7 @@
 .global-bar__title {
   margin: 0;
   font-family:
-    'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
+    "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif;
   font-size: clamp(1.8rem, 3vw, 2.9rem);
   line-height: 0.96;
   letter-spacing: -0.04em;
@@ -195,9 +202,74 @@
   background: rgba(255, 255, 255, 0.3);
 }
 
+.side-nav__item--editor {
+  cursor: default;
+  padding: 0 10px 0 14px;
+}
+
+.side-nav__item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.side-nav__item-select {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.side-nav__item-state {
+  color: var(--text-faint);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
 .side-nav__item--disabled:hover {
   border-color: transparent;
   background: rgba(255, 255, 255, 0.3);
+}
+
+.editor-toggle {
+  position: relative;
+  width: 48px;
+  height: 28px;
+  border: 1px solid rgba(82, 63, 41, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease;
+}
+
+.editor-toggle--enabled {
+  border-color: rgba(197, 93, 51, 0.24);
+  background: rgba(197, 93, 51, 0.18);
+}
+
+.editor-toggle__thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #fffdf8;
+  box-shadow: 0 4px 10px rgba(53, 37, 20, 0.12);
+  transition: transform 180ms ease;
+}
+
+.editor-toggle--enabled .editor-toggle__thumb {
+  transform: translateX(20px);
 }
 
 .disabled-tag {
