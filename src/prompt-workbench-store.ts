@@ -14,7 +14,9 @@ import {
 const loadCustomServersFromStorage = (): McpServer[] => {
   try {
     const data = typeof window !== 'undefined' ? localStorage.getItem('ai-compose:custom-mcp-servers') : null
-    return data ? JSON.parse(data) : []
+    const list: McpServer[] = data ? JSON.parse(data) : []
+    // 查重：过滤掉任何名字与官方预设服务重名的项，避免历史脏数据引起重复
+    return list.filter(item => !presetMcpServers.some(p => p.name.toLowerCase() === item.name.toLowerCase()))
   } catch (e) {
     console.error('Failed to load custom MCP servers from storage', e)
     return []

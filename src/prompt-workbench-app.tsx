@@ -174,6 +174,16 @@ function PromptWorkbenchApp() {
       .map((a) => a.trim())
       .filter((a) => a.length > 0);
 
+    const existsName = mcpServers.some(
+      (s) =>
+        s.name.toLowerCase() === formName.trim().toLowerCase() &&
+        (selectedMcpServerId === "__new__" || s.id !== selectedMcpServer.id)
+    );
+    if (existsName) {
+      messageApi.error(`已存在名为 "${formName.trim()}" 的 MCP 服务，请使用其他名称`);
+      return;
+    }
+
     if (selectedMcpServerId === "__new__") {
       addMcpServer({
         name: formName.trim(),
