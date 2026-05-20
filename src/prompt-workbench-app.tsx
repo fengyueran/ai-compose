@@ -83,6 +83,9 @@ function PromptWorkbenchApp() {
     mcpServers.find((server) => server.id === selectedMcpServerId) ??
     mcpServers[0];
 
+  const isExternalServer = selectedMcpServerId !== "__new__" && selectedMcpServer?.source === "external";
+  const isPresetServer = selectedMcpServerId !== "__new__" && selectedMcpServer?.source === "preset";
+
   const enabledMcp = useMemo(
     () => mcpServers.filter((server) => server.enabled),
     [mcpServers],
@@ -707,9 +710,11 @@ function PromptWorkbenchApp() {
                               {server.name}
                             </span>
                             <div className="fragment-list__item-meta-row">
-                              <span className="fragment-list__item-meta">
+                              <span className={`fragment-list__item-meta${server.source === "external" ? " fragment-list__item-meta--external" : ""}`}>
                                 {server.source === "preset"
                                   ? "官方预设"
+                                  : server.source === "external"
+                                  ? "本地配置"
                                   : "自定义"}
                               </span>
                               <span className="fragment-list__item-meta-separator">
@@ -754,19 +759,25 @@ function PromptWorkbenchApp() {
                       </p>
                     </div>
                     {selectedMcpServerId !== "__new__" && selectedMcpServer && (
-                      <button
-                        className={`fragment-action-btn${
-                          selectedMcpServer.enabled
-                            ? " fragment-action-btn--active"
-                            : ""
-                        }`}
-                        onClick={() => toggleMcpServer(selectedMcpServer.id)}
-                        type="button"
-                      >
-                        {selectedMcpServer.enabled
-                          ? "从最终 MCP 移除"
-                          : "加入最终 MCP"}
-                      </button>
+                      isExternalServer ? (
+                        <span className="mcp-badge-readonly" style={{ fontSize: "12px", color: "var(--text-faint)", background: "var(--surface-container-high)", padding: "6px 10px", borderRadius: "6px", fontWeight: 500 }}>
+                          外部手动配置 (只读)
+                        </span>
+                      ) : (
+                        <button
+                          className={`fragment-action-btn${
+                            selectedMcpServer.enabled
+                              ? " fragment-action-btn--active"
+                              : ""
+                          }`}
+                          onClick={() => toggleMcpServer(selectedMcpServer.id)}
+                          type="button"
+                        >
+                          {selectedMcpServer.enabled
+                            ? "从最终 MCP 移除"
+                            : "加入最终 MCP"}
+                        </button>
+                      )
                     )}
                   </div>
 
@@ -786,7 +797,7 @@ function PromptWorkbenchApp() {
                           className="form-input"
                           placeholder="例如: weather"
                           value={formName}
-                          disabled={selectedMcpServerId !== "__new__" && selectedMcpServer?.source === "preset"}
+                          disabled={isPresetServer || isExternalServer}
                           onChange={(e) => setFormName(e.target.value)}
                         />
                       </div>
@@ -799,7 +810,7 @@ function PromptWorkbenchApp() {
                           className="form-input"
                           placeholder="例如: npx, python, uv"
                           value={formCommand}
-                          disabled={selectedMcpServerId !== "__new__" && selectedMcpServer?.source === "preset"}
+                          disabled={isPresetServer || isExternalServer}
                           onChange={(e) => setFormCommand(e.target.value)}
                         />
                       </div>
@@ -815,6 +826,7 @@ function PromptWorkbenchApp() {
 -y
 @modelcontextprotocol/server-sqlite"
                           value={formArgs}
+                          disabled={isPresetServer || isExternalServer}
                           onChange={(e) => setFormArgs(e.target.value)}
                         />
                       </div>
@@ -830,6 +842,7 @@ function PromptWorkbenchApp() {
                                 className="form-input env-input"
                                 placeholder="KEY"
                                 value={pair.key}
+                                disabled={isExternalServer}
                                 onChange={(e) => {
                                   const next = [...formEnv];
                                   next[index].key = e.target.value;
@@ -840,45 +853,50 @@ function PromptWorkbenchApp() {
                                 className="form-input env-input"
                                 placeholder="VALUE"
                                 value={pair.value}
+                                disabled={isExternalServer}
                                 onChange={(e) => {
                                   const next = [...formEnv];
                                   next[index].value = e.target.value;
                                   setFormEnv(next);
                                 }}
                               />
-                              <button
-                                type="button"
-                                className="env-editor__delete-btn"
-                                style={{
-                                  background: "none",
-                                  border: "none",
-                                  color: "#ff4d4f",
-                                  cursor: "pointer",
-                                  fontSize: "12px",
-                                }}
-                                onClick={() => setFormEnv(formEnv.filter((_, i) => i !== index))}
-                              >
-                                删除
-                              </button>
+                              {!isExternalServer && (
+                                <button
+                                  type="button"
+                                  className="env-editor__delete-btn"
+                                  style={{
+                                    background: "none",
+                                    border: "none",
+                                    color: "#ff4d4f",
+                                    cursor: "pointer",
+                                    fontSize: "12px",
+                                  }}
+                                  onClick={() => setFormEnv(formEnv.filter((_, i) => i !== index))}
+                                >
+                                  删除
+                                </button>
+                              )}
                             </div>
                           ))}
-                          <button
-                            type="button"
-                            className="env-editor__add-btn"
-                            style={{
-                              alignSelf: "flex-start",
-                              background: "rgba(255, 140, 0, 0.1)",
-                              border: "1px dashed var(--accent-color)",
-                              color: "var(--accent-color)",
-                              padding: "4px 8px",
-                              borderRadius: "4px",
-                              fontSize: "12px",
-                              cursor: "pointer",
-                            }}
-                            onClick={() => setFormEnv([...formEnv, { key: "", value: "" }])}
-                          >
-                            + 添加环境变量
-                          </button>
+                          {!isExternalServer && (
+                            <button
+                              type="button"
+                              className="env-editor__add-btn"
+                              style={{
+                                alignSelf: "flex-start",
+                                background: "rgba(255, 140, 0, 0.1)",
+                                border: "1px dashed var(--accent-color)",
+                                color: "var(--accent-color)",
+                                padding: "4px 8px",
+                                borderRadius: "4px",
+                                fontSize: "12px",
+                                cursor: "pointer",
+                              }}
+                              onClick={() => setFormEnv([...formEnv, { key: "", value: "" }])}
+                            >
+                              + 添加环境变量
+                            </button>
+                          )}
                         </div>
                       </div>
 
@@ -903,14 +921,17 @@ function PromptWorkbenchApp() {
                         <button
                           type="button"
                           className="mcp-form__btn mcp-form__btn--primary"
+                          disabled={isExternalServer}
                           style={{
-                            background: "linear-gradient(135deg, var(--accent-color) 0%, #ff8c00 100%)",
+                            background: isExternalServer 
+                              ? "var(--surface-container-high)" 
+                              : "linear-gradient(135deg, var(--accent-color) 0%, #ff8c00 100%)",
                             border: "none",
-                            color: "#fff",
+                            color: isExternalServer ? "var(--text-faint)" : "#fff",
                             padding: "6px 12px",
                             borderRadius: "6px",
                             fontWeight: 500,
-                            cursor: "pointer",
+                            cursor: isExternalServer ? "not-allowed" : "pointer",
                           }}
                           onClick={handleSaveMcp}
                         >

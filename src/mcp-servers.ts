@@ -5,7 +5,7 @@ export type McpServer = {
   args: string[]
   env?: Record<string, string>
   enabled: boolean
-  source: 'preset' | 'user'
+  source: 'preset' | 'user' | 'external'
   description?: string
 }
 

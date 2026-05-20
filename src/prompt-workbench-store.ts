@@ -77,7 +77,8 @@ const initialMcpEditorStates = {
 
 const syncMcpServersWithLocal = (
   mcpServers: McpServer[],
-  localMcp: Record<string, any> | undefined
+  localMcp: Record<string, any> | undefined,
+  managedMcp: Record<string, any> | undefined
 ): McpServer[] => {
   if (!localMcp) {
     return mcpServers
@@ -88,16 +89,22 @@ const syncMcpServersWithLocal = (
     const localVal = localMcp[server.name]
     // 必须要含有 command 字段才认为是真正有效启用的服务
     if (localVal && typeof localVal === 'object' && 'command' in localVal) {
+      let source = server.source
+      if (source !== 'preset') {
+        const isManaged = managedMcp && server.name in managedMcp
+        source = isManaged ? 'user' : 'external'
+      }
+
       return {
         ...server,
         enabled: true,
         command: localVal.command ?? server.command,
         args: localVal.args ?? server.args,
         env: localVal.env ?? server.env,
+        source,
       }
     } else {
-      // ！！！关键：如果本地没有，不要把 server.enabled 强行重置为 false！！！
-      // 保持它在工作台原本的启用状态不变，以体现用户在界面上的操作意图。
+      // 保持原本的启用状态不变，保障操作意图
       return server
     }
   })
@@ -114,6 +121,9 @@ const syncMcpServersWithLocal = (
     const exists = nextServers.some((s) => s.name === name)
     if (!exists) {
       const newId = name.toLowerCase().replace(/\s+/g, '-')
+      const isManaged = managedMcp && name in managedMcp
+      const source = isManaged ? 'user' : 'external'
+
       nextServers.push({
         id: newId,
         name,
@@ -121,8 +131,10 @@ const syncMcpServersWithLocal = (
         args: (val as any).args ?? [],
         env: (val as any).env,
         enabled: true,
-        source: 'user',
-        description: '从本地编辑器配置文件中加载的自定义服务',
+        source,
+        description: source === 'external' 
+          ? '检测到本地配置文件中手动写入的外部服务 (只读)' 
+          : '从本地编辑器配置文件中加载的自定义服务',
       })
     }
   })
@@ -154,7 +166,7 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
       if (domain === 'MCP') {
         const targetState = mcpEditorStates[activeEditorId]
         if (targetState && targetState.targetPath !== '') {
-          nextMcpServers = syncMcpServersWithLocal(mcpServers, targetState.mcpServers)
+          nextMcpServers = syncMcpServersWithLocal(mcpServers, targetState.mcpServers, targetState.managedMcpServers)
         }
       }
 
@@ -186,13 +198,11 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
         cursor: { ...editorStates.cursor },
       }
 
-      // 根据是否有本地启用且被当前工作台管理（在 mcpServers 中）的有效配置，重新判定大开关的开启状态
-      const managedNames = mcpServers.map((s) => s.name)
+      // 根据受管边界内是否有启用的有效配置，重新判定大开关的开启状态
       const checkEditorEnabled = (targetState: typeof editorStates.codex) => {
-        const localMcp = targetState.mcpServers
-        if (!localMcp) return false
-        return Object.entries(localMcp).some(([name, val]) => {
-          if (!managedNames.includes(name)) return false
+        const managedMcp = targetState.managedMcpServers
+        if (!managedMcp) return false
+        return Object.values(managedMcp).some((val) => {
           return val && typeof val === 'object' && 'command' in val
         })
       }
@@ -205,7 +215,7 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
       const targetState = nextMcpStates[activeEditorId]
       let updatedServers = mcpServers
       if (targetState && targetState.targetPath !== '') {
-        updatedServers = syncMcpServersWithLocal(mcpServers, targetState.mcpServers)
+        updatedServers = syncMcpServersWithLocal(mcpServers, targetState.mcpServers, targetState.managedMcpServers)
       }
 
       set((state) => ({
@@ -226,7 +236,7 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
       if (activeDomain === 'MCP') {
         const targetState = mcpEditorStates[editorId]
         if (targetState && targetState.targetPath !== '') {
-          nextMcpServers = syncMcpServersWithLocal(mcpServers, targetState.mcpServers)
+          nextMcpServers = syncMcpServersWithLocal(mcpServers, targetState.mcpServers, targetState.managedMcpServers)
         }
       }
 

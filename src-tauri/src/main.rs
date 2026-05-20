@@ -44,6 +44,7 @@ struct EditorTargetState {
     enabled: bool,
     target_path: String,
     mcp_servers: Option<serde_json::Value>,
+    managed_mcp_servers: Option<serde_json::Value>,
 }
 
 #[derive(Serialize)]
@@ -484,13 +485,36 @@ fn build_editor_target_state(editor_id: EditorId) -> Result<EditorTargetState, S
         enabled,
         target_path: target_path.display().to_string(),
         mcp_servers: None,
+        managed_mcp_servers: None,
     })
+}
+
+fn extract_managed_mcp_servers(content: &str) -> Option<serde_json::Value> {
+    let begin_marker = "# === BEGIN AI-COMPOSE MCP ===";
+    let end_marker = "# === END AI-COMPOSE MCP ===";
+    
+    let start_idx = content.find(begin_marker)?;
+    let end_idx = content.find(end_marker)?;
+    if start_idx >= end_idx {
+        return None;
+    }
+    
+    let managed_block = &content[start_idx + begin_marker.len()..end_idx];
+    // 构造一个可被完整 TOML 解析器载入的伪文档
+    let toml_doc = format!("[mcp_servers]\n{}", managed_block);
+    if let Ok(parsed) = toml::from_str::<toml::Value>(&toml_doc) {
+        if let Some(servers) = parsed.get("mcp_servers") {
+            return Some(toml_to_json(servers));
+        }
+    }
+    None
 }
 
 fn build_editor_mcp_state(editor_id: EditorId) -> Result<EditorTargetState, String> {
     let target_path = resolve_editor_mcp_path(editor_id)?;
     let mut enabled = false;
     let mut mcp_servers = None;
+    let mut managed_mcp_servers = None;
 
     if target_path.exists() {
         let content = fs::read_to_string(&target_path)
@@ -506,6 +530,8 @@ fn build_editor_mcp_state(editor_id: EditorId) -> Result<EditorTargetState, Stri
                         }
                     }
                 }
+                // 提取受管服务
+                managed_mcp_servers = extract_managed_mcp_servers(&content);
             }
             _ => {
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) {
@@ -513,6 +539,7 @@ fn build_editor_mcp_state(editor_id: EditorId) -> Result<EditorTargetState, Stri
                         if let Some(obj) = servers.as_object() {
                             enabled = !obj.is_empty();
                             mcp_servers = Some(servers.clone());
+                            managed_mcp_servers = Some(servers.clone());
                         }
                     }
                 }
@@ -524,6 +551,7 @@ fn build_editor_mcp_state(editor_id: EditorId) -> Result<EditorTargetState, Stri
         enabled,
         target_path: target_path.display().to_string(),
         mcp_servers,
+        managed_mcp_servers,
     })
 }
 

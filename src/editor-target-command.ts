@@ -12,6 +12,7 @@ export type EditorTargetState = {
   enabled: boolean
   targetPath: string
   mcpServers?: Record<string, any>
+  managedMcpServers?: Record<string, any>
 }
 
 export type ApplyPromptResult = {
