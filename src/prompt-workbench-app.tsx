@@ -64,6 +64,7 @@ function PromptWorkbenchApp() {
     toggleMcpServer,
     addMcpServer,
     updateMcpServer,
+    deleteMcpServer,
   } = usePromptWorkbenchStore();
 
   const selectedFragment =
@@ -191,6 +192,11 @@ function PromptWorkbenchApp() {
       });
       messageApi.success("修改 MCP 服务成功！请点击右侧“应用配置”写入编辑器");
     }
+  };
+
+  const handleDeleteMcp = (id: string) => {
+    deleteMcpServer(id);
+    messageApi.success("删除 MCP 服务成功！请点击右侧“应用配置”写入编辑器");
   };
 
   useEffect(() => {
@@ -796,7 +802,7 @@ function PromptWorkbenchApp() {
 
                     {selectedMcpServerId !== "__new__" && selectedMcpServer?.source === "user" && (
                       <p style={{ margin: "-8px 0 16px 0", fontSize: "12px", color: "var(--text-faint)", background: "rgba(255, 140, 0, 0.04)", border: "1px dashed rgba(255, 140, 0, 0.15)", padding: "8px 12px", borderRadius: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
-                        💡 <strong>小提示：</strong> 工作台的修改（加入、移除、编辑等）均为临时保存，需点击右侧预览区的<strong>“应用配置”</strong>按钮后才真正写入到本地配置文件。
+                        💡 <strong>小提示：</strong> 工作台的修改（加入、移除、删除、编辑等）均为临时保存，需点击右侧预览区的<strong>“应用配置”</strong>按钮后才真正写入到本地配置文件。
                       </p>
                     )}
 
@@ -913,6 +919,23 @@ function PromptWorkbenchApp() {
                       </div>
 
                       <div className="mcp-form__actions" style={{ display: "flex", gap: "12px", marginTop: "12px", justifyContent: "flex-end" }}>
+                        {selectedMcpServerId !== "__new__" && selectedMcpServer?.source === "user" && (
+                          <button
+                            type="button"
+                            className="mcp-form__btn mcp-form__btn--danger"
+                            style={{
+                              background: "rgba(255, 77, 79, 0.1)",
+                              border: "1px solid #ff4d4f",
+                              color: "#ff4d4f",
+                              padding: "6px 12px",
+                              borderRadius: "6px",
+                              cursor: "pointer",
+                            }}
+                            onClick={() => handleDeleteMcp(selectedMcpServer.id)}
+                          >
+                            删除服务
+                          </button>
+                        )}
                         <button
                           type="button"
                           className="mcp-form__btn mcp-form__btn--primary"
