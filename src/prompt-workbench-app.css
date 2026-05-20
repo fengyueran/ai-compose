@@ -765,6 +765,8 @@
   cursor: pointer;
   box-shadow: 0 2px 6px rgba(197, 93, 51, 0.15);
   transition: all 0.2s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .preview-apply-btn:hover {
