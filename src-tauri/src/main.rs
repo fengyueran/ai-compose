@@ -43,6 +43,7 @@ struct ApplyPromptResult {
 struct EditorTargetState {
     enabled: bool,
     target_path: String,
+    mcp_servers: Option<serde_json::Value>,
 }
 
 #[derive(Serialize)]
@@ -68,6 +69,29 @@ struct ApplyMcpResult {
     editor_id: EditorId,
     target_path: String,
     updated_at: String,
+}
+
+fn toml_to_json(toml: &toml::Value) -> serde_json::Value {
+    match toml {
+        toml::Value::String(s) => serde_json::Value::String(s.clone()),
+        toml::Value::Integer(i) => serde_json::Value::Number((*i).into()),
+        toml::Value::Float(f) => serde_json::Number::from_f64(*f)
+            .map(serde_json::Value::Number)
+            .unwrap_or(serde_json::Value::Null),
+        toml::Value::Boolean(b) => serde_json::Value::Bool(*b),
+        toml::Value::Datetime(d) => serde_json::Value::String(d.to_string()),
+        toml::Value::Array(arr) => {
+            let json_arr = arr.iter().map(toml_to_json).collect();
+            serde_json::Value::Array(json_arr)
+        }
+        toml::Value::Table(table) => {
+            let mut json_obj = serde_json::Map::new();
+            for (k, v) in table {
+                json_obj.insert(k.clone(), toml_to_json(v));
+            }
+            serde_json::Value::Object(json_obj)
+        }
+    }
 }
 
 fn json_to_toml(json: &serde_json::Value) -> toml::Value {
@@ -404,12 +428,16 @@ fn build_editor_target_state(editor_id: EditorId) -> Result<EditorTargetState, S
     Ok(EditorTargetState {
         enabled,
         target_path: target_path.display().to_string(),
+        mcp_servers: None,
     })
 }
 
 fn build_editor_mcp_state(editor_id: EditorId) -> Result<EditorTargetState, String> {
     let target_path = resolve_editor_mcp_path(editor_id)?;
-    let enabled = if target_path.exists() {
+    let mut enabled = false;
+    let mut mcp_servers = None;
+
+    if target_path.exists() {
         let content = fs::read_to_string(&target_path)
             .map_err(|error| format!("读取编辑器目标 MCP 配置失败：{error}"))?;
         
@@ -418,40 +446,29 @@ fn build_editor_mcp_state(editor_id: EditorId) -> Result<EditorTargetState, Stri
                 if let Ok(parsed) = toml::from_str::<toml::Value>(&content) {
                     if let Some(servers) = parsed.get("mcp_servers") {
                         if let Some(obj) = servers.as_table() {
-                            !obj.is_empty()
-                        } else {
-                            false
+                            enabled = !obj.is_empty();
+                            mcp_servers = Some(toml_to_json(servers));
                         }
-                    } else {
-                        false
                     }
-                } else {
-                    false
                 }
             }
             _ => {
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) {
                     if let Some(servers) = parsed.get("mcpServers") {
                         if let Some(obj) = servers.as_object() {
-                            !obj.is_empty()
-                        } else {
-                            false
+                            enabled = !obj.is_empty();
+                            mcp_servers = Some(servers.clone());
                         }
-                    } else {
-                        false
                     }
-                } else {
-                    false
                 }
             }
         }
-    } else {
-        false
-    };
+    }
 
     Ok(EditorTargetState {
         enabled,
         target_path: target_path.display().to_string(),
+        mcp_servers,
     })
 }
 

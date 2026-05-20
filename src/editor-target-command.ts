@@ -11,6 +11,7 @@ type ApplyPromptPayload = {
 export type EditorTargetState = {
   enabled: boolean
   targetPath: string
+  mcpServers?: Record<string, any>
 }
 
 export type ApplyPromptResult = {

@@ -23,7 +23,7 @@ type PromptWorkbenchState = {
   applyMessage: string
   editorStates: Record<EditorId, EditorState>
   promptEditorStates: Record<EditorId, EditorState>
-  mcpEditorStates: Record<EditorId, EditorState>
+  mcpEditorStates: Record<EditorId, EditorTargetState>
   isHydratingEditorStates: boolean
   lastAppliedAt: string | null
   presetFragments: PromptFragment[]
@@ -69,6 +69,67 @@ const initialEditorStates = {
   cursor: { enabled: false },
 }
 
+const initialMcpEditorStates = {
+  antigravity: { enabled: false, targetPath: '' },
+  codex: { enabled: false, targetPath: '' },
+  cursor: { enabled: false, targetPath: '' },
+}
+
+const syncMcpServersWithLocal = (
+  mcpServers: McpServer[],
+  localMcp: Record<string, any> | undefined
+): McpServer[] => {
+  if (!localMcp) {
+    return mcpServers.map((s) => ({ ...s, enabled: false }))
+  }
+
+  // 1. 用本地配置更新已有的服务启用状态和配置内容
+  let nextServers = mcpServers.map((server) => {
+    const localVal = localMcp[server.name]
+    if (localVal) {
+      return {
+        ...server,
+        enabled: true,
+        command: localVal.command ?? server.command,
+        args: localVal.args ?? server.args,
+        env: localVal.env ?? server.env,
+      }
+    } else {
+      return {
+        ...server,
+        enabled: false,
+      }
+    }
+  })
+
+  // 2. 将本地存在但工作台列表中没有的自定义服务动态拉取进来
+  Object.entries(localMcp).forEach(([name, val]) => {
+    if (!val || typeof val !== 'object' || Array.isArray(val)) {
+      return
+    }
+    if (!('command' in val)) {
+      return
+    }
+
+    const exists = nextServers.some((s) => s.name === name)
+    if (!exists) {
+      const newId = name.toLowerCase().replace(/\s+/g, '-')
+      nextServers.push({
+        id: newId,
+        name,
+        command: (val as any).command ?? '',
+        args: (val as any).args ?? [],
+        env: (val as any).env,
+        enabled: true,
+        source: 'user',
+        description: '从本地编辑器配置文件中加载的自定义服务',
+      })
+    }
+  })
+
+  return nextServers
+}
+
 export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
   (set, get) => ({
     activeDomain: 'Prompt',
@@ -77,7 +138,7 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
     applyMessage: '正在从本地编辑器目标文件读取 AI-COMPOSE 受管状态。',
     editorStates: initialEditorStates,
     promptEditorStates: initialEditorStates,
-    mcpEditorStates: initialEditorStates,
+    mcpEditorStates: initialMcpEditorStates,
     isHydratingEditorStates: true,
     lastAppliedAt: null,
     presetFragments: presetPromptFragments,
@@ -87,10 +148,20 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
     selectedMcpServerId: defaultSelectedMcpServerId,
     
     selectDomain: (domain) => {
-      const { promptEditorStates, mcpEditorStates } = get()
+      const { promptEditorStates, mcpEditorStates, activeEditorId, mcpServers } = get()
+      
+      let nextMcpServers = mcpServers
+      if (domain === 'MCP') {
+        const targetState = mcpEditorStates[activeEditorId]
+        if (targetState && targetState.targetPath !== '') {
+          nextMcpServers = syncMcpServersWithLocal(mcpServers, targetState.mcpServers)
+        }
+      }
+
       set({
         activeDomain: domain,
         editorStates: domain === 'Prompt' ? promptEditorStates : mcpEditorStates,
+        mcpServers: nextMcpServers,
       })
     },
     
@@ -108,14 +179,23 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
     },
     
     hydrateMcpEditorStates: (editorStates) => {
+      const { activeEditorId, mcpServers } = get()
       const nextMcpStates = {
-        antigravity: { enabled: editorStates.antigravity.enabled },
-        codex: { enabled: editorStates.codex.enabled },
-        cursor: { enabled: editorStates.cursor.enabled },
+        antigravity: editorStates.antigravity,
+        codex: editorStates.codex,
+        cursor: editorStates.cursor,
       }
+      
+      const targetState = nextMcpStates[activeEditorId]
+      let updatedServers = mcpServers
+      if (targetState && targetState.targetPath !== '') {
+        updatedServers = syncMcpServersWithLocal(mcpServers, targetState.mcpServers)
+      }
+
       set((state) => ({
         mcpEditorStates: nextMcpStates,
         editorStates: state.activeDomain === 'MCP' ? nextMcpStates : state.editorStates,
+        mcpServers: updatedServers,
       }))
     },
     
@@ -124,7 +204,20 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
     },
     
     selectEditor: (editorId) => {
-      set({ activeEditorId: editorId })
+      const { activeDomain, mcpEditorStates, mcpServers } = get()
+      
+      let nextMcpServers = mcpServers
+      if (activeDomain === 'MCP') {
+        const targetState = mcpEditorStates[editorId]
+        if (targetState && targetState.targetPath !== '') {
+          nextMcpServers = syncMcpServersWithLocal(mcpServers, targetState.mcpServers)
+        }
+      }
+
+      set({
+        activeEditorId: editorId,
+        mcpServers: nextMcpServers,
+      })
     },
     
     selectFragment: (fragmentId) => {
