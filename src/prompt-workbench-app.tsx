@@ -706,20 +706,19 @@ function PromptWorkbenchApp() {
                           type="button"
                         >
                           <div className="fragment-list__item-main">
-                            <span className="fragment-list__item-title">
-                              {server.name}
-                            </span>
-                            <div className="fragment-list__item-meta-row">
-                              <span className={`fragment-list__item-meta${server.source === "external" ? " fragment-list__item-meta--external" : ""}`}>
+                            <div className="fragment-list__item-title-row" style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                              <span className="fragment-list__item-title" style={{ margin: 0 }}>
+                                {server.name}
+                              </span>
+                              <span className={`mcp-source-badge mcp-source-badge--${server.source}`}>
                                 {server.source === "preset"
-                                  ? "官方预设"
+                                  ? "官方"
                                   : server.source === "external"
                                   ? "本地配置"
                                   : "自定义"}
                               </span>
-                              <span className="fragment-list__item-meta-separator">
-                                ·
-                              </span>
+                            </div>
+                            <div className="fragment-list__item-meta-row">
                               <span className="fragment-list__item-meta">
                                 {server.args.length} 个参数
                               </span>
