@@ -1,10 +1,11 @@
 import { Message } from "@xinghunm/compass-ui";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   applyPromptToEditorTarget,
   loadEditorTargetStates,
-  type ApplyPromptResult,
+  applyMcpToEditorTarget,
+  loadEditorMcpStates,
   type EditorId,
   isTauriRuntime,
 } from "./editor-target-command";
@@ -14,7 +15,7 @@ import { usePromptWorkbenchStore } from "./prompt-workbench-store";
 
 const configurationDomains = [
   { name: "Prompt", isAvailable: true },
-  { name: "MCP", isAvailable: false },
+  { name: "MCP", isAvailable: true },
   { name: "Skills", isAvailable: false },
   { name: "Profiles", isAvailable: false },
 ] as const;
@@ -40,10 +41,13 @@ function PromptWorkbenchApp() {
   const [messageApi, messageContextHolder] = Message.useMessage();
 
   const {
+    activeDomain,
+    selectDomain,
     activeEditorId,
     editorStates,
     enabledFragmentIds,
-    hydrateEditorStates,
+    hydratePromptEditorStates,
+    hydrateMcpEditorStates,
     isHydratingEditorStates,
     presetFragments,
     selectEditor,
@@ -53,6 +57,14 @@ function PromptWorkbenchApp() {
     setEditorHydrationPending,
     setApplyFeedback,
     toggleFragment,
+    // MCP
+    mcpServers,
+    selectedMcpServerId,
+    selectMcpServer,
+    toggleMcpServer,
+    addMcpServer,
+    updateMcpServer,
+    deleteMcpServer,
   } = usePromptWorkbenchStore();
 
   const selectedFragment =
@@ -66,6 +78,98 @@ function PromptWorkbenchApp() {
       ),
     [enabledFragmentIds, presetFragments],
   );
+
+  const selectedMcpServer =
+    mcpServers.find((server) => server.id === selectedMcpServerId) ??
+    mcpServers[0];
+
+  const enabledMcp = useMemo(
+    () => mcpServers.filter((server) => server.enabled),
+    [mcpServers],
+  );
+
+  const generatedMcpJson = useMemo(() => {
+    const mcpServersObj: Record<string, any> = {};
+    enabledMcp.forEach((server) => {
+      mcpServersObj[server.name] = {
+        command: server.command,
+        args: server.args,
+      };
+      if (server.env && Object.keys(server.env).length > 0) {
+        mcpServersObj[server.name].env = server.env;
+      }
+    });
+    return JSON.stringify({ mcpServers: mcpServersObj }, null, 2);
+  }, [enabledMcp]);
+
+  // 表单状态，用于编辑/创建 MCP
+  const [formName, setFormName] = useState("");
+  const [formCommand, setFormCommand] = useState("");
+  const [formArgs, setFormArgs] = useState("");
+  const [formEnv, setFormEnv] = useState<{ key: string; value: string }[]>([]);
+
+  // 当选中的 MCP 发生变化时，同步表单
+  useEffect(() => {
+    if (selectedMcpServer && selectedMcpServerId !== "__new__") {
+      setFormName(selectedMcpServer.name);
+      setFormCommand(selectedMcpServer.command);
+      setFormArgs(selectedMcpServer.args.join("\n"));
+      setFormEnv(
+        Object.entries(selectedMcpServer.env ?? {}).map(([key, value]) => ({
+          key,
+          value,
+        })),
+      );
+    } else if (selectedMcpServerId === "__new__") {
+      setFormName("");
+      setFormCommand("npx");
+      setFormArgs("");
+      setFormEnv([]);
+    }
+  }, [selectedMcpServerId, selectedMcpServer]);
+
+  const handleSaveMcp = () => {
+    if (!formName.trim() || !formCommand.trim()) {
+      messageApi.error("名称和命令不能为空");
+      return;
+    }
+
+    const envObj: Record<string, string> = {};
+    formEnv.forEach(({ key, value }) => {
+      if (key.trim()) {
+        envObj[key.trim()] = value;
+      }
+    });
+
+    const parsedArgs = formArgs
+      .split("\n")
+      .map((a) => a.trim())
+      .filter((a) => a.length > 0);
+
+    if (selectedMcpServerId === "__new__") {
+      addMcpServer({
+        name: formName.trim(),
+        command: formCommand.trim(),
+        args: parsedArgs,
+        env: envObj,
+        enabled: true,
+      });
+      messageApi.success("添加 MCP 服务成功");
+    } else {
+      updateMcpServer(selectedMcpServer.id, {
+        name: formName.trim(),
+        command: formCommand.trim(),
+        args: parsedArgs,
+        env: envObj,
+      });
+      messageApi.success("修改 MCP 服务成功");
+    }
+  };
+
+  const handleDeleteMcp = (id: string) => {
+    deleteMcpServer(id);
+    messageApi.success("删除 MCP 服务成功");
+  };
 
   useEffect(() => {
     let isSubscribed = true;
@@ -83,13 +187,17 @@ function PromptWorkbenchApp() {
       }
 
       try {
-        const nextEditorStates = await loadEditorTargetStates();
+        const [nextPromptStates, nextMcpStates] = await Promise.all([
+          loadEditorTargetStates(),
+          loadEditorMcpStates(),
+        ]);
 
         if (!isSubscribed) {
           return;
         }
 
-        hydrateEditorStates(nextEditorStates);
+        hydratePromptEditorStates(nextPromptStates);
+        hydrateMcpEditorStates(nextMcpStates);
         setApplyFeedback({
           status: "idle",
           message:
@@ -118,99 +226,174 @@ function PromptWorkbenchApp() {
     return () => {
       isSubscribed = false;
     };
-  }, [hydrateEditorStates, setApplyFeedback, setEditorHydrationPending]);
+  }, [
+    hydratePromptEditorStates,
+    hydrateMcpEditorStates,
+    setApplyFeedback,
+    setEditorHydrationPending,
+  ]);
 
   const applyToEditor = async (
     editorId: EditorId,
     targetEnabled: boolean,
-  ): Promise<ApplyPromptResult | null> => {
-    if (targetEnabled && enabledFragments.length === 0) {
-      setApplyFeedback({
-        status: "error",
-        message: "请至少启用一个片段后再执行应用。",
-        lastAppliedAt: null,
-      });
-      return null;
-    }
+  ): Promise<{ action: string; targetPath: string } | null> => {
+    if (activeDomain === "Prompt") {
+      if (targetEnabled && enabledFragments.length === 0) {
+        setApplyFeedback({
+          status: "error",
+          message: "请至少启用一个片段后再执行应用。",
+          lastAppliedAt: null,
+        });
+        return null;
+      }
 
-    if (!isTauriRuntime()) {
-      setApplyFeedback({
-        status: "error",
-        message:
-          "当前不在 Tauri 桌面宿主中运行。请使用 `pnpm dev:desktop` 启动后再执行应用。",
-        lastAppliedAt: null,
-      });
-      return null;
-    }
-
-    setApplyFeedback({
-      status: "pending",
-      message: targetEnabled
-        ? editorId === "codex"
-          ? "正在整理最终 Prompt，并通过桌面宿主写入用户级 Codex AGENTS.md。"
-          : editorId === "cursor"
-            ? "正在整理最终 Prompt，并通过桌面宿主写入用户级 Cursor AGENTS.md。"
-            : "正在整理最终 Prompt，并通过桌面宿主写入用户级 Antigravity GEMINI.md。"
-        : editorId === "codex"
-          ? "正在清除用户级 Codex 中由 AI-COMPOSE 受管的提示词配置。"
-          : editorId === "cursor"
-            ? "正在清除用户级 Cursor 中由 AI-COMPOSE 受管的提示词配置。"
-            : "正在清除用户级 Antigravity 中由 AI-COMPOSE 受管的提示词配置。",
-      lastAppliedAt: null,
-    });
-
-    try {
-      const generatedAt = new Intl.DateTimeFormat("zh-CN", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: false,
-      }).format(new Date());
-      const managedBlock = composeManagedPromptBlock(
-        enabledFragments,
-        generatedAt,
-      );
-      const result = await applyPromptToEditorTarget({
-        editorId,
-        enabled: targetEnabled,
-        managedBlock,
-      });
-
-      const lastAppliedTime = new Intl.DateTimeFormat("zh-CN", {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: false,
-      }).format(new Date());
+      if (!isTauriRuntime()) {
+        setApplyFeedback({
+          status: "error",
+          message:
+            "当前不在 Tauri 桌面宿主中运行。请使用 `pnpm dev:desktop` 启动后再执行应用。",
+          lastAppliedAt: null,
+        });
+        return null;
+      }
 
       setApplyFeedback({
-        status: "success",
-        message:
-          result.action === "updated"
-            ? `已成功写入 ${result.targetPath}，当前共更新 ${enabledFragments.length} 个片段的受管区块。`
-            : result.action === "removed"
-              ? `已从 ${result.targetPath} 清除 AI-COMPOSE 受管区块，其他非受管内容保持不变。`
-              : `${result.targetPath} 当前没有可清除的 AI-COMPOSE 受管区块。`,
-        lastAppliedAt: lastAppliedTime,
-      });
-
-      return result;
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "写入编辑器目标配置时发生未知错误。";
-
-      setApplyFeedback({
-        status: "error",
-        message,
+        status: "pending",
+        message: targetEnabled
+          ? editorId === "codex"
+            ? "正在整理最终 Prompt，并通过桌面宿主写入用户级 Codex AGENTS.md。"
+            : editorId === "cursor"
+              ? "正在整理最终 Prompt，并通过桌面宿主写入用户级 Cursor AGENTS.md。"
+              : "正在整理最终 Prompt，并通过桌面宿主写入用户级 Antigravity GEMINI.md。"
+          : editorId === "codex"
+            ? "正在清除用户级 Codex 中由 AI-COMPOSE 受管的提示词配置。"
+            : editorId === "cursor"
+              ? "正在清除用户级 Cursor 中由 AI-COMPOSE 受管的提示词配置。"
+              : "正在清除用户级 Antigravity 中由 AI-COMPOSE 受管的提示词配置。",
         lastAppliedAt: null,
       });
 
-      return null;
+      try {
+        const generatedAt = new Intl.DateTimeFormat("zh-CN", {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false,
+        }).format(new Date());
+        const managedBlock = composeManagedPromptBlock(
+          enabledFragments,
+          generatedAt,
+        );
+        const result = await applyPromptToEditorTarget({
+          editorId,
+          enabled: targetEnabled,
+          managedBlock,
+        });
+
+        const lastAppliedTime = new Intl.DateTimeFormat("zh-CN", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false,
+        }).format(new Date());
+
+        setApplyFeedback({
+          status: "success",
+          message:
+            result.action === "updated"
+              ? `已成功写入 ${result.targetPath}，当前共更新 ${enabledFragments.length} 个片段的受管区块。`
+              : result.action === "removed"
+                ? `已从 ${result.targetPath} 清除 AI-COMPOSE 受管区块，其他非受管内容保持不变。`
+                : `${result.targetPath} 当前没有可清除的 AI-COMPOSE 受管区块。`,
+          lastAppliedAt: lastAppliedTime,
+        });
+
+        return result;
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "写入编辑器目标配置时发生未知错误。";
+
+        setApplyFeedback({
+          status: "error",
+          message,
+          lastAppliedAt: null,
+        });
+
+        return null;
+      }
+    } else {
+      if (targetEnabled && enabledMcp.length === 0) {
+        setApplyFeedback({
+          status: "error",
+          message: "请至少启用一个 MCP 服务后再执行应用。",
+          lastAppliedAt: null,
+        });
+        return null;
+      }
+
+      if (!isTauriRuntime()) {
+        setApplyFeedback({
+          status: "error",
+          message:
+            "当前不在 Tauri 桌面宿主中运行。请使用 `pnpm dev:desktop` 启动后再执行应用。",
+          lastAppliedAt: null,
+        });
+        return null;
+      }
+
+      setApplyFeedback({
+        status: "pending",
+        message: targetEnabled
+          ? `正在整理最终 MCP 配置，并通过桌面宿主写入用户级 ${editorMeta[editorId].title} MCP 配置文件。`
+          : `正在清除用户级 ${editorMeta[editorId].title} 中由 AI-COMPOSE 受管的 MCP 配置。`,
+        lastAppliedAt: null,
+      });
+
+      try {
+        const result = await applyMcpToEditorTarget({
+          editorId,
+          enabled: targetEnabled,
+          configJson: generatedMcpJson,
+        });
+
+        const lastAppliedTime = new Intl.DateTimeFormat("zh-CN", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false,
+        }).format(new Date());
+
+        setApplyFeedback({
+          status: "success",
+          message:
+            result.action === "updated"
+              ? `已成功写入 ${result.targetPath}，当前共更新 ${enabledMcp.length} 个 MCP 服务。`
+              : result.action === "removed"
+                ? `已从 ${result.targetPath} 清除 AI-COMPOSE 受管 MCP 配置。`
+                : `${result.targetPath} 当前无改动。`,
+          lastAppliedAt: lastAppliedTime,
+        });
+
+        return result;
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "写入编辑器目标 MCP 配置时发生未知错误。";
+
+        setApplyFeedback({
+          status: "error",
+          message,
+          lastAppliedAt: null,
+        });
+
+        return null;
+      }
     }
   };
 
@@ -218,13 +401,24 @@ function PromptWorkbenchApp() {
     const nextEnabled = !editorStates[editorId].enabled;
     selectEditor(editorId);
 
-    if (nextEnabled && enabledFragments.length === 0) {
-      setApplyFeedback({
-        status: "error",
-        message: `请至少启用一个片段后再启用 ${editorMeta[editorId].title} 配置。`,
-        lastAppliedAt: null,
-      });
-      return;
+    if (activeDomain === "Prompt") {
+      if (nextEnabled && enabledFragments.length === 0) {
+        setApplyFeedback({
+          status: "error",
+          message: `请至少启用一个片段后再启用 ${editorMeta[editorId].title} 配置。`,
+          lastAppliedAt: null,
+        });
+        return;
+      }
+    } else {
+      if (nextEnabled && enabledMcp.length === 0) {
+        setApplyFeedback({
+          status: "error",
+          message: `请至少启用一个 MCP 服务后再启用 ${editorMeta[editorId].title} 配置。`,
+          lastAppliedAt: null,
+        });
+        return;
+      }
     }
 
     setEditorEnabled(editorId, nextEnabled);
@@ -235,7 +429,7 @@ function PromptWorkbenchApp() {
       return;
     }
 
-    if (editorId === "cursor" && nextEnabled && result.action === "updated") {
+    if (activeDomain === "Prompt" && editorId === "cursor" && nextEnabled && result.action === "updated") {
       messageApi.success({
         content:
           "已写入 ~/.cursor/AGENTS.md；下一步请拷贝到当前项目目录，供 Cursor 项目规则读取。",
@@ -256,7 +450,7 @@ function PromptWorkbenchApp() {
           <div className="global-bar__status" aria-label="当前上下文">
             <span className="chip">
               <span className="chip__label">配置域</span>
-              Prompt
+              {activeDomain}
             </span>
           </div>
         </header>
@@ -314,11 +508,14 @@ function PromptWorkbenchApp() {
                   <button
                     key={domain.name}
                     className={`side-nav__item${
-                      domain.isAvailable
+                      activeDomain === domain.name
                         ? " side-nav__item--active"
-                        : " side-nav__item--disabled"
+                        : !domain.isAvailable
+                          ? " side-nav__item--disabled"
+                          : ""
                     }`}
                     disabled={!domain.isAvailable}
+                    onClick={() => domain.isAvailable && selectDomain(domain.name)}
                     type="button"
                   >
                     <span>{domain.name}</span>
@@ -332,151 +529,454 @@ function PromptWorkbenchApp() {
           </aside>
 
           <main className="workbench">
-            <section
-              className="panel fragment-list"
-              aria-labelledby="fragment-list-title"
-            >
-              <div className="panel__header">
-                <div>
-                  <h2 className="panel__title" id="fragment-list-title">
-                    官方预设片段
-                  </h2>
-                  <p className="panel__subtitle">
-                    当前首版粒度为分类即片段，共 7 个官方预设项。
-                  </p>
-                </div>
-                <span className="chip">{enabledFragments.length} 项已启用</span>
-              </div>
+            {activeDomain === "Prompt" ? (
+              <>
+                <section
+                  className="panel fragment-list"
+                  aria-labelledby="fragment-list-title"
+                >
+                  <div className="panel__header">
+                    <div>
+                      <h2 className="panel__title" id="fragment-list-title">
+                        官方预设片段
+                      </h2>
+                      <p className="panel__subtitle">
+                        当前首版粒度为分类即片段，共 7 个官方预设项。
+                      </p>
+                    </div>
+                    <span className="chip">{enabledFragments.length} 项已启用</span>
+                  </div>
 
-              <div className="fragment-list__items">
-                {presetFragments.map((fragment) => {
-                  const isSelected = fragment.id === selectedFragmentId;
-                  const isEnabled = enabledFragmentIds.includes(fragment.id);
+                  <div className="fragment-list__items">
+                    {presetFragments.map((fragment) => {
+                      const isSelected = fragment.id === selectedFragmentId;
+                      const isEnabled = enabledFragmentIds.includes(fragment.id);
 
-                  return (
+                      return (
+                        <button
+                          key={fragment.id}
+                          className={`fragment-list__item${
+                            isSelected ? " fragment-list__item--selected" : ""
+                          }`}
+                          onClick={() => selectFragment(fragment.id)}
+                          type="button"
+                        >
+                          <div className="fragment-list__item-main">
+                            <span className="fragment-list__item-title">
+                              {fragment.title}
+                            </span>
+                            <div className="fragment-list__item-meta-row">
+                              <span className="fragment-list__item-meta">
+                                {fragment.source === "preset"
+                                  ? "官方预设"
+                                  : "用户片段"}
+                              </span>
+                              <span className="fragment-list__item-meta-separator">
+                                ·
+                              </span>
+                              <span className="fragment-list__item-meta">
+                                {fragment.items.length} 条
+                              </span>
+                            </div>
+                          </div>
+
+                          <span className="fragment-list__toggle">
+                            <span
+                              aria-hidden="true"
+                              className={`fragment-list__toggle-dot${
+                                isEnabled
+                                  ? " fragment-list__toggle-dot--enabled"
+                                  : ""
+                              }`}
+                            />
+                            {isEnabled ? "已启用" : "未启用"}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+
+                <section
+                  className="panel fragment-detail"
+                  aria-labelledby="fragment-detail-title"
+                >
+                  <div className="panel__header">
+                    <div>
+                      <h2 className="panel__title" id="fragment-detail-title">
+                        {selectedFragment?.title}
+                      </h2>
+                      <p className="panel__subtitle">
+                        当前仅提供官方预设查看与启用切换，后续继续接入用户片段编辑。
+                      </p>
+                    </div>
                     <button
-                      key={fragment.id}
-                      className={`fragment-list__item${
-                        isSelected ? " fragment-list__item--selected" : ""
+                      className={`fragment-action-btn${
+                        enabledFragmentIds.includes(selectedFragment.id)
+                          ? " fragment-action-btn--active"
+                          : ""
                       }`}
-                      onClick={() => selectFragment(fragment.id)}
+                      onClick={() => toggleFragment(selectedFragment.id)}
                       type="button"
                     >
-                      <div className="fragment-list__item-main">
-                        <span className="fragment-list__item-title">
-                          {fragment.title}
-                        </span>
-                        <div className="fragment-list__item-meta-row">
-                          <span className="fragment-list__item-meta">
-                            {fragment.source === "preset"
-                              ? "官方预设"
-                              : "用户片段"}
+                      {enabledFragmentIds.includes(selectedFragment.id)
+                        ? "从最终 Prompt 移除"
+                        : "加入最终 Prompt"}
+                    </button>
+                  </div>
+
+                  <div className="fragment-detail__body">
+                    <ul className="fragment-detail__list">
+                      {selectedFragment?.items.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </section>
+              </>
+            ) : (
+              <>
+                <section
+                  className="panel fragment-list"
+                  aria-labelledby="mcp-list-title"
+                >
+                  <div className="panel__header">
+                    <div>
+                      <h2 className="panel__title" id="mcp-list-title">
+                        官方预设 MCP 服务
+                      </h2>
+                      <p className="panel__subtitle">
+                        当前首版为直接映射为 mcpServers 配置的官方项与自定义项。
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="fragment-action-btn"
+                      style={{ minHeight: "32px", padding: "0 10px", fontSize: "12px" }}
+                      onClick={() => selectMcpServer("__new__")}
+                    >
+                      + 添加自定义
+                    </button>
+                  </div>
+
+                  <div className="fragment-list__items">
+                    {mcpServers.map((server) => {
+                      const isSelected = server.id === selectedMcpServerId;
+                      const isEnabled = server.enabled;
+
+                      return (
+                        <button
+                          key={server.id}
+                          className={`fragment-list__item${
+                            isSelected ? " fragment-list__item--selected" : ""
+                          }`}
+                          onClick={() => selectMcpServer(server.id)}
+                          type="button"
+                        >
+                          <div className="fragment-list__item-main">
+                            <span className="fragment-list__item-title">
+                              {server.name}
+                            </span>
+                            <div className="fragment-list__item-meta-row">
+                              <span className="fragment-list__item-meta">
+                                {server.source === "preset"
+                                  ? "官方预设"
+                                  : "自定义"}
+                              </span>
+                              <span className="fragment-list__item-meta-separator">
+                                ·
+                              </span>
+                              <span className="fragment-list__item-meta">
+                                {server.args.length} 个参数
+                              </span>
+                            </div>
+                          </div>
+
+                          <span className="fragment-list__toggle">
+                            <span
+                              aria-hidden="true"
+                              className={`fragment-list__toggle-dot${
+                                isEnabled
+                                  ? " fragment-list__toggle-dot--enabled"
+                                  : ""
+                              }`}
+                            />
+                            {isEnabled ? "已启用" : "未启用"}
                           </span>
-                          <span className="fragment-list__item-meta-separator">
-                            ·
-                          </span>
-                          <span className="fragment-list__item-meta">
-                            {fragment.items.length} 条
-                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+
+                <section
+                  className="panel fragment-detail"
+                  aria-labelledby="mcp-detail-title"
+                >
+                  <div className="panel__header">
+                    <div>
+                      <h2 className="panel__title" id="mcp-detail-title">
+                        {selectedMcpServerId === "__new__"
+                          ? "添加自定义 MCP"
+                          : selectedMcpServer?.name}
+                      </h2>
+                      <p className="panel__subtitle">
+                        配置并启用 MCP 服务器以扩充模型上下文能力。
+                      </p>
+                    </div>
+                    {selectedMcpServerId !== "__new__" && selectedMcpServer && (
+                      <button
+                        className={`fragment-action-btn${
+                          selectedMcpServer.enabled
+                            ? " fragment-action-btn--active"
+                            : ""
+                        }`}
+                        onClick={() => toggleMcpServer(selectedMcpServer.id)}
+                        type="button"
+                      >
+                        {selectedMcpServer.enabled
+                          ? "从最终 MCP 移除"
+                          : "加入最终 MCP"}
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="fragment-detail__body" style={{ overflowY: "auto" }}>
+                    {selectedMcpServerId !== "__new__" && selectedMcpServer?.description && (
+                      <p className="mcp-description" style={{ marginBottom: "16px", color: "var(--text-faint)", fontSize: "14px", lineHeight: "1.5" }}>
+                        {selectedMcpServer.description}
+                      </p>
+                    )}
+
+                    <div className="mcp-form" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                      <div className="mcp-form__field" style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                        <label className="mcp-form__label" style={{ fontSize: "12px", color: "var(--text-faint)", fontWeight: 500 }}>
+                          服务名称 (必须唯一且无空格)
+                        </label>
+                        <input
+                          className="form-input"
+                          placeholder="例如: weather"
+                          value={formName}
+                          disabled={selectedMcpServerId !== "__new__" && selectedMcpServer?.source === "preset"}
+                          onChange={(e) => setFormName(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="mcp-form__field" style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                        <label className="mcp-form__label" style={{ fontSize: "12px", color: "var(--text-faint)", fontWeight: 500 }}>
+                          启动命令 (Command)
+                        </label>
+                        <input
+                          className="form-input"
+                          placeholder="例如: npx, python, uv"
+                          value={formCommand}
+                          disabled={selectedMcpServerId !== "__new__" && selectedMcpServer?.source === "preset"}
+                          onChange={(e) => setFormCommand(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="mcp-form__field" style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                        <label className="mcp-form__label" style={{ fontSize: "12px", color: "var(--text-faint)", fontWeight: 500 }}>
+                          启动参数 (Arguments, 一行一个)
+                        </label>
+                        <textarea
+                          className="form-textarea"
+                          rows={4}
+                          placeholder="例如:
+-y
+@modelcontextprotocol/server-sqlite"
+                          value={formArgs}
+                          onChange={(e) => setFormArgs(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="mcp-form__field" style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                        <label className="mcp-form__label" style={{ fontSize: "12px", color: "var(--text-faint)", fontWeight: 500 }}>
+                          环境变量 (Environment Variables)
+                        </label>
+                        <div className="env-editor" style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                          {formEnv.map((pair, index) => (
+                            <div key={index} className="env-editor__row" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                              <input
+                                className="form-input env-input"
+                                placeholder="KEY"
+                                value={pair.key}
+                                onChange={(e) => {
+                                  const next = [...formEnv];
+                                  next[index].key = e.target.value;
+                                  setFormEnv(next);
+                                }}
+                              />
+                              <input
+                                className="form-input env-input"
+                                placeholder="VALUE"
+                                value={pair.value}
+                                onChange={(e) => {
+                                  const next = [...formEnv];
+                                  next[index].value = e.target.value;
+                                  setFormEnv(next);
+                                }}
+                              />
+                              <button
+                                type="button"
+                                className="env-editor__delete-btn"
+                                style={{
+                                  background: "none",
+                                  border: "none",
+                                  color: "#ff4d4f",
+                                  cursor: "pointer",
+                                  fontSize: "12px",
+                                }}
+                                onClick={() => setFormEnv(formEnv.filter((_, i) => i !== index))}
+                              >
+                                删除
+                              </button>
+                            </div>
+                          ))}
+                          <button
+                            type="button"
+                            className="env-editor__add-btn"
+                            style={{
+                              alignSelf: "flex-start",
+                              background: "rgba(255, 140, 0, 0.1)",
+                              border: "1px dashed var(--accent-color)",
+                              color: "var(--accent-color)",
+                              padding: "4px 8px",
+                              borderRadius: "4px",
+                              fontSize: "12px",
+                              cursor: "pointer",
+                            }}
+                            onClick={() => setFormEnv([...formEnv, { key: "", value: "" }])}
+                          >
+                            + 添加环境变量
+                          </button>
                         </div>
                       </div>
 
-                      <span className="fragment-list__toggle">
-                        <span
-                          aria-hidden="true"
-                          className={`fragment-list__toggle-dot${
-                            isEnabled
-                              ? " fragment-list__toggle-dot--enabled"
-                              : ""
-                          }`}
-                        />
-                        {isEnabled ? "已启用" : "未启用"}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-
-            <section
-              className="panel fragment-detail"
-              aria-labelledby="fragment-detail-title"
-            >
-              <div className="panel__header">
-                <div>
-                  <h2 className="panel__title" id="fragment-detail-title">
-                    {selectedFragment?.title}
-                  </h2>
-                  <p className="panel__subtitle">
-                    当前仅提供官方预设查看与启用切换，后续继续接入用户片段编辑。
-                  </p>
-                </div>
-                <button
-                  className={`fragment-action-btn${
-                    enabledFragmentIds.includes(selectedFragment.id)
-                      ? " fragment-action-btn--active"
-                      : ""
-                  }`}
-                  onClick={() => toggleFragment(selectedFragment.id)}
-                  type="button"
-                >
-                  {enabledFragmentIds.includes(selectedFragment.id)
-                    ? "从最终 Prompt 移除"
-                    : "加入最终 Prompt"}
-                </button>
-              </div>
-
-              <div className="fragment-detail__body">
-                <ul className="fragment-detail__list">
-                  {selectedFragment?.items.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            </section>
+                      <div className="mcp-form__actions" style={{ display: "flex", gap: "12px", marginTop: "12px", justifyContent: "flex-end" }}>
+                        {selectedMcpServerId !== "__new__" && selectedMcpServer?.source === "user" && (
+                          <button
+                            type="button"
+                            className="mcp-form__btn mcp-form__btn--danger"
+                            style={{
+                              background: "rgba(255, 77, 79, 0.1)",
+                              border: "1px solid #ff4d4f",
+                              color: "#ff4d4f",
+                              padding: "6px 12px",
+                              borderRadius: "6px",
+                              cursor: "pointer",
+                            }}
+                            onClick={() => handleDeleteMcp(selectedMcpServer.id)}
+                          >
+                            删除服务
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="mcp-form__btn mcp-form__btn--primary"
+                          style={{
+                            background: "linear-gradient(135deg, var(--accent-color) 0%, #ff8c00 100%)",
+                            border: "none",
+                            color: "#fff",
+                            padding: "6px 12px",
+                            borderRadius: "6px",
+                            fontWeight: 500,
+                            cursor: "pointer",
+                          }}
+                          onClick={handleSaveMcp}
+                        >
+                          {selectedMcpServerId === "__new__" ? "创建服务" : "保存修改"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              </>
+            )}
           </main>
 
           <aside className="preview-column">
-            <section
-              className="panel preview-card"
-              aria-labelledby="preview-title"
-            >
-              <div className="panel__header">
-                <div>
-                  <h2 className="panel__title" id="preview-title">
-                    最终 Prompt 预览
-                  </h2>
-                  <p className="panel__subtitle">
-                    右侧始终展示当前启用片段的最终组合结果。
-                  </p>
+            {activeDomain === "Prompt" ? (
+              <section
+                className="panel preview-card"
+                aria-labelledby="preview-title"
+              >
+                <div className="panel__header">
+                  <div>
+                    <h2 className="panel__title" id="preview-title">
+                      最终 Prompt 预览
+                    </h2>
+                    <p className="panel__subtitle">
+                      右侧始终展示当前启用片段的最终组合结果。
+                    </p>
+                  </div>
                 </div>
-              </div>
 
-              <div className="preview-card__body">
-                {enabledFragments.length === 0 ? (
-                  <p className="preview-card__empty">
-                    还没有启用任何片段。请先从中间工作区选择要纳入 Prompt
-                    的内容。
-                  </p>
-                ) : (
-                  enabledFragments.map((fragment) => (
-                    <section
-                      key={fragment.id}
-                      className="preview-card__section"
+                <div className="preview-card__body">
+                  {enabledFragments.length === 0 ? (
+                    <p className="preview-card__empty">
+                      还没有启用任何片段。请先从中间工作区选择要纳入 Prompt
+                      的内容。
+                    </p>
+                  ) : (
+                    enabledFragments.map((fragment) => (
+                      <section
+                        key={fragment.id}
+                        className="preview-card__section"
+                      >
+                        <h3 className="preview-card__section-title">
+                          {fragment.title}
+                        </h3>
+                        <ul className="preview-card__list">
+                          {fragment.items.map((item) => (
+                            <li key={item}>{item}</li>
+                          ))}
+                        </ul>
+                      </section>
+                    ))
+                  )}
+                </div>
+              </section>
+            ) : (
+              <section
+                className="panel preview-card"
+                aria-labelledby="preview-title"
+              >
+                <div className="panel__header">
+                  <div>
+                    <h2 className="panel__title" id="preview-title">
+                      最终 MCP 配置预览
+                    </h2>
+                    <p className="panel__subtitle">
+                      右侧始终展示当前启用 MCP 服务的最终 JSON 配置。
+                    </p>
+                  </div>
+                </div>
+
+                <div className="preview-card__body" style={{ padding: "0 16px 16px 16px" }}>
+                  {enabledMcp.length === 0 ? (
+                    <p className="preview-card__empty">
+                      还没有启用任何 MCP 服务。请先从中间工作区选择要纳入的配置。
+                    </p>
+                  ) : (
+                    <pre
+                      style={{
+                        background: "rgba(0, 0, 0, 0.2)",
+                        padding: "12px",
+                        borderRadius: "8px",
+                        overflowX: "auto",
+                        fontFamily: "monospace",
+                        fontSize: "13px",
+                        color: "var(--text-bright)",
+                        lineHeight: 1.5,
+                      }}
                     >
-                      <h3 className="preview-card__section-title">
-                        {fragment.title}
-                      </h3>
-                      <ul className="preview-card__list">
-                        {fragment.items.map((item) => (
-                          <li key={item}>{item}</li>
-                        ))}
-                      </ul>
-                    </section>
-                  ))
-                )}
-              </div>
-            </section>
+                      <code>{generatedMcpJson}</code>
+                    </pre>
+                  )}
+                </div>
+              </section>
+            )}
           </aside>
         </div>
       </div>

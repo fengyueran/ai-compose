@@ -43,5 +43,28 @@ describe('Prompt Workbench', () => {
     expect(screen.getByRole('button', { name: '从最终 Prompt 移除' })).toBeInTheDocument()
     expect(actionBtn.className).toContain('fragment-action-btn--active')
   })
+
+  test('toggles active configuration domain to MCP and displays server list and json preview', async () => {
+    render(<PromptWorkbenchApp />)
+
+    // 默认是 Prompt 域激活，MCP 配置域应该可被点击
+    const mcpDomainBtn = screen.getByRole('button', { name: 'MCP' })
+    expect(mcpDomainBtn).toBeInTheDocument()
+
+    // 切换到 MCP 配置域
+    await userEvent.click(mcpDomainBtn)
+
+    // 应切换为 active，且中间区域应当显示 MCP 相关的标题
+    expect(screen.getByText('官方预设 MCP 服务')).toBeInTheDocument()
+
+    // 预设列表中应展示 sqlite, fetch 等
+    expect(screen.getAllByText('sqlite').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('fetch').length).toBeGreaterThan(0)
+
+    // 默认右侧预览区应该展示 MCP JSON 格式
+    expect(screen.getByText(/"mcpServers"/)).toBeInTheDocument()
+    expect(screen.getByText(/"sqlite"/)).toBeInTheDocument()
+    expect(screen.getByText(/"fetch"/)).toBeInTheDocument()
+  })
 })
 

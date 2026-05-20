@@ -661,3 +661,52 @@
     height: auto;
   }
 }
+
+/* MCP Form styling */
+.form-input,
+.form-textarea {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.62);
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 0.94rem;
+  outline: none;
+  box-sizing: border-box;
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.form-input:focus,
+.form-textarea:focus {
+  border-color: var(--accent);
+  background: var(--panel-strong);
+  box-shadow: 0 0 0 3px rgba(197, 93, 51, 0.12);
+}
+
+.form-input:disabled,
+.form-textarea:disabled {
+  background: rgba(255, 255, 255, 0.3);
+  color: var(--text-faint);
+  cursor: not-allowed;
+  border-color: rgba(82, 63, 41, 0.06);
+}
+
+.form-textarea {
+  resize: vertical;
+}
+
+.env-input {
+  flex: 1;
+}
+
+.mcp-description {
+  background: rgba(197, 93, 51, 0.04);
+  border-left: 3px solid var(--accent);
+  padding: 8px 12px;
+  border-radius: 4px;
+}
