@@ -8,6 +8,7 @@ const MANAGED_BLOCK_END: &str = "<!-- END AI-COMPOSE -->";
 #[derive(Deserialize, Serialize, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
 enum EditorId {
+    Antigravity,
     Codex,
     Cursor,
 }
@@ -76,9 +77,17 @@ fn apply_prompt_to_editor_target(payload: ApplyPromptPayload) -> Result<ApplyPro
 
 fn resolve_editor_agents_path(editor_id: EditorId) -> Result<PathBuf, String> {
     match editor_id {
+        EditorId::Antigravity => resolve_antigravity_agents_path(),
         EditorId::Codex => resolve_codex_agents_path(),
         EditorId::Cursor => resolve_cursor_agents_path(),
     }
+}
+
+fn resolve_antigravity_agents_path() -> Result<PathBuf, String> {
+    let home_directory =
+        std::env::var("HOME").map_err(|_| "无法读取当前用户的 HOME 目录。".to_string())?;
+
+    Ok(Path::new(&home_directory).join(".gemini").join("GEMINI.md"))
 }
 
 fn resolve_codex_agents_path() -> Result<PathBuf, String> {

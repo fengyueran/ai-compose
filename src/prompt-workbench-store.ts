@@ -43,6 +43,9 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
     applyStatus: 'idle',
     applyMessage: '请通过桌面端运行当前工作台，以启用真实的编辑器配置写入能力。',
     editorStates: {
+      antigravity: {
+        enabled: false,
+      },
       codex: {
         enabled: true,
       },

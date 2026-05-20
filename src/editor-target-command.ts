@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 
-export type EditorId = 'codex' | 'cursor'
+export type EditorId = 'antigravity' | 'codex' | 'cursor'
 
 type ApplyPromptPayload = {
   editorId: EditorId

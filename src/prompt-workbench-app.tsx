@@ -28,6 +28,13 @@ const editorMeta: Record<
     title: string;
   }
 > = {
+  antigravity: {
+    applyLabel: "应用到用户级 Antigravity",
+    clearingLabel: "清除 Antigravity 配置",
+    description: "通过桌面宿主将当前最终 Prompt 写入用户级 Antigravity 配置。",
+    targetPathLabel: "~/.gemini/GEMINI.md",
+    title: "Antigravity",
+  },
   codex: {
     applyLabel: "应用到用户级 Codex",
     clearingLabel: "清除 Codex 配置",
@@ -113,10 +120,14 @@ function PromptWorkbenchApp() {
       message: targetEnabled
         ? editorId === "codex"
           ? "正在整理最终 Prompt，并通过桌面宿主写入用户级 Codex AGENTS.md。"
-          : "正在整理最终 Prompt，并通过桌面宿主写入用户级 Cursor AGENTS.md。"
+          : editorId === "cursor"
+            ? "正在整理最终 Prompt，并通过桌面宿主写入用户级 Cursor AGENTS.md。"
+            : "正在整理最终 Prompt，并通过桌面宿主写入用户级 Antigravity GEMINI.md。"
         : editorId === "codex"
           ? "正在清除用户级 Codex 中由 AI-COMPOSE 受管的提示词配置。"
-          : "正在清除用户级 Cursor 中由 AI-COMPOSE 受管的提示词配置。",
+          : editorId === "cursor"
+            ? "正在清除用户级 Cursor 中由 AI-COMPOSE 受管的提示词配置。"
+            : "正在清除用户级 Antigravity 中由 AI-COMPOSE 受管的提示词配置。",
       lastAppliedAt: null,
     });
 
