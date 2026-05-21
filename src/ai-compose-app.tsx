@@ -1570,7 +1570,7 @@ function AiComposeApp() {
                     disabled={!isCurrentEditorEnabled}
                     title={isCurrentEditorEnabled ? `应用 Skills 到 ${editorMeta[activeEditorId].title}` : `请先启用左侧 ${editorMeta[activeEditorId].title}`}
                   >
-                    同步软链接
+                    应用配置
                   </button>
                 </div>
               </section>
