@@ -148,7 +148,7 @@ describe('Prompt Workbench', () => {
         {
           id: 'cli-skill',
           name: 'CLI Skill',
-          description: 'Managed by npx skills',
+          description: 'Managed by skills.sh',
           content: '# CLI Skill',
           path: '/Users/test/.agents/skills/cli-skill',
           sourceKind: 'cli',
@@ -168,9 +168,9 @@ describe('Prompt Workbench', () => {
 
     render(<AiComposeApp />)
 
-    expect(screen.getByText(/npx skills 1 项，可链接/)).toBeInTheDocument()
+    expect(screen.getByText(/skills.sh 1 项，可链接/)).toBeInTheDocument()
     expect(screen.getByText(/本地已安装 1 项/)).toBeInTheDocument()
-    expect(screen.getAllByText('npx').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('skills.sh').length).toBeGreaterThan(0)
     expect(screen.getAllByText('本地已安装').length).toBeGreaterThan(0)
     expect(screen.getByText(/Scanned from an editor target directory/)).toBeInTheDocument()
 
@@ -197,5 +197,29 @@ describe('Prompt Workbench', () => {
     await userEvent.click(screen.getByRole('option', { name: '本地已安装' }))
     expect(screen.getByRole('button', { name: /Local Scan Skill/ })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /CLI Skill/ })).not.toBeInTheDocument()
+
+    await userEvent.click(filterSelect)
+    await userEvent.click(screen.getByRole('option', { name: 'skills.sh 安装' }))
+    expect(screen.getByRole('button', { name: /CLI Skill/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Local Scan Skill/ })).not.toBeInTheDocument()
+  })
+
+  test('renders loading state for skills list when hydrating', () => {
+    // 模拟 Tauri 运行时，使得 useEffect 不会同步地将 pending 状态清空
+    ;(window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {}
+
+    usePromptWorkbenchStore.setState({
+      activeDomain: 'Skills',
+      isHydratingEditorStates: true,
+      skills: [],
+    })
+
+    render(<AiComposeApp />)
+
+    expect(screen.getByText('正在加载技能列表...')).toBeInTheDocument()
+    expect(screen.queryByText('未检测到全局安装的技能。可在上方输入仓库名进行安装。')).not.toBeInTheDocument()
+
+    // 恢复 window
+    delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
   })
 })

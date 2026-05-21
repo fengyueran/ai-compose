@@ -26,12 +26,13 @@ const configurationDomains = [
   { name: "Profiles", isAvailable: false },
 ] as const;
 
-type SkillsFilter = "all" | "enabled" | "disabled" | "local";
+type SkillsFilter = "all" | "enabled" | "disabled" | "local" | "cli";
 
 const skillsFilterOptions: SelectOption[] = [
   { label: "全部", value: "all" },
   { label: "已启用", value: "enabled" },
   { label: "未启用", value: "disabled" },
+  { label: "skills.sh 安装", value: "cli" },
   { label: "本地已安装", value: "local" },
 ];
 
@@ -65,6 +66,7 @@ function AiComposeApp() {
     hydrateMcpEditorStates,
     hydrateSkillsEditorStates,
     isHydratingEditorStates,
+    applyStatus,
     presetFragments,
     selectEditor,
     selectedFragmentId,
@@ -135,6 +137,8 @@ function AiComposeApp() {
   const [isRemovingSkill, setIsRemovingSkill] = useState(false);
   const [skillsQuery, setSkillsQuery] = useState("");
   const [skillsFilter, setSkillsFilter] = useState<SkillsFilter>("all");
+
+  const isSkillsLoading = isHydratingEditorStates || isAddingSkillsRepo || isRemovingSkill || isUpdatingSkill;
 
   const generatedMcpJson = useMemo(() => {
     const mcpServersObj: Record<
@@ -211,6 +215,9 @@ function AiComposeApp() {
         return false;
       }
       if (skillsFilter === "disabled" && (!isCliManaged || isEnabled)) {
+        return false;
+      }
+      if (skillsFilter === "cli" && !isCliManaged) {
         return false;
       }
       if (skillsFilter === "local" && isCliManaged) {
@@ -1295,7 +1302,7 @@ function AiComposeApp() {
                         Skills 来源与目标
                       </h2>
                       <p className="panel__subtitle">
-                        npx skills 管理项可链接；本地已安装项只读展示，不参与同步。
+                        skills.sh 管理项可链接；本地已安装项只读展示，不参与同步。
                       </p>
                     </div>
                     <span className="chip">{enabledSkillsForEditor.length} 项已启用</span>
@@ -1364,12 +1371,17 @@ function AiComposeApp() {
                 <div className="skills-manager__body">
                   <div className="skills-list-pane">
                     <div className="skills-list-pane__summary">
-                      <span>来源：npx skills {managedSkills.length} 项，可链接 · 本地已安装 {skills.length - managedSkills.length} 项</span>
+                      <span>来源：skills.sh {managedSkills.length} 项，可链接 · 本地已安装 {skills.length - managedSkills.length} 项</span>
                       <span>目标：{activeSkillsTargetPath || "未检测到目标路径"}</span>
                     </div>
 
-                    <div className="skills-list-rows">
-                      {skills.length === 0 ? (
+                    <div className={`skills-list-rows${isSkillsLoading ? " skills-list-rows--loading" : ""}`}>
+                      {isSkillsLoading && skills.length === 0 ? (
+                        <div className="skills-list-loading">
+                          <div className="skills-spinner" />
+                          <span>正在加载技能列表...</span>
+                        </div>
+                      ) : skills.length === 0 ? (
                         <p className="skills-list-empty">
                           未检测到全局安装的技能。可在上方输入仓库名进行安装。
                         </p>
@@ -1400,7 +1412,7 @@ function AiComposeApp() {
                                       ? "skill-source-badge--cli"
                                       : "skill-source-badge--readonly"
                                   }`}>
-                                    {isCliManaged ? "npx" : "本地已安装"}
+                                    {isCliManaged ? "skills.sh" : "本地已安装"}
                                   </span>
                                 </span>
                                 <span className="skills-list-row__description">
@@ -1425,7 +1437,7 @@ function AiComposeApp() {
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   if (!isCliManaged) {
-                                    messageApi.warning("本地已安装的 Skill 只读展示，请通过 npx skills 安装后再启用。");
+                                    messageApi.warning("本地已安装的 Skill 只读展示，请通过 skills.sh 安装后再启用。");
                                     return;
                                   }
                                   toggleSkill(skill.id);
@@ -1437,7 +1449,7 @@ function AiComposeApp() {
                                   event.preventDefault();
                                   event.stopPropagation();
                                   if (!isCliManaged) {
-                                    messageApi.warning("本地已安装的 Skill 只读展示，请通过 npx skills 安装后再启用。");
+                                    messageApi.warning("本地已安装的 Skill 只读展示，请通过 skills.sh 安装后再启用。");
                                     return;
                                   }
                                   toggleSkill(skill.id);
@@ -1454,7 +1466,7 @@ function AiComposeApp() {
 
                   <section
                     key={selectedSkillId}
-                    className="skills-detail-pane"
+                    className={`skills-detail-pane${isRemovingSkill || isUpdatingSkill ? " skills-detail-pane--loading" : ""}`}
                     aria-labelledby="skill-detail-title"
                   >
                     <div className="skills-detail-pane__header">
@@ -1468,7 +1480,7 @@ function AiComposeApp() {
                               ? "skill-source-badge--cli"
                               : "skill-source-badge--readonly"
                           }`}>
-                            {isSelectedSkillCliManaged ? "npx" : "本地已安装"}
+                            {isSelectedSkillCliManaged ? "skills.sh" : "本地已安装"}
                           </span>
                         ) : null}
                         <p className="skills-detail-pane__description">
@@ -1483,7 +1495,7 @@ function AiComposeApp() {
                             disabled={isUpdatingSkill || isAddingSkillsRepo || !isSelectedSkillCliManaged}
                             loading={isRemovingSkill}
                             style={{ opacity: isRemovingSkill || isUpdatingSkill || isAddingSkillsRepo || !isSelectedSkillCliManaged ? 0.6 : 1 }}
-                            title={!isSelectedSkillCliManaged ? "本地已安装的 Skill 不受 npx skills 管理，不能从来源移除。" : "从 npx skills 全局来源中移除此 Skill。"}
+                            title={!isSelectedSkillCliManaged ? "本地已安装的 Skill 不受 skills.sh 管理，不能从来源移除。" : "从 skills.sh 全局来源中移除此 Skill。"}
                             onClick={async () => {
                               if (!selectedSkill) return;
                               setIsRemovingSkill(true);
@@ -1510,7 +1522,7 @@ function AiComposeApp() {
                             disabled={isRemovingSkill || isAddingSkillsRepo || !isSelectedSkillCliManaged}
                             loading={isUpdatingSkill}
                             style={{ opacity: isRemovingSkill || isUpdatingSkill || isAddingSkillsRepo || !isSelectedSkillCliManaged ? 0.6 : 1 }}
-                            title={!isSelectedSkillCliManaged ? "本地已安装的 Skill 不受 npx skills 管理，不能在这里更新。" : undefined}
+                            title={!isSelectedSkillCliManaged ? "本地已安装的 Skill 不受 skills.sh 管理，不能在这里更新。" : undefined}
                             onClick={async () => {
                               if (!selectedSkill) return;
                               setIsUpdatingSkill(true);
@@ -1537,7 +1549,7 @@ function AiComposeApp() {
                       {selectedSkill ? (
                         <>
                           <p className="skills-detail-pane__path">
-                            <strong>来源类型：</strong>{isSelectedSkillCliManaged ? "npx skills 管理，可创建目标软链接" : "本地/目标目录扫描，只读"}
+                            <strong>来源类型：</strong>{isSelectedSkillCliManaged ? "skills.sh 管理，可创建目标软链接" : "本地/目标目录扫描，只读"}
                           </p>
                           <p className="skills-detail-pane__path">
                             <strong>物理来源路径：</strong>{selectedSkill.path}
@@ -1569,12 +1581,12 @@ function AiComposeApp() {
                     </span>
                   </div>
                   <button
-                    className={`preview-apply-btn${isCurrentEditorEnabled ? "" : " preview-apply-btn--disabled"}`}
+                    className={`preview-apply-btn${isCurrentEditorEnabled && applyStatus !== "pending" ? "" : " preview-apply-btn--disabled"}`}
                     onClick={handleApplyClick}
-                    disabled={!isCurrentEditorEnabled}
+                    disabled={!isCurrentEditorEnabled || applyStatus === "pending"}
                     title={isCurrentEditorEnabled ? `应用 Skills 到 ${editorMeta[activeEditorId].title}` : `请先启用左侧 ${editorMeta[activeEditorId].title}`}
                   >
-                    应用配置
+                    {applyStatus === "pending" ? "正在应用..." : "应用配置"}
                   </button>
                 </div>
               </section>
@@ -1598,12 +1610,12 @@ function AiComposeApp() {
                     </p>
                   </div>
                   <button
-                    className={`preview-apply-btn${isCurrentEditorEnabled ? "" : " preview-apply-btn--disabled"}`}
+                    className={`preview-apply-btn${isCurrentEditorEnabled && applyStatus !== "pending" ? "" : " preview-apply-btn--disabled"}`}
                     onClick={handleApplyClick}
-                    disabled={!isCurrentEditorEnabled}
+                    disabled={!isCurrentEditorEnabled || applyStatus === "pending"}
                     title={isCurrentEditorEnabled ? `应用 Prompt 配置到 ${editorMeta[activeEditorId].title}` : `请先启用左侧 ${editorMeta[activeEditorId].title}`}
                   >
-                    应用配置
+                    {applyStatus === "pending" ? "正在应用..." : "应用配置"}
                   </button>
                 </div>
 
@@ -1647,12 +1659,12 @@ function AiComposeApp() {
                     </p>
                   </div>
                   <button
-                    className={`preview-apply-btn${isCurrentEditorEnabled ? "" : " preview-apply-btn--disabled"}`}
+                    className={`preview-apply-btn${isCurrentEditorEnabled && applyStatus !== "pending" ? "" : " preview-apply-btn--disabled"}`}
                     onClick={handleApplyClick}
-                    disabled={!isCurrentEditorEnabled}
+                    disabled={!isCurrentEditorEnabled || applyStatus === "pending"}
                     title={isCurrentEditorEnabled ? `应用 MCP 配置到 ${editorMeta[activeEditorId].title}` : `请先启用左侧 ${editorMeta[activeEditorId].title}`}
                   >
-                    应用配置
+                    {applyStatus === "pending" ? "正在应用..." : "应用配置"}
                   </button>
                 </div>
 
@@ -1695,12 +1707,12 @@ function AiComposeApp() {
                     </p>
                   </div>
                   <button
-                    className={`preview-apply-btn${isCurrentEditorEnabled ? "" : " preview-apply-btn--disabled"}`}
+                    className={`preview-apply-btn${isCurrentEditorEnabled && applyStatus !== "pending" ? "" : " preview-apply-btn--disabled"}`}
                     onClick={handleApplyClick}
-                    disabled={!isCurrentEditorEnabled}
+                    disabled={!isCurrentEditorEnabled || applyStatus === "pending"}
                     title={isCurrentEditorEnabled ? `应用 Skills 到 ${editorMeta[activeEditorId].title}` : `请先启用左侧 ${editorMeta[activeEditorId].title}`}
                   >
-                    应用配置
+                    {applyStatus === "pending" ? "正在应用..." : "应用配置"}
                   </button>
                 </div>
 
