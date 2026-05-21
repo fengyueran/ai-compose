@@ -92,7 +92,16 @@ function AiComposeApp() {
   );
 
   const generatedMcpJson = useMemo(() => {
-    const mcpServersObj: Record<string, unknown> = {};
+    const mcpServersObj: Record<
+      string,
+      {
+        type?: string;
+        url?: string;
+        command?: string;
+        args?: string[];
+        env?: Record<string, string>;
+      }
+    > = {};
     enabledMcp.forEach((server) => {
       if (server.transportType === 'http') {
         mcpServersObj[server.name] = {
@@ -100,13 +109,18 @@ function AiComposeApp() {
           url: server.url || '',
         };
       } else {
-        mcpServersObj[server.name] = {
+        const entry: {
+          command: string;
+          args: string[];
+          env?: Record<string, string>;
+        } = {
           command: server.command || '',
           args: server.args || [],
         };
         if (server.env && Object.keys(server.env).length > 0) {
-          mcpServersObj[server.name].env = server.env;
+          entry.env = server.env;
         }
+        mcpServersObj[server.name] = entry;
       }
     });
     return JSON.stringify({ mcpServers: mcpServersObj }, null, 2);
