@@ -10,7 +10,7 @@ import {
   isTauriRuntime,
 } from "./editor-target-command";
 import { composeManagedPromptBlock } from "./compose-prompt";
-import "./prompt-workbench-app.css";
+import "./ai-compose-app.css";
 import { usePromptWorkbenchStore } from "./prompt-workbench-store";
 
 const configurationDomains = [
@@ -37,7 +37,7 @@ const editorMeta: Record<
   },
 };
 
-function PromptWorkbenchApp() {
+function AiComposeApp() {
   const [messageApi, messageContextHolder] = Message.useMessage();
 
   const {
@@ -1229,4 +1229,4 @@ function PromptWorkbenchApp() {
   );
 }
 
-export default PromptWorkbenchApp;
+export default AiComposeApp;

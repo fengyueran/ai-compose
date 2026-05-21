@@ -1,11 +1,11 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
-import PromptWorkbenchApp from './prompt-workbench-app'
+import AiComposeApp from './ai-compose-app'
 
 describe('Prompt Workbench', () => {
   test('renders the codex prompt workbench skeleton', () => {
-    render(<PromptWorkbenchApp />)
+    render(<AiComposeApp />)
 
     expect(
       screen.getByRole('heading', { name: 'AI Compose' }),
@@ -24,7 +24,7 @@ describe('Prompt Workbench', () => {
   })
 
   test('toggles fragment prompt status and updates button style and preview', async () => {
-    render(<PromptWorkbenchApp />)
+    render(<AiComposeApp />)
 
     // 默认是启用的，因此按钮应该显示 “从最终 Prompt 移除”
     const actionBtn = screen.getByRole('button', { name: '从最终 Prompt 移除' })
@@ -45,7 +45,7 @@ describe('Prompt Workbench', () => {
   })
 
   test('toggles active configuration domain to MCP and displays server list and json preview', async () => {
-    render(<PromptWorkbenchApp />)
+    render(<AiComposeApp />)
 
     // 默认是 Prompt 域激活，MCP 配置域应该可被点击
     const mcpDomainBtn = screen.getByRole('button', { name: 'MCP' })
@@ -70,7 +70,7 @@ describe('Prompt Workbench', () => {
   })
 
   test('adds a custom MCP server and saves it with correct style variables', async () => {
-    render(<PromptWorkbenchApp />)
+    render(<AiComposeApp />)
 
     // 切换到 MCP 配置域
     await userEvent.click(screen.getByRole('button', { name: 'MCP' }))
@@ -95,7 +95,7 @@ describe('Prompt Workbench', () => {
   })
 
   test('adds a custom HTTP/SSE direct MCP server and updates configuration preview', async () => {
-    render(<PromptWorkbenchApp />)
+    render(<AiComposeApp />)
 
     // 切换到 MCP 配置域
     await userEvent.click(screen.getByRole('button', { name: 'MCP' }))
