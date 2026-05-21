@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import AiComposeApp from './ai-compose-app'
+import { usePromptWorkbenchStore } from './prompt-workbench-store'
 
 describe('Prompt Workbench', () => {
   test('renders the codex prompt workbench skeleton', () => {
@@ -128,6 +129,71 @@ describe('Prompt Workbench', () => {
     expect(screen.getByText(/type = "streamable_http"/)).toBeInTheDocument()
     expect(screen.getByText(/url = "http:\/\/127.0.0.1:3845\/mcp"/)).toBeInTheDocument()
   })
+
+  test('keeps fallback scanned skills read-only while cli skills can be linked', async () => {
+    usePromptWorkbenchStore.setState({
+      activeDomain: 'Skills',
+      activeEditorId: 'cursor',
+      editorStates: {
+        antigravity: { enabled: false, targetPath: '', enabledSkills: [] },
+        codex: { enabled: false, targetPath: '', enabledSkills: [] },
+        cursor: { enabled: true, targetPath: '/Users/test/.cursor/skills', enabledSkills: [] },
+      },
+      skillsEditorStates: {
+        antigravity: { enabled: false, targetPath: '', enabledSkills: [] },
+        codex: { enabled: false, targetPath: '', enabledSkills: [] },
+        cursor: { enabled: true, targetPath: '/Users/test/.cursor/skills', enabledSkills: [] },
+      },
+      skills: [
+        {
+          id: 'cli-skill',
+          name: 'CLI Skill',
+          description: 'Managed by npx skills',
+          content: '# CLI Skill',
+          path: '/Users/test/.agents/skills/cli-skill',
+          sourceKind: 'cli',
+        },
+        {
+          id: 'local-scan-skill',
+          name: 'Local Scan Skill',
+          description: 'Scanned from an editor target directory',
+          content: '# Local Scan Skill',
+          path: '/Users/test/.cursor/skills/local-scan-skill',
+          sourceKind: 'fallbackDirectory',
+        },
+      ],
+      selectedSkillId: 'cli-skill',
+      isHydratingEditorStates: false,
+    })
+
+    render(<AiComposeApp />)
+
+    expect(screen.getByText(/npx skills 1 项，可链接/)).toBeInTheDocument()
+    expect(screen.getByText(/本地已安装 1 项/)).toBeInTheDocument()
+    expect(screen.getAllByText('npx').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('本地已安装').length).toBeGreaterThan(0)
+    expect(screen.getByText(/Scanned from an editor target directory/)).toBeInTheDocument()
+
+    const readonlySwitch = screen.getByRole('switch', {
+      name: '链接 Local Scan Skill 到 Cursor',
+    })
+    await userEvent.click(readonlySwitch)
+    expect(usePromptWorkbenchStore.getState().skillsEditorStates.cursor.enabledSkills).toEqual([])
+
+    const cliSwitch = screen.getByRole('switch', {
+      name: '链接 CLI Skill 到 Cursor',
+    })
+    await userEvent.click(cliSwitch)
+    expect(usePromptWorkbenchStore.getState().skillsEditorStates.cursor.enabledSkills).toEqual(['cli-skill'])
+
+    const filterSelect = screen.getByRole('combobox')
+    await userEvent.click(filterSelect)
+    await userEvent.click(screen.getByRole('option', { name: '未启用' }))
+    expect(screen.queryByRole('button', { name: /Local Scan Skill/ })).not.toBeInTheDocument()
+
+    await userEvent.click(filterSelect)
+    await userEvent.click(screen.getByRole('option', { name: '本地已安装' }))
+    expect(screen.getByRole('button', { name: /Local Scan Skill/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /CLI Skill/ })).not.toBeInTheDocument()
+  })
 })
-
-
