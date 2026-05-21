@@ -657,8 +657,34 @@ fn is_editor_skills_target_path(path: &Path) -> bool {
     })
 }
 
-fn classify_cli_skill_source(path: &Path) -> SkillSourceKind {
-    if is_editor_skills_target_path(path) {
+fn resolve_skills_cli_lock_path() -> Result<PathBuf, String> {
+    Ok(get_home_dir()?.join(".agents").join(".skill-lock.json"))
+}
+
+fn load_skills_cli_lock_ids() -> std::collections::HashSet<String> {
+    let Ok(lock_path) = resolve_skills_cli_lock_path() else {
+        return std::collections::HashSet::new();
+    };
+    let Ok(lock_content) = fs::read_to_string(lock_path) else {
+        return std::collections::HashSet::new();
+    };
+    let Ok(lock_json) = serde_json::from_str::<serde_json::Value>(&lock_content) else {
+        return std::collections::HashSet::new();
+    };
+
+    lock_json
+        .get("skills")
+        .and_then(|skills| skills.as_object())
+        .map(|skills| skills.keys().cloned().collect())
+        .unwrap_or_default()
+}
+
+fn classify_cli_skill_source(
+    path: &Path,
+    skill_id: &str,
+    managed_skill_ids: &std::collections::HashSet<String>,
+) -> SkillSourceKind {
+    if is_editor_skills_target_path(path) || !managed_skill_ids.contains(skill_id) {
         SkillSourceKind::FallbackDirectory
     } else {
         SkillSourceKind::Cli
@@ -781,8 +807,9 @@ fn load_physical_skills() -> Result<Vec<SkillInfo>, String> {
     if let Ok(output) = npx_output {
         if output.status.success() {
             if let Ok(json_val) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
+                let managed_skill_ids = load_skills_cli_lock_ids();
                 for (name, path) in extract_skill_source_entries(&json_val) {
-                    let source_kind = classify_cli_skill_source(&path);
+                    let source_kind = classify_cli_skill_source(&path, &name, &managed_skill_ids);
                     if let Some(skill) = load_single_skill(&path, &name, source_kind) {
                         if !loaded_ids.contains(&skill.id) {
                             loaded_ids.insert(skill.id.clone());
@@ -1227,9 +1254,12 @@ mod tests {
     #[test]
     fn test_editor_target_paths_are_not_cli_managed_sources() {
         let home = get_home_dir().unwrap();
+        let mut managed_skill_ids = std::collections::HashSet::new();
+        managed_skill_ids.insert("local-skill".to_string());
+
         let editor_target_skill = home.join(".codex").join("skills").join("local-skill");
         assert_eq!(
-            classify_cli_skill_source(&editor_target_skill),
+            classify_cli_skill_source(&editor_target_skill, "local-skill", &managed_skill_ids),
             SkillSourceKind::FallbackDirectory
         );
 
@@ -1239,8 +1269,24 @@ mod tests {
             .join("skills")
             .join("local-skill");
         assert_eq!(
-            classify_cli_skill_source(&external_skill),
+            classify_cli_skill_source(&external_skill, "local-skill", &managed_skill_ids),
             SkillSourceKind::Cli
+        );
+    }
+
+    #[test]
+    fn test_cli_listed_external_paths_require_lock_membership() {
+        let home = get_home_dir().unwrap();
+        let external_skill = home
+            .join("my-house")
+            .join("skills")
+            .join("skills")
+            .join("react-development");
+        let managed_skill_ids = std::collections::HashSet::new();
+
+        assert_eq!(
+            classify_cli_skill_source(&external_skill, "react-development", &managed_skill_ids),
+            SkillSourceKind::FallbackDirectory
         );
     }
 }
