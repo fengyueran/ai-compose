@@ -140,11 +140,11 @@ const syncMcpServersWithLocal = (
         return
       }
       // 预设服务或自定义服务（user）即使本地不存在（即从物理文件中移出了），依然在工作台列表中保留草稿
-      // 如果本地的受管 MCP 配置完全为空（代表从未写入应用过），则预置服务保留它们在声明文件中的默认启用状态，否则设为 false
-      const hasAnyManagedMcp = !!(managedMcp && Object.keys(managedMcp).length > 0)
+      // 如果该服务在受管 MCP 中不存在（说明从未被应用配置过），则保留其在定义文件中的默认启用状态，否则设为 false
+      const isPresetUnmanaged = server.source === 'preset' && !(managedMcp && server.name in managedMcp)
       nextServers.push({
         ...server,
-        enabled: server.source === 'preset' && !hasAnyManagedMcp ? !!server.enabled : false,
+        enabled: isPresetUnmanaged ? !!server.enabled : false,
       })
     }
   })
