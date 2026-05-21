@@ -10,6 +10,14 @@ import {
   presetMcpServers,
 } from './mcp-servers'
 
+interface LocalMcpConfig {
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+  type?: string
+  url?: string
+}
+
 // 从 localStorage 加载自定义服务
 const loadCustomServersFromStorage = (): McpServer[] => {
   try {
@@ -108,8 +116,8 @@ const initialMcpEditorStates = {
 
 const syncMcpServersWithLocal = (
   mcpServers: McpServer[],
-  localMcp: Record<string, any> | undefined,
-  managedMcp: Record<string, any> | undefined
+  localMcp: Record<string, unknown> | undefined,
+  managedMcp: Record<string, unknown> | undefined
 ): McpServer[] => {
   const safeLocalMcp = localMcp || {}
 
@@ -125,16 +133,17 @@ const syncMcpServersWithLocal = (
       }
 
       const transportType = 'url' in localVal ? 'http' : 'stdio'
+      const configVal = localVal as LocalMcpConfig
 
       nextServers.push({
         ...server,
         enabled: true,
         transportType,
-        command: (localVal as any).command ?? server.command,
-        args: (localVal as any).args ?? server.args,
-        env: (localVal as any).env ?? server.env,
-        type: (localVal as any).type ?? server.type,
-        url: (localVal as any).url ?? server.url,
+        command: configVal.command ?? server.command,
+        args: configVal.args ?? server.args,
+        env: configVal.env ?? server.env,
+        type: configVal.type ?? server.type,
+        url: configVal.url ?? server.url,
         source,
       })
     } else {
@@ -166,16 +175,17 @@ const syncMcpServersWithLocal = (
       const newId = name.toLowerCase().replace(/\s+/g, '-')
       const source = 'external'
       const transportType = 'url' in val ? 'http' : 'stdio'
+      const configVal = val as LocalMcpConfig
 
       nextServers.push({
         id: newId,
         name,
         transportType,
-        command: (val as any).command,
-        args: (val as any).args,
-        env: (val as any).env,
-        type: (val as any).type,
-        url: (val as any).url,
+        command: configVal.command,
+        args: configVal.args,
+        env: configVal.env,
+        type: configVal.type,
+        url: configVal.url,
         enabled: true,
         source,
         description: source === 'external' 

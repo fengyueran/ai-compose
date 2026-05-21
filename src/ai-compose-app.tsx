@@ -92,7 +92,7 @@ function AiComposeApp() {
   );
 
   const generatedMcpJson = useMemo(() => {
-    const mcpServersObj: Record<string, any> = {};
+    const mcpServersObj: Record<string, unknown> = {};
     enabledMcp.forEach((server) => {
       if (server.transportType === 'http') {
         mcpServersObj[server.name] = {
@@ -142,40 +142,30 @@ function AiComposeApp() {
     return tomlStr.trim();
   }, [enabledMcp]);
 
-  // 表单状态，用于编辑/创建 MCP
-  const [formName, setFormName] = useState("");
-  const [formTransportType, setFormTransportType] = useState<'stdio' | 'http'>("stdio");
-  const [formCommand, setFormCommand] = useState("");
-  const [formArgs, setFormArgs] = useState("");
-  const [formEnv, setFormEnv] = useState<{ key: string; value: string }[]>([]);
-  const [formType, setFormType] = useState("");
-  const [formUrl, setFormUrl] = useState("");
-
-  // 当选中的 MCP 发生变化时，同步表单
-  useEffect(() => {
-    if (selectedMcpServer && selectedMcpServerId !== "__new__") {
-      setFormName(selectedMcpServer.name);
-      setFormTransportType(selectedMcpServer.transportType ?? "stdio");
-      setFormCommand(selectedMcpServer.command ?? "");
-      setFormArgs((selectedMcpServer.args ?? []).join("\n"));
-      setFormEnv(
-        Object.entries(selectedMcpServer.env ?? {}).map(([key, value]) => ({
-          key,
-          value,
-        })),
-      );
-      setFormType(selectedMcpServer.type ?? "");
-      setFormUrl(selectedMcpServer.url ?? "");
-    } else if (selectedMcpServerId === "__new__") {
-      setFormName("");
-      setFormTransportType("stdio");
-      setFormCommand("npx");
-      setFormArgs("");
-      setFormEnv([]);
-      setFormType("streamable_http");
-      setFormUrl("");
-    }
-  }, [selectedMcpServerId, selectedMcpServer]);
+  // 表单状态，用于编辑/创建 MCP，基于 selectedMcpServerId 进行状态初始化
+  const [formName, setFormName] = useState(() =>
+    selectedMcpServer && selectedMcpServerId !== "__new__" ? selectedMcpServer.name : ""
+  );
+  const [formTransportType, setFormTransportType] = useState<'stdio' | 'http'>(() =>
+    selectedMcpServer && selectedMcpServerId !== "__new__" ? (selectedMcpServer.transportType ?? "stdio") : "stdio"
+  );
+  const [formCommand, setFormCommand] = useState(() =>
+    selectedMcpServer && selectedMcpServerId !== "__new__" ? (selectedMcpServer.command ?? "") : "npx"
+  );
+  const [formArgs, setFormArgs] = useState(() =>
+    selectedMcpServer && selectedMcpServerId !== "__new__" ? (selectedMcpServer.args ?? []).join("\n") : ""
+  );
+  const [formEnv, setFormEnv] = useState<{ key: string; value: string }[]>(() =>
+    selectedMcpServer && selectedMcpServerId !== "__new__"
+      ? Object.entries(selectedMcpServer.env ?? {}).map(([key, value]) => ({ key, value }))
+      : []
+  );
+  const [formType, setFormType] = useState(() =>
+    selectedMcpServer && selectedMcpServerId !== "__new__" ? (selectedMcpServer.type ?? "streamable_http") : "streamable_http"
+  );
+  const [formUrl, setFormUrl] = useState(() =>
+    selectedMcpServer && selectedMcpServerId !== "__new__" ? (selectedMcpServer.url ?? "") : ""
+  );
 
   const handleSaveMcp = () => {
     if (!formName.trim()) {
@@ -253,8 +243,9 @@ function AiComposeApp() {
     try {
       await applyToEditor(activeEditorId, isCurrentEditorEnabled);
       messageApi.success({ content: "删除 MCP 服务成功并已自动同步物理文件！", key: "delete-mcp" });
-    } catch (err: any) {
-      messageApi.error({ content: `删除成功，但物理文件同步失败: ${err.message}`, key: "delete-mcp" });
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      messageApi.error({ content: `删除成功，但物理文件同步失败: ${errMsg}`, key: "delete-mcp" });
     }
   };
 
@@ -445,7 +436,7 @@ function AiComposeApp() {
         const latestMcpServers = usePromptWorkbenchStore.getState().mcpServers;
         const enabledMcpLatest = latestMcpServers.filter((s) => s.enabled);
         
-        const payloadMcpServers: Record<string, any> = {};
+        const payloadMcpServers: Record<string, Record<string, unknown>> = {};
         enabledMcpLatest.forEach((s) => {
           if (s.transportType === 'http') {
             payloadMcpServers[s.name] = {
@@ -839,6 +830,7 @@ function AiComposeApp() {
                 </section>
 
                 <section
+                  key={selectedMcpServerId}
                   className="panel fragment-detail"
                   aria-labelledby="mcp-detail-title"
                 >
