@@ -11,6 +11,7 @@ import {
   applySkillsToEditorTarget,
   addSkillsRepository,
   updateSkill,
+  removeSkill,
   type EditorId,
   isTauriRuntime,
 } from "./editor-target-command";
@@ -131,6 +132,7 @@ function AiComposeApp() {
   const [skillsRepoInput, setSkillsRepoInput] = useState("");
   const [isAddingSkillsRepo, setIsAddingSkillsRepo] = useState(false);
   const [isUpdatingSkill, setIsUpdatingSkill] = useState(false);
+  const [isRemovingSkill, setIsRemovingSkill] = useState(false);
   const [skillsQuery, setSkillsQuery] = useState("");
   const [skillsFilter, setSkillsFilter] = useState<SkillsFilter>("all");
 
@@ -1487,8 +1489,34 @@ function AiComposeApp() {
                             {!isSelectedSkillCliManaged
                               ? "只读"
                               : enabledSkillsForEditor.includes(selectedSkill.id)
-                              ? "移除"
-                              : "启用"}
+                              ? "不应用"
+                              : "应用"}
+                          </button>
+                          <button
+                            type="button"
+                            className="fragment-action-btn"
+                            disabled={isRemovingSkill || !isSelectedSkillCliManaged}
+                            style={{ opacity: isRemovingSkill || !isSelectedSkillCliManaged ? 0.6 : 1 }}
+                            title={!isSelectedSkillCliManaged ? "本地已安装的 Skill 不受 npx skills 管理，不能从来源移除。" : "从 npx skills 全局来源中移除此 Skill。"}
+                            onClick={async () => {
+                              if (!selectedSkill) return;
+                              setIsRemovingSkill(true);
+                              try {
+                                await removeSkill(selectedSkill.id);
+                                messageApi.success(`已从来源移除 ${selectedSkill.name}。`);
+                                const refreshed = await loadPhysicalSkills();
+                                setSkillsList(refreshed);
+                                const nextSkillsStates = await loadEditorSkillsStates();
+                                hydrateSkillsEditorStates(nextSkillsStates);
+                              } catch (err) {
+                                const errMsg = err instanceof Error ? err.message : String(err);
+                                messageApi.error(`从来源移除失败: ${errMsg}`);
+                              } finally {
+                                setIsRemovingSkill(false);
+                              }
+                            }}
+                          >
+                            {isRemovingSkill ? "移除中..." : "从来源移除"}
                           </button>
                           <button
                             type="button"

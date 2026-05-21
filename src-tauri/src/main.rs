@@ -1069,6 +1069,36 @@ fn update_skill(skill_id: String) -> Result<String, String> {
     }
 }
 
+#[tauri::command]
+fn remove_skill(skill_id: String) -> Result<String, String> {
+    let skill_id = skill_id.trim();
+    if !is_safe_skill_id(skill_id) {
+        return Err("技能 ID 只能包含字母、数字、点、下划线和短横线。".to_string());
+    }
+
+    let output = std::process::Command::new(npx_command_name())
+        .args(["skills", "remove", skill_id, "-g", "-y"])
+        .output();
+
+    match output {
+        Ok(out) => {
+            let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+            let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+            if out.status.success() {
+                Ok(stdout)
+            } else {
+                Err(format!(
+                    "移除技能来源失败，错误码：{:?}\n输出：{}\n错误：{}",
+                    out.status.code(),
+                    stdout,
+                    stderr
+                ))
+            }
+        }
+        Err(e) => Err(format!("无法运行移除命令：{e}")),
+    }
+}
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -1080,7 +1110,8 @@ fn main() {
             load_editor_skills_states,
             apply_skills_to_editor_target,
             add_skills_repository,
-            update_skill
+            update_skill,
+            remove_skill
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -129,3 +129,7 @@ export async function addSkillsRepository(repo: string): Promise<string> {
 export async function updateSkill(skillId: string): Promise<string> {
   return invoke<string>('update_skill', { skillId })
 }
+
+export async function removeSkill(skillId: string): Promise<string> {
+  return invoke<string>('remove_skill', { skillId })
+}
