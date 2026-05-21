@@ -77,3 +77,55 @@ export async function loadEditorMcpStates(): Promise<
 > {
   return invoke<Record<EditorId, EditorTargetState>>('load_editor_mcp_states')
 }
+
+export type SkillInfo = {
+  id: string
+  name: string
+  description: string
+  content: string
+  path: string
+  sourceKind: 'cli' | 'fallbackDirectory'
+}
+
+export type EditorSkillsState = {
+  enabled: boolean
+  targetPath: string
+  enabledSkills: string[]
+}
+
+export type EditorSkillsStates = Record<EditorId, EditorSkillsState>
+
+export type ApplySkillsPayload = {
+  editorId: EditorId
+  enabled: boolean
+  enabledSkills: string[]
+}
+
+export type ApplySkillsResult = {
+  action: 'removed' | 'unchanged' | 'updated'
+  editorId: EditorId
+  targetPath: string
+  updatedAt: string
+}
+
+export async function loadPhysicalSkills(): Promise<SkillInfo[]> {
+  return invoke<SkillInfo[]>('load_physical_skills')
+}
+
+export async function loadEditorSkillsStates(): Promise<EditorSkillsStates> {
+  return invoke<EditorSkillsStates>('load_editor_skills_states')
+}
+
+export async function applySkillsToEditorTarget(
+  payload: ApplySkillsPayload,
+): Promise<ApplySkillsResult> {
+  return invoke<ApplySkillsResult>('apply_skills_to_editor_target', { payload })
+}
+
+export async function addSkillsRepository(repo: string): Promise<string> {
+  return invoke<string>('add_skills_repository', { repo })
+}
+
+export async function updateSkill(skillId: string): Promise<string> {
+  return invoke<string>('update_skill', { skillId })
+}

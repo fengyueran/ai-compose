@@ -192,11 +192,13 @@ fn apply_mcp_to_editor_target(payload: ApplyMcpPayload) -> Result<ApplyMcpResult
     let parsed: serde_json::Value = serde_json::from_str(&payload.config_json)
         .map_err(|error| format!("非法的 MCP JSON 配置：{error}"))?;
 
-    let mcp_servers_json = parsed.get("mcpServers")
+    let mcp_servers_json = parsed
+        .get("mcpServers")
         .and_then(|v| v.as_object())
         .ok_or_else(|| "缺少 mcpServers 配置项。".to_string())?;
 
-    let managed_names: Vec<String> = parsed.get("managedNames")
+    let managed_names: Vec<String> = parsed
+        .get("managedNames")
         .and_then(|v| v.as_array())
         .map(|arr| {
             arr.iter()
@@ -225,10 +227,13 @@ fn apply_mcp_to_editor_target(payload: ApplyMcpPayload) -> Result<ApplyMcpResult
 
             let fragment = if !enabled_servers.is_empty() {
                 let mut dummy_root = toml::map::Map::new();
-                dummy_root.insert("mcp_servers".to_string(), toml::Value::Table(enabled_servers));
+                dummy_root.insert(
+                    "mcp_servers".to_string(),
+                    toml::Value::Table(enabled_servers),
+                );
                 let mut serialized = toml::to_string_pretty(&toml::Value::Table(dummy_root))
                     .map_err(|error| format!("序列化 TOML 失败：{error}"))?;
-                
+
                 if serialized.starts_with("[mcp_servers]\n") {
                     serialized = serialized.replacen("[mcp_servers]\n", "", 1);
                 } else if serialized.starts_with("mcp_servers = {}") {
@@ -253,7 +258,7 @@ fn apply_mcp_to_editor_target(payload: ApplyMcpPayload) -> Result<ApplyMcpResult
                 // 分支 1：存在边界标记
                 let start_idx = toml_str.find(begin_marker).unwrap();
                 let end_idx = toml_str.find(end_marker).unwrap() + end_marker.len();
-                
+
                 if fragment.is_empty() {
                     // 如果要写入的配置为空，说明需要全部清除。我们直接把整个包含边界的块全部抹除！
                     let mut delete_range = start_idx..end_idx;
@@ -271,10 +276,10 @@ fn apply_mcp_to_editor_target(payload: ApplyMcpPayload) -> Result<ApplyMcpResult
                 // 分支 2：没有标记，只有在需要写入内容时才创建标记块
                 if !fragment.is_empty() {
                     let block_to_write = format!("{}\n{}\n{}", begin_marker, fragment, end_marker);
-                    
+
                     let mut toml_root = toml::from_str::<toml::Value>(&toml_str)
                         .unwrap_or_else(|_| toml::Value::Table(toml::map::Map::new()));
-                    
+
                     if let Some(root_table) = toml_root.as_table_mut() {
                         if let Some(mcp_servers_val) = root_table.get_mut("mcp_servers") {
                             if let Some(mcp_servers_table) = mcp_servers_val.as_table_mut() {
@@ -284,13 +289,17 @@ fn apply_mcp_to_editor_target(payload: ApplyMcpPayload) -> Result<ApplyMcpResult
                             }
                         }
                     }
-                    
+
                     let mut clean_toml = toml::to_string_pretty(&toml_root)
                         .map_err(|error| format!("序列化 TOML 失败：{error}"))?;
-                    
+
                     if !clean_toml.contains("[mcp_servers]") {
                         if clean_toml.contains("[mcp_servers.") {
-                            clean_toml = clean_toml.replacen("[mcp_servers.", "[mcp_servers]\n\n[mcp_servers.", 1);
+                            clean_toml = clean_toml.replacen(
+                                "[mcp_servers.",
+                                "[mcp_servers]\n\n[mcp_servers.",
+                                1,
+                            );
                         } else if clean_toml.contains("mcp_servers = {}") {
                             clean_toml = clean_toml.replace("mcp_servers = {}", "[mcp_servers]");
                         } else {
@@ -304,7 +313,7 @@ fn apply_mcp_to_editor_target(payload: ApplyMcpPayload) -> Result<ApplyMcpResult
                     } else {
                         clean_toml.push_str(&format!("\n{}", block_to_write));
                     }
-                    
+
                     toml_str = clean_toml;
                 }
             }
@@ -332,7 +341,8 @@ fn apply_mcp_to_editor_target(payload: ApplyMcpPayload) -> Result<ApplyMcpResult
             if !root_obj.contains_key("mcpServers") {
                 root_obj.insert("mcpServers".to_string(), serde_json::json!({}));
             }
-            let mcp_servers_obj = root_obj.get_mut("mcpServers")
+            let mcp_servers_obj = root_obj
+                .get_mut("mcpServers")
                 .and_then(|v| v.as_object_mut())
                 .ok_or_else(|| "配置文件中的 mcpServers 不是一个 Object。".to_string())?;
 
@@ -382,15 +392,12 @@ fn resolve_editor_mcp_path(editor_id: EditorId) -> Result<PathBuf, String> {
     let home_path = Path::new(&home_directory);
 
     match editor_id {
-        EditorId::Antigravity => {
-            Ok(home_path.join(".gemini").join("antigravity").join("mcp_config.json"))
-        }
-        EditorId::Codex => {
-            Ok(home_path.join(".codex").join("config.toml"))
-        }
-        EditorId::Cursor => {
-            Ok(home_path.join(".cursor").join("mcp.json"))
-        }
+        EditorId::Antigravity => Ok(home_path
+            .join(".gemini")
+            .join("antigravity")
+            .join("mcp_config.json")),
+        EditorId::Codex => Ok(home_path.join(".codex").join("config.toml")),
+        EditorId::Cursor => Ok(home_path.join(".cursor").join("mcp.json")),
     }
 }
 
@@ -417,17 +424,15 @@ fn resolve_cursor_agents_path() -> Result<PathBuf, String> {
 
 fn upsert_managed_block(original_content: &str, managed_block: &str) -> String {
     if let Some((start, end)) = find_managed_block_range(original_content) {
-        let mut next_content = String::with_capacity(
-            original_content.len() - (end - start) + managed_block.len() + 1,
-        );
+        let mut next_content =
+            String::with_capacity(original_content.len() - (end - start) + managed_block.len() + 1);
         next_content.push_str(&original_content[..start]);
         next_content.push_str(managed_block);
         next_content.push_str(&original_content[end..]);
         return next_content;
     }
 
-    let mut next_content =
-        String::with_capacity(original_content.len() + managed_block.len() + 2);
+    let mut next_content = String::with_capacity(original_content.len() + managed_block.len() + 2);
     let normalized = normalize_trailing_newline(original_content);
     next_content.push_str(&normalized);
     if !normalized.is_empty() && !normalized.ends_with("\n\n") {
@@ -453,7 +458,10 @@ fn remove_managed_block(original_content: &str) -> (ApplyAction, String) {
         return (ApplyAction::Removed, next_content);
     }
 
-    (ApplyAction::Unchanged, normalize_trailing_newline(original_content))
+    (
+        ApplyAction::Unchanged,
+        normalize_trailing_newline(original_content),
+    )
 }
 
 fn build_editor_target_state(editor_id: EditorId) -> Result<EditorTargetState, String> {
@@ -477,13 +485,13 @@ fn build_editor_target_state(editor_id: EditorId) -> Result<EditorTargetState, S
 fn extract_managed_mcp_servers(content: &str) -> Option<serde_json::Value> {
     let begin_marker = "# === BEGIN AI-COMPOSE MCP ===";
     let end_marker = "# === END AI-COMPOSE MCP ===";
-    
+
     let start_idx = content.find(begin_marker)?;
     let end_idx = content.find(end_marker)?;
     if start_idx >= end_idx {
         return None;
     }
-    
+
     let managed_block = &content[start_idx + begin_marker.len()..end_idx];
     // 构造一个可被完整 TOML 解析器载入的伪文档
     let toml_doc = format!("[mcp_servers]\n{}", managed_block);
@@ -504,7 +512,7 @@ fn build_editor_mcp_state(editor_id: EditorId) -> Result<EditorTargetState, Stri
     if target_path.exists() {
         let content = fs::read_to_string(&target_path)
             .map_err(|error| format!("读取编辑器目标 MCP 配置失败：{error}"))?;
-        
+
         match editor_id {
             EditorId::Codex => {
                 if let Ok(parsed) = toml::from_str::<toml::Value>(&content) {
@@ -565,13 +573,487 @@ fn current_timestamp() -> String {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillInfo {
+    id: String,
+    name: String,
+    description: String,
+    content: String,
+    path: String,
+    source_kind: SkillSourceKind,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+enum SkillSourceKind {
+    Cli,
+    FallbackDirectory,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct EditorSkillsState {
+    enabled: bool,
+    target_path: String,
+    enabled_skills: Vec<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EditorSkillsStates {
+    antigravity: EditorSkillsState,
+    codex: EditorSkillsState,
+    cursor: EditorSkillsState,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ApplySkillsPayload {
+    editor_id: EditorId,
+    enabled: bool,
+    enabled_skills: Vec<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ApplySkillsResult {
+    action: ApplyAction,
+    editor_id: EditorId,
+    target_path: String,
+    updated_at: String,
+}
+
+fn get_home_dir() -> Result<PathBuf, String> {
+    std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .map(PathBuf::from)
+        .map_err(|_| "无法读取当前用户的 HOME 目录。".to_string())
+}
+
+fn resolve_editor_skills_path(editor_id: EditorId) -> Result<PathBuf, String> {
+    let home = get_home_dir()?;
+    match editor_id {
+        EditorId::Antigravity => Ok(home.join(".gemini").join("skills")),
+        EditorId::Codex => Ok(home.join(".codex").join("skills")),
+        EditorId::Cursor => Ok(home.join(".cursor").join("skills")),
+    }
+}
+
+fn is_editor_skills_target_path(path: &Path) -> bool {
+    let Ok(home) = get_home_dir() else {
+        return false;
+    };
+    let candidate = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let target_roots = [
+        home.join(".codex").join("skills"),
+        home.join(".cursor").join("skills"),
+        home.join(".gemini").join("skills"),
+    ];
+
+    target_roots.iter().any(|target_root| {
+        let canonical_root = fs::canonicalize(target_root).unwrap_or_else(|_| target_root.clone());
+        candidate.starts_with(canonical_root)
+    })
+}
+
+fn classify_cli_skill_source(path: &Path) -> SkillSourceKind {
+    if is_editor_skills_target_path(path) {
+        SkillSourceKind::FallbackDirectory
+    } else {
+        SkillSourceKind::Cli
+    }
+}
+
+fn load_single_skill(path: &Path, id: &str, source_kind: SkillSourceKind) -> Option<SkillInfo> {
+    let skill_md_path = path.join("SKILL.md");
+    if !skill_md_path.exists() {
+        return None;
+    }
+
+    let content_str = fs::read_to_string(&skill_md_path).ok()?;
+    let mut name = id.to_string();
+    let mut description = String::new();
+    let mut body = content_str.clone();
+
+    if content_str.starts_with("---") {
+        if let Some(second_dash_idx) = content_str[3..].find("---") {
+            let front_matter = &content_str[3..(second_dash_idx + 3)];
+            body = content_str[(second_dash_idx + 6)..].trim().to_string();
+
+            for line in front_matter.lines() {
+                let trimmed = line.trim();
+                if trimmed.starts_with("name:") {
+                    name = trimmed["name:".len()..]
+                        .trim()
+                        .trim_matches('"')
+                        .trim_matches('\'')
+                        .to_string();
+                } else if trimmed.starts_with("description:") {
+                    description = trimmed["description:".len()..]
+                        .trim()
+                        .trim_matches('"')
+                        .trim_matches('\'')
+                        .to_string();
+                }
+            }
+        }
+    }
+
+    Some(SkillInfo {
+        id: id.to_string(),
+        name,
+        description,
+        content: body,
+        path: path.display().to_string(),
+        source_kind,
+    })
+}
+
+fn npx_command_name() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "npx.cmd"
+    } else {
+        "npx"
+    }
+}
+
+fn is_safe_repo_source(repo: &str) -> bool {
+    let mut parts = repo.split('/');
+    let owner = parts.next().unwrap_or_default();
+    let name = parts.next().unwrap_or_default();
+
+    !owner.is_empty()
+        && !name.is_empty()
+        && parts.next().is_none()
+        && owner.chars().all(is_safe_cli_identifier_char)
+        && name.chars().all(is_safe_cli_identifier_char)
+}
+
+fn is_safe_skill_id(skill_id: &str) -> bool {
+    !skill_id.is_empty()
+        && !skill_id.contains('/')
+        && !skill_id.contains('\\')
+        && skill_id.chars().all(is_safe_cli_identifier_char)
+}
+
+fn is_safe_cli_identifier_char(ch: char) -> bool {
+    ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.')
+}
+
+fn extract_skill_source_entries(value: &serde_json::Value) -> Vec<(String, PathBuf)> {
+    let items: Vec<&serde_json::Value> = if let Some(arr) = value.as_array() {
+        arr.iter().collect()
+    } else if let Some(arr) = value.get("skills").and_then(|v| v.as_array()) {
+        arr.iter().collect()
+    } else if let Some(arr) = value.get("items").and_then(|v| v.as_array()) {
+        arr.iter().collect()
+    } else {
+        Vec::new()
+    };
+
+    items
+        .into_iter()
+        .filter_map(|item| {
+            let name = item
+                .get("name")
+                .or_else(|| item.get("id"))
+                .and_then(|v| v.as_str())?;
+            let path = item
+                .get("path")
+                .or_else(|| item.get("targetPath"))
+                .or_else(|| item.get("target_path"))
+                .and_then(|v| v.as_str())?;
+            Some((name.to_string(), PathBuf::from(path)))
+        })
+        .collect()
+}
+
+#[tauri::command]
+fn load_physical_skills() -> Result<Vec<SkillInfo>, String> {
+    let mut skills = Vec::new();
+    let mut loaded_ids = std::collections::HashSet::new();
+
+    let npx_output = std::process::Command::new(npx_command_name())
+        .args(["skills", "ls", "-g", "--json"])
+        .output();
+
+    if let Ok(output) = npx_output {
+        if output.status.success() {
+            if let Ok(json_val) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
+                for (name, path) in extract_skill_source_entries(&json_val) {
+                    let source_kind = classify_cli_skill_source(&path);
+                    if let Some(skill) = load_single_skill(&path, &name, source_kind) {
+                        if !loaded_ids.contains(&skill.id) {
+                            loaded_ids.insert(skill.id.clone());
+                            skills.push(skill);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if skills.is_empty() {
+        let home = get_home_dir()?;
+        let physical_dir = home.join(".gemini").join("antigravity").join("skills");
+        if physical_dir.exists() && physical_dir.is_dir() {
+            if let Ok(entries) = fs::read_dir(&physical_dir) {
+                for entry in entries.filter_map(Result::ok) {
+                    let path = entry.path();
+                    if path.is_dir() {
+                        if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
+                            if let Some(skill) =
+                                load_single_skill(&path, name, SkillSourceKind::FallbackDirectory)
+                            {
+                                if !loaded_ids.contains(&skill.id) {
+                                    loaded_ids.insert(skill.id.clone());
+                                    skills.push(skill);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(skills)
+}
+
+fn is_skill_enabled(editor_skills_dir: &Path, skill_id: &str, physical_skill_path: &Path) -> bool {
+    let link_path = editor_skills_dir.join(skill_id);
+    let metadata = match fs::symlink_metadata(&link_path) {
+        Ok(metadata) => metadata,
+        Err(_) => return false,
+    };
+
+    if !metadata.file_type().is_symlink() {
+        return false;
+    }
+
+    if let Ok(target) = fs::read_link(&link_path) {
+        let absolute_target = if target.is_absolute() {
+            target
+        } else {
+            editor_skills_dir.join(target)
+        };
+        if let Ok(c_target) = fs::canonicalize(&absolute_target) {
+            if let Ok(c_physical) = fs::canonicalize(physical_skill_path) {
+                return c_target == c_physical;
+            }
+        }
+    }
+    false
+}
+
+fn build_editor_skills_state(
+    editor_id: EditorId,
+    physical_skills: &[SkillInfo],
+) -> Result<EditorSkillsState, String> {
+    let target_path = resolve_editor_skills_path(editor_id)?;
+    let mut enabled_skills = Vec::new();
+
+    if target_path.exists() && target_path.is_dir() {
+        for skill in physical_skills {
+            if skill.source_kind != SkillSourceKind::Cli {
+                continue;
+            }
+            if is_skill_enabled(&target_path, &skill.id, Path::new(&skill.path)) {
+                enabled_skills.push(skill.id.clone());
+            }
+        }
+    }
+
+    let enabled = !enabled_skills.is_empty();
+
+    Ok(EditorSkillsState {
+        enabled,
+        target_path: target_path.display().to_string(),
+        enabled_skills,
+    })
+}
+
+#[tauri::command]
+fn load_editor_skills_states() -> Result<EditorSkillsStates, String> {
+    let physical_skills = load_physical_skills()?;
+    Ok(EditorSkillsStates {
+        antigravity: build_editor_skills_state(EditorId::Antigravity, &physical_skills)?,
+        codex: build_editor_skills_state(EditorId::Codex, &physical_skills)?,
+        cursor: build_editor_skills_state(EditorId::Cursor, &physical_skills)?,
+    })
+}
+
+#[cfg(unix)]
+fn create_symlink<P: AsRef<Path>, Q: AsRef<Path>>(original: P, link: Q) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(original, link)
+}
+
+#[cfg(windows)]
+fn create_symlink<P: AsRef<Path>, Q: AsRef<Path>>(original: P, link: Q) -> std::io::Result<()> {
+    std::os::windows::fs::symlink_dir(original, link)
+}
+
+fn remove_link_or_dir(path: &Path) -> std::io::Result<()> {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error),
+    };
+
+    if metadata.file_type().is_symlink() {
+        fs::remove_file(path)?;
+        return Ok(());
+    }
+
+    Err(std::io::Error::new(
+        std::io::ErrorKind::AlreadyExists,
+        "目标路径存在，但不是由 AI-COMPOSE 管理的技能软链接",
+    ))
+}
+
+#[tauri::command]
+fn apply_skills_to_editor_target(payload: ApplySkillsPayload) -> Result<ApplySkillsResult, String> {
+    let target_path = resolve_editor_skills_path(payload.editor_id)?;
+    let physical_skills = load_physical_skills()?;
+
+    let mut action = ApplyAction::Unchanged;
+
+    if !payload.enabled {
+        if target_path.exists() && target_path.is_dir() {
+            for skill in &physical_skills {
+                if skill.source_kind != SkillSourceKind::Cli {
+                    continue;
+                }
+                if is_skill_enabled(&target_path, &skill.id, Path::new(&skill.path)) {
+                    let link_path = target_path.join(&skill.id);
+                    remove_link_or_dir(&link_path)
+                        .map_err(|e| format!("清除技能软链接失败：{e}"))?;
+                    action = ApplyAction::Removed;
+                }
+            }
+        }
+    } else {
+        fs::create_dir_all(&target_path).map_err(|e| format!("创建编辑器 skills 目录失败：{e}"))?;
+
+        for skill in &physical_skills {
+            if skill.source_kind != SkillSourceKind::Cli {
+                continue;
+            }
+            let should_enable = payload.enabled_skills.contains(&skill.id);
+            let currently_enabled =
+                is_skill_enabled(&target_path, &skill.id, Path::new(&skill.path));
+            let link_path = target_path.join(&skill.id);
+
+            if should_enable && !currently_enabled {
+                if let Ok(metadata) = fs::symlink_metadata(&link_path) {
+                    if !metadata.file_type().is_symlink() {
+                        return Err(format!(
+                            "目标路径 {} 已存在且不是技能软链接，为避免覆盖用户文件已停止写入。",
+                            link_path.display()
+                        ));
+                    }
+                    remove_link_or_dir(&link_path)
+                        .map_err(|e| format!("移除已有技能软链接失败：{e}"))?;
+                }
+                create_symlink(Path::new(&skill.path), &link_path)
+                    .map_err(|e| format!("创建技能软链接失败：{e}"))?;
+                action = ApplyAction::Updated;
+            } else if !should_enable && currently_enabled {
+                remove_link_or_dir(&link_path).map_err(|e| format!("删除技能软链接失败：{e}"))?;
+                action = ApplyAction::Removed;
+            }
+        }
+    }
+
+    Ok(ApplySkillsResult {
+        action,
+        editor_id: payload.editor_id,
+        target_path: target_path.display().to_string(),
+        updated_at: current_timestamp(),
+    })
+}
+
+#[tauri::command]
+fn add_skills_repository(repo: String) -> Result<String, String> {
+    let repo = repo.trim();
+    if !is_safe_repo_source(repo) {
+        return Err(
+            "仓库源必须使用 owner/repo 格式，且只能包含字母、数字、点、下划线和短横线。"
+                .to_string(),
+        );
+    }
+
+    let output = std::process::Command::new(npx_command_name())
+        .args(["skills", "add", repo, "-g", "-y"])
+        .output();
+
+    match output {
+        Ok(out) => {
+            let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+            let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+            if out.status.success() {
+                Ok(stdout)
+            } else {
+                Err(format!(
+                    "安装技能失败，错误码：{:?}\n输出：{}\n错误：{}",
+                    out.status.code(),
+                    stdout,
+                    stderr
+                ))
+            }
+        }
+        Err(e) => Err(format!("无法运行安装命令：{e}")),
+    }
+}
+
+#[tauri::command]
+fn update_skill(skill_id: String) -> Result<String, String> {
+    let skill_id = skill_id.trim();
+    let output = if skill_id.is_empty() {
+        std::process::Command::new(npx_command_name())
+            .args(["skills", "update", "-g", "-y"])
+            .output()
+    } else {
+        if !is_safe_skill_id(skill_id) {
+            return Err("技能 ID 只能包含字母、数字、点、下划线和短横线。".to_string());
+        }
+        std::process::Command::new(npx_command_name())
+            .args(["skills", "update", skill_id, "-g", "-y"])
+            .output()
+    };
+
+    match output {
+        Ok(out) => {
+            let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+            let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+            if out.status.success() {
+                Ok(stdout)
+            } else {
+                Err(format!(
+                    "更新技能失败，错误码：{:?}\n输出：{}\n错误：{}",
+                    out.status.code(),
+                    stdout,
+                    stderr
+                ))
+            }
+        }
+        Err(e) => Err(format!("无法运行更新命令：{e}")),
+    }
+}
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             apply_prompt_to_editor_target,
             load_editor_target_states,
             load_editor_mcp_states,
-            apply_mcp_to_editor_target
+            apply_mcp_to_editor_target,
+            load_physical_skills,
+            load_editor_skills_states,
+            apply_skills_to_editor_target,
+            add_skills_repository,
+            update_skill
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -580,6 +1062,15 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn unique_test_dir(name: &str) -> PathBuf {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!("ai-compose-{name}-{timestamp}"))
+    }
 
     #[test]
     fn test_resolve_cursor_mcp_path() {
@@ -622,5 +1113,134 @@ mod tests {
                 assert!(mcp_servers_val.is_object());
             }
         }
+    }
+
+    #[test]
+    fn test_load_single_skill_extracts_front_matter_and_body() {
+        let root = unique_test_dir("skill-frontmatter");
+        let skill_dir = root.join("react-development");
+        fs::create_dir_all(&skill_dir).unwrap();
+        fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: \"React Development\"\ndescription: \"React task router\"\n---\n\n# Usage\n\nUse it.",
+        )
+        .unwrap();
+
+        let skill =
+            load_single_skill(&skill_dir, "react-development", SkillSourceKind::Cli).unwrap();
+        assert_eq!(skill.id, "react-development");
+        assert_eq!(skill.name, "React Development");
+        assert_eq!(skill.description, "React task router");
+        assert_eq!(skill.content, "# Usage\n\nUse it.");
+        assert_eq!(skill.source_kind, SkillSourceKind::Cli);
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn test_extract_skill_source_entries_supports_array_and_wrapped_shapes() {
+        let array_json = serde_json::json!([
+            { "name": "alpha", "path": "/tmp/alpha" },
+            { "id": "beta", "targetPath": "/tmp/beta" }
+        ]);
+        let entries = extract_skill_source_entries(&array_json);
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].0, "alpha");
+        assert_eq!(entries[1].0, "beta");
+
+        let wrapped_json = serde_json::json!({
+            "skills": [{ "name": "gamma", "target_path": "/tmp/gamma" }]
+        });
+        let wrapped_entries = extract_skill_source_entries(&wrapped_json);
+        assert_eq!(wrapped_entries.len(), 1);
+        assert_eq!(wrapped_entries[0].0, "gamma");
+    }
+
+    #[test]
+    fn test_skill_enablement_requires_matching_symlink() {
+        let root = unique_test_dir("skill-link");
+        let physical_dir = root.join("source").join("react-development");
+        let editor_dir = root.join("editor-skills");
+        fs::create_dir_all(&physical_dir).unwrap();
+        fs::create_dir_all(&editor_dir).unwrap();
+
+        let unmanaged_dir = editor_dir.join("react-development");
+        fs::create_dir_all(&unmanaged_dir).unwrap();
+        assert!(!is_skill_enabled(
+            &editor_dir,
+            "react-development",
+            &physical_dir
+        ));
+        fs::remove_dir_all(&unmanaged_dir).unwrap();
+
+        create_symlink(&physical_dir, editor_dir.join("react-development")).unwrap();
+        assert!(is_skill_enabled(
+            &editor_dir,
+            "react-development",
+            &physical_dir
+        ));
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn test_cli_input_validation_rejects_shell_like_values() {
+        assert!(is_safe_repo_source("vercel-labs/agent-skills"));
+        assert!(!is_safe_repo_source("vercel-labs/agent-skills;rm"));
+        assert!(!is_safe_repo_source(
+            "https://github.com/vercel-labs/agent-skills"
+        ));
+
+        assert!(is_safe_skill_id("react-development"));
+        assert!(!is_safe_skill_id("../react-development"));
+        assert!(!is_safe_skill_id("react;development"));
+    }
+
+    #[test]
+    fn test_fallback_skills_are_not_marked_enabled() {
+        let root = unique_test_dir("fallback-skill-state");
+        let physical_dir = root.join("fallback").join("local-skill");
+        let editor_dir = root.join("editor-skills");
+        fs::create_dir_all(&physical_dir).unwrap();
+        fs::create_dir_all(&editor_dir).unwrap();
+        fs::write(physical_dir.join("SKILL.md"), "# Local Skill").unwrap();
+        create_symlink(&physical_dir, editor_dir.join("local-skill")).unwrap();
+
+        let skill = load_single_skill(
+            &physical_dir,
+            "local-skill",
+            SkillSourceKind::FallbackDirectory,
+        )
+        .unwrap();
+        let mut enabled_skills = Vec::new();
+
+        if skill.source_kind == SkillSourceKind::Cli
+            && is_skill_enabled(&editor_dir, &skill.id, Path::new(&skill.path))
+        {
+            enabled_skills.push(skill.id.clone());
+        }
+
+        assert!(enabled_skills.is_empty());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn test_editor_target_paths_are_not_cli_managed_sources() {
+        let home = get_home_dir().unwrap();
+        let editor_target_skill = home.join(".codex").join("skills").join("local-skill");
+        assert_eq!(
+            classify_cli_skill_source(&editor_target_skill),
+            SkillSourceKind::FallbackDirectory
+        );
+
+        let external_skill = home
+            .join("my-house")
+            .join("skills")
+            .join("skills")
+            .join("local-skill");
+        assert_eq!(
+            classify_cli_skill_source(&external_skill),
+            SkillSourceKind::Cli
+        );
     }
 }
