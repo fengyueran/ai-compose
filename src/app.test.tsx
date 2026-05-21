@@ -174,30 +174,22 @@ describe('Prompt Workbench', () => {
     expect(screen.getAllByText('本地已安装').length).toBeGreaterThan(0)
     expect(screen.getByText(/Scanned from an editor target directory/)).toBeInTheDocument()
 
-    const readonlySwitch = screen.getByRole('switch', {
-      name: '链接 Local Scan Skill 到 Cursor',
-    })
-    await userEvent.click(readonlySwitch)
-    expect(usePromptWorkbenchStore.getState().skillsEditorStates.cursor.enabledSkills).toEqual([])
+    // Switches should not be present in the document
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument()
 
-    const cliSwitch = screen.getByRole('switch', {
-      name: '链接 CLI Skill 到 Cursor',
-    })
-    await userEvent.click(cliSwitch)
-    expect(usePromptWorkbenchStore.getState().skillsEditorStates.cursor.enabledSkills).toEqual(['cli-skill'])
-    expect(screen.queryByRole('button', { name: '不应用' })).not.toBeInTheDocument()
+    // Preview apply summary bar checks
+    expect(screen.getAllByText('CLI Skill').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: '从来源移除' })).toBeInTheDocument()
 
     const filterSelect = screen.getByRole('combobox')
     await userEvent.click(filterSelect)
-    await userEvent.click(screen.getByRole('option', { name: '未启用' }))
-    expect(screen.queryByRole('button', { name: /Local Scan Skill/ })).not.toBeInTheDocument()
 
-    await userEvent.click(filterSelect)
+    // Check filter by '本地已安装'
     await userEvent.click(screen.getByRole('option', { name: '本地已安装' }))
     expect(screen.getByRole('button', { name: /Local Scan Skill/ })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /CLI Skill/ })).not.toBeInTheDocument()
 
+    // Check filter by 'skills.sh 安装'
     await userEvent.click(filterSelect)
     await userEvent.click(screen.getByRole('option', { name: 'skills.sh 安装' }))
     expect(screen.getByRole('button', { name: /CLI Skill/ })).toBeInTheDocument()

@@ -85,6 +85,9 @@ export type SkillInfo = {
   content: string
   path: string
   sourceKind: 'cli' | 'fallbackDirectory'
+  isBuiltin?: boolean
+  installed?: boolean
+  repoSource?: string
 }
 
 export type EditorSkillsState = {

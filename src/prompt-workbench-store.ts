@@ -486,16 +486,183 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
       })
     },
 
-    setSkillsList: (skills) => {
+    setSkillsList: (physicalSkills) => {
       const { selectedSkillId } = get()
-      let nextSelectedId = skills.length > 0 ? selectedSkillId : ''
-      if (skills.length > 0 && (!selectedSkillId || !skills.some((s) => s.id === selectedSkillId))) {
-        nextSelectedId = skills[0].id
+      
+      const mappedPhysical = physicalSkills.map(ps => {
+        const preset = BUILTIN_SKILLS_PRESET.find(p => p.id === ps.id);
+        return {
+          ...ps,
+          isBuiltin: !!preset,
+          installed: true,
+          repoSource: preset?.repoSource,
+        };
+      });
+
+      const uninstalledBuiltin = BUILTIN_SKILLS_PRESET
+        .filter(p => !physicalSkills.some(ps => ps.id === p.id))
+        .map(p => ({
+          id: p.id,
+          name: p.name,
+          description: p.description,
+          content: p.content,
+          path: '',
+          sourceKind: 'cli' as const,
+          isBuiltin: true,
+          installed: false,
+          repoSource: p.repoSource,
+        }));
+
+      const mergedSkills = [...mappedPhysical, ...uninstalledBuiltin];
+
+      mergedSkills.sort((a, b) => {
+        if (a.isBuiltin && !b.isBuiltin) return -1;
+        if (!a.isBuiltin && b.isBuiltin) return 1;
+        
+        if (a.installed && !b.installed) return -1;
+        if (!a.installed && b.installed) return 1;
+        
+        return a.id.localeCompare(b.id);
+      });
+
+      let nextSelectedId = mergedSkills.length > 0 ? selectedSkillId : '';
+      if (mergedSkills.length > 0 && (!selectedSkillId || !mergedSkills.some((s) => s.id === selectedSkillId))) {
+        nextSelectedId = mergedSkills[0].id;
       }
+
       set({
-        skills,
+        skills: mergedSkills,
         selectedSkillId: nextSelectedId,
-      })
+      });
     },
   }),
 )
+
+const BUILTIN_SKILLS_PRESET = [
+  {
+    id: "find-skills",
+    name: "find-skills",
+    description: "交互式搜索、发现、安装技能组件，管理全局和项目级技能",
+    repoSource: "vercel-labs/skills",
+    content: "<!--内置技能-->\n\n# find-skills\n\n此技能提供了交互式发现、搜索和安装其他技能的指令，方便在命令行里扩展您的 Agent 动作能力。\n\n### 官方仓库\nhttps://github.com/vercel-labs/skills",
+  },
+  {
+    id: "frontend-design",
+    name: "frontend-design",
+    description: "指导前端设计实现，使用优质设计系统、TailwindCSS 和组件库，保证卓越视觉和优秀体验",
+    repoSource: "anthropics/skills",
+    content: "<!--内置技能-->\n\n# frontend-design\n\n专为前端研发设计的指导规范，助力开发者编写出高水准、美观且响应式的网页与组件代码。\n\n### 官方仓库\nhttps://github.com/anthropics/skills",
+  },
+  {
+    id: "brainstorming",
+    name: "brainstorming",
+    description: "在开始任何功能、组件或行为的开发/修改前，用于理清用户意图和产品设计的头脑风暴指南",
+    repoSource: "obra/superpowers",
+    content: "<!--内置技能-->\n\n# brainstorming\n\n在做任何创造性工作、设计或写代码前必须运行的头脑风暴指南。可理清意图、规避冗余工作并提供优质的设计想法。\n\n### 官方仓库\nhttps://github.com/obra/superpowers",
+  },
+  {
+    id: "dispatching-parallel-agents",
+    name: "dispatching-parallel-agents",
+    description: "当遇到两个或更多无顺序依赖、无共享状态的独立任务时，进行并行任务调度的策略",
+    repoSource: "obra/superpowers",
+    content: "<!--内置技能-->\n\n# dispatching-parallel-agents\n\n用于指导如何将复杂工作拆分为独立任务并并行运行多个 Agent 子任务，以成倍提高交付速度的说明书。\n\n### 官方仓库\nhttps://github.com/obra/superpowers",
+  },
+  {
+    id: "executing-plans",
+    name: "executing-plans",
+    description: "将已编写的执行计划分阶段实施并进行检查与对齐的执行指引",
+    repoSource: "obra/superpowers",
+    content: "<!--内置技能-->\n\n# executing-plans\n\n详细规定如何基于已批准的设计和执行计划，安全、稳步地推进编码，并在每个检查点验证产出的规范流程。\n\n### 官方仓库\nhttps://github.com/obra/superpowers",
+  },
+  {
+    id: "finishing-a-development-branch",
+    name: "finishing-a-development-branch",
+    description: "开发完成且测试通过后，指导如何整合代码、提交 PR 或清理临时环境的完成准则",
+    repoSource: "obra/superpowers",
+    content: "<!--内置技能-->\n\n# finishing-a-development-branch\n\n当开发完成且所有测试通过后，提供结构化选项（合并、提交PR或清理工作区）来稳妥收尾研发工作分支的指南。\n\n### 官方仓库\nhttps://github.com/obra/superpowers",
+  },
+  {
+    id: "receiving-code-review",
+    name: "receiving-code-review",
+    description: "接收代码评审意见时的严谨反馈态度指南，强调技术论证和科学验证，拒绝盲从修改",
+    repoSource: "obra/superpowers",
+    content: "<!--内置技能-->\n\n# receiving-code-review\n\n当收到代码审查意见时，指导如何进行理性技术探讨、确认和方案验证，而不是做做样子、盲从或敷衍地堆砌补丁。\n\n### 官方仓库\nhttps://github.com/obra/superpowers",
+  },
+  {
+    id: "requesting-code-review",
+    name: "requesting-code-review",
+    description: "在完成任务或主要功能、并准备合并代码前，请求代码评审并验证功能是否完全合规的标准",
+    repoSource: "obra/superpowers",
+    content: "<!--内置技能-->\n\n# requesting-code-review\n\n在完成任务或主要模块后，如何科学地发起代码评审、梳理变更范围并自证需求满足程度的指导原则。\n\n### 官方仓库\nhttps://github.com/obra/superpowers",
+  },
+  {
+    id: "subagent-driven-development",
+    name: "subagent-driven-development",
+    description: "在同一个会话窗口中通过调度专职子 Agent 执行子任务的研发指南",
+    repoSource: "obra/superpowers",
+    content: "<!--内置技能-->\n\n# subagent-driven-development\n\n讲述如何在当前会话中合理拆分职责并启动多个子 Agent 分工协作（如研究、测试、编码），提升工作能效的最佳实践。\n\n### 官方仓库\nhttps://github.com/obra/superpowers",
+  },
+  {
+    id: "systematic-debugging",
+    name: "systematic-debugging",
+    description: "在定位任何 bug、测试失败或意外表现时必须严格执行的系统性排查与调试逻辑",
+    repoSource: "obra/superpowers",
+    content: "<!--内置技能-->\n\n# systematic-debugging\n\n当遇到测试失败或程序报错时，如何严密设立假设、寻找证据链以彻底修复问题，而不是依靠直觉胡乱试错的操作指南。\n\n### 官方仓库\nhttps://github.com/obra/superpowers",
+  },
+  {
+    id: "test-driven-development",
+    name: "test-driven-development",
+    description: "遵循先写失败测试、再写最小实现、最后整理重构 (Red-Green-Refactor) 的开发工作流",
+    repoSource: "obra/superpowers",
+    content: "<!--内置技能-->\n\n# test-driven-development\n\n实现任何新特性或修复缺陷时必须遵循的测试驱动开发指南，坚持先写测试再写实现，确保代码底线质量。\n\n### 官方仓库\nhttps://github.com/obra/superpowers",
+  },
+  {
+    id: "using-git-worktrees",
+    name: "using-git-worktrees",
+    description: "指导如何利用 Git Worktree 隔离开发环境与主工作区，提高分支切换的效率和安全",
+    repoSource: "obra/superpowers",
+    content: "<!--内置技能-->\n\n# using-git-worktrees\n\n教您使用 Git Worktree 来维持干净隔离的会话工作流，以便在处理复杂任务时随时切换或多任务并行的实操指引。\n\n### 官方仓库\nhttps://github.com/obra/superpowers",
+  },
+  {
+    id: "using-superpowers",
+    name: "using-superpowers",
+    description: "每次开始对话时的第一步，用以确立如何寻找和正确使用已有技能的方法论",
+    repoSource: "obra/superpowers",
+    content: "<!--内置技能-->\n\n# using-superpowers\n\n在回答任何用户提问前，明确如何检索已有技能、合理调用专门动作而避免平铺直叙回答的核心守则。\n\n### 官方仓库\nhttps://github.com/obra/superpowers",
+  },
+  {
+    id: "verification-before-completion",
+    name: "verification-before-completion",
+    description: "完成任务声称通过前必须履行的验证核对，坚持数据和输出结果高于口头断言",
+    repoSource: "obra/superpowers",
+    content: "<!--内置技能-->\n\n# verification-before-completion\n\n在声称完成功能或问题修复前，如何进行自动化测试、界面检查或端到端验证以展示确凿证据的工作守则。\n\n### 官方仓库\nhttps://github.com/obra/superpowers",
+  },
+  {
+    id: "writing-plans",
+    name: "writing-plans",
+    description: "在有需求、 spec 或多步变更任务时，必须先编写并确认实现方案的计划准则",
+    repoSource: "obra/superpowers",
+    content: "<!--内置技能-->\n\n# writing-plans\n\n教您在做大规模、重构或复杂特性修改前，如何产出严谨可复审的方案设计与里程碑拆分，避免走弯路。\n\n### 官方仓库\nhttps://github.com/obra/superpowers",
+  },
+  {
+    id: "writing-skills",
+    name: "writing-skills",
+    description: "用于规范和指导在编写、测试并发布新技能或修改现有技能时的质量和结构要求",
+    repoSource: "obra/superpowers",
+    content: "<!--内置技能-->\n\n# writing-skills\n\n关于如何合理定义一个技能、撰写标准的 `SKILL.md`，并在部署至真实 Agent 前执行调试和验证的参考书。\n\n### 官方仓库\nhttps://github.com/obra/superpowers",
+  },
+  {
+    id: "skill-creator",
+    name: "skill-creator",
+    description: "协助用户创建规范的 SKILL.md，编写和自动验证新技能的构建逻辑",
+    repoSource: "anthropics/skills",
+    content: "<!--内置技能-->\n\n# skill-creator\n\n用于加速自定义技能编写、符合平台与 Agent 解析规范、指导快速起步新技能定义的脚手架工具。\n\n### 官方仓库\nhttps://github.com/anthropics/skills",
+  },
+  {
+    id: "ui-ux-pro-max",
+    name: "ui-ux-pro-max",
+    description: "UI/UX 高级设计指南，教您编写顶级视觉美学与动效的现代前端页面",
+    repoSource: "nextlevelbuilder/ui-ux-pro-max-skill",
+    content: "<!--内置技能-->\n\n# ui-ux-pro-max\n\n专为打造高视觉冲击力（WOW体验）、优秀人机交互和微动画设计的前端美学技能方案。\n\n### 官方仓库\nhttps://github.com/nextlevelbuilder/ui-ux-pro-max-skill",
+  }
+]
