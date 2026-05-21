@@ -185,7 +185,7 @@ describe('Prompt Workbench', () => {
     })
     await userEvent.click(cliSwitch)
     expect(usePromptWorkbenchStore.getState().skillsEditorStates.cursor.enabledSkills).toEqual(['cli-skill'])
-    expect(screen.getByRole('button', { name: '不应用' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '不应用' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '从来源移除' })).toBeInTheDocument()
 
     const filterSelect = screen.getByRole('combobox')

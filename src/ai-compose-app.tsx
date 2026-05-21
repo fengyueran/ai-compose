@@ -1476,23 +1476,6 @@ function AiComposeApp() {
                       {selectedSkill && (
                         <div className="skills-detail-pane__actions">
                           <button
-                            className={`fragment-action-btn${
-                              enabledSkillsForEditor.includes(selectedSkill.id)
-                                ? " fragment-action-btn--active"
-                                : ""
-                            }`}
-                            onClick={() => toggleSkill(selectedSkill.id)}
-                            disabled={!isSelectedSkillCliManaged}
-                            title={!isSelectedSkillCliManaged ? "本地已安装的 Skill 只读展示，不能启用同步。" : undefined}
-                            type="button"
-                          >
-                            {!isSelectedSkillCliManaged
-                              ? "只读"
-                              : enabledSkillsForEditor.includes(selectedSkill.id)
-                              ? "不应用"
-                              : "应用"}
-                          </button>
-                          <button
                             type="button"
                             className="fragment-action-btn"
                             disabled={isRemovingSkill || !isSelectedSkillCliManaged}
