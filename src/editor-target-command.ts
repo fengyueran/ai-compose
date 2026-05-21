@@ -11,6 +11,8 @@ type ApplyPromptPayload = {
 export type EditorTargetState = {
   enabled: boolean
   targetPath: string
+  mcpServers?: Record<string, any>
+  managedMcpServers?: Record<string, any>
 }
 
 export type ApplyPromptResult = {
@@ -49,4 +51,29 @@ export async function loadEditorTargetStates(): Promise<
   Record<EditorId, EditorTargetState>
 > {
   return invoke<Record<EditorId, EditorTargetState>>('load_editor_target_states')
+}
+
+export type ApplyMcpPayload = {
+  editorId: EditorId
+  enabled: boolean
+  configJson: string
+}
+
+export type ApplyMcpResult = {
+  action: 'removed' | 'unchanged' | 'updated'
+  editorId: EditorId
+  targetPath: string
+  updatedAt: string
+}
+
+export async function applyMcpToEditorTarget(
+  payload: ApplyMcpPayload,
+): Promise<ApplyMcpResult> {
+  return invoke<ApplyMcpResult>('apply_mcp_to_editor_target', { payload })
+}
+
+export async function loadEditorMcpStates(): Promise<
+  Record<EditorId, EditorTargetState>
+> {
+  return invoke<Record<EditorId, EditorTargetState>>('load_editor_mcp_states')
 }
