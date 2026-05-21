@@ -1,4 +1,4 @@
-import { Message, Select, type SelectOption } from "@xinghunm/compass-ui";
+import { Message, Select, Button, type SelectOption } from "@xinghunm/compass-ui";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -1330,31 +1330,35 @@ function AiComposeApp() {
                         value={skillsRepoInput}
                         onChange={(event) => setSkillsRepoInput(event.target.value)}
                       />
-                      <button
+                      <Button
                         type="button"
-                        className="fragment-action-btn"
-                        disabled={isAddingSkillsRepo || !skillsRepoInput.trim()}
-                        onClick={async () => {
+                        className={`fragment-action-btn${isAddingSkillsRepo ? " fragment-action-btn--loading" : ""}`}
+                        disabled={isRemovingSkill || isUpdatingSkill || !skillsRepoInput.trim()}
+                        loading={isAddingSkillsRepo}
+                        style={{ opacity: isAddingSkillsRepo || isRemovingSkill || isUpdatingSkill || !skillsRepoInput.trim() ? 0.6 : 1 }}
+                        onClick={() => {
                           if (!skillsRepoInput.trim()) return;
                           setIsAddingSkillsRepo(true);
-                          try {
-                            await addSkillsRepository(skillsRepoInput.trim());
-                            messageApi.success("技能安装成功！正在刷新列表...");
-                            setSkillsRepoInput("");
-                            const refreshed = await loadPhysicalSkills();
-                            setSkillsList(refreshed);
-                            const nextSkillsStates = await loadEditorSkillsStates();
-                            hydrateSkillsEditorStates(nextSkillsStates);
-                          } catch (err) {
-                            const errMsg = err instanceof Error ? err.message : String(err);
-                            messageApi.error(`安装失败: ${errMsg}`);
-                          } finally {
-                            setIsAddingSkillsRepo(false);
-                          }
+                          setTimeout(async () => {
+                            try {
+                              await addSkillsRepository(skillsRepoInput.trim());
+                              messageApi.success("技能安装成功！正在刷新列表...");
+                              setSkillsRepoInput("");
+                              const refreshed = await loadPhysicalSkills();
+                              setSkillsList(refreshed);
+                              const nextSkillsStates = await loadEditorSkillsStates();
+                              hydrateSkillsEditorStates(nextSkillsStates);
+                            } catch (err) {
+                              const errMsg = err instanceof Error ? err.message : String(err);
+                              messageApi.error(`安装失败: ${errMsg}`);
+                            } finally {
+                              setIsAddingSkillsRepo(false);
+                            }
+                          }, 30);
                         }}
                       >
-                        {isAddingSkillsRepo ? "安装中..." : "安装"}
-                      </button>
+                        安装
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -1475,56 +1479,62 @@ function AiComposeApp() {
                       </div>
                       {selectedSkill && (
                         <div className="skills-detail-pane__actions">
-                          <button
+                          <Button
                             type="button"
-                            className="fragment-action-btn"
-                            disabled={isRemovingSkill || !isSelectedSkillCliManaged}
-                            style={{ opacity: isRemovingSkill || !isSelectedSkillCliManaged ? 0.6 : 1 }}
+                            className={`fragment-action-btn${isRemovingSkill ? " fragment-action-btn--loading" : ""}`}
+                            disabled={isUpdatingSkill || isAddingSkillsRepo || !isSelectedSkillCliManaged}
+                            loading={isRemovingSkill}
+                            style={{ opacity: isRemovingSkill || isUpdatingSkill || isAddingSkillsRepo || !isSelectedSkillCliManaged ? 0.6 : 1 }}
                             title={!isSelectedSkillCliManaged ? "本地已安装的 Skill 不受 npx skills 管理，不能从来源移除。" : "从 npx skills 全局来源中移除此 Skill。"}
-                            onClick={async () => {
+                            onClick={() => {
                               if (!selectedSkill) return;
                               setIsRemovingSkill(true);
-                              try {
-                                await removeSkill(selectedSkill.id);
-                                messageApi.success(`已从来源移除 ${selectedSkill.name}。`);
-                                const refreshed = await loadPhysicalSkills();
-                                setSkillsList(refreshed);
-                                const nextSkillsStates = await loadEditorSkillsStates();
-                                hydrateSkillsEditorStates(nextSkillsStates);
-                              } catch (err) {
-                                const errMsg = err instanceof Error ? err.message : String(err);
-                                messageApi.error(`从来源移除失败: ${errMsg}`);
-                              } finally {
-                                setIsRemovingSkill(false);
-                              }
+                              setTimeout(async () => {
+                                try {
+                                  await removeSkill(selectedSkill.id);
+                                  messageApi.success(`已从来源移除 ${selectedSkill.name}。`);
+                                  const refreshed = await loadPhysicalSkills();
+                                  setSkillsList(refreshed);
+                                  const nextSkillsStates = await loadEditorSkillsStates();
+                                  hydrateSkillsEditorStates(nextSkillsStates);
+                                } catch (err) {
+                                  const errMsg = err instanceof Error ? err.message : String(err);
+                                  messageApi.error(`从来源移除失败: ${errMsg}`);
+                                } finally {
+                                  setIsRemovingSkill(false);
+                                }
+                              }, 30);
                             }}
                           >
-                            {isRemovingSkill ? "移除中..." : "从来源移除"}
-                          </button>
-                          <button
+                            从来源移除
+                          </Button>
+                          <Button
                             type="button"
-                            className="fragment-action-btn"
-                            disabled={isUpdatingSkill || !isSelectedSkillCliManaged}
-                            style={{ opacity: isUpdatingSkill || !isSelectedSkillCliManaged ? 0.6 : 1 }}
+                            className={`fragment-action-btn${isUpdatingSkill ? " fragment-action-btn--loading" : ""}`}
+                            disabled={isRemovingSkill || isAddingSkillsRepo || !isSelectedSkillCliManaged}
+                            loading={isUpdatingSkill}
+                            style={{ opacity: isRemovingSkill || isUpdatingSkill || isAddingSkillsRepo || !isSelectedSkillCliManaged ? 0.6 : 1 }}
                             title={!isSelectedSkillCliManaged ? "本地已安装的 Skill 不受 npx skills 管理，不能在这里更新。" : undefined}
-                            onClick={async () => {
+                            onClick={() => {
                               if (!selectedSkill) return;
                               setIsUpdatingSkill(true);
-                              try {
-                                await updateSkill(selectedSkill.id);
-                                messageApi.success(`技能 ${selectedSkill.name} 更新成功！`);
-                                const refreshed = await loadPhysicalSkills();
-                                setSkillsList(refreshed);
-                              } catch (err) {
-                                const errMsg = err instanceof Error ? err.message : String(err);
-                                messageApi.error(`更新失败: ${errMsg}`);
-                              } finally {
-                                setIsUpdatingSkill(false);
-                              }
+                              setTimeout(async () => {
+                                try {
+                                  await updateSkill(selectedSkill.id);
+                                  messageApi.success(`技能 ${selectedSkill.name} 更新成功！`);
+                                  const refreshed = await loadPhysicalSkills();
+                                  setSkillsList(refreshed);
+                                } catch (err) {
+                                  const errMsg = err instanceof Error ? err.message : String(err);
+                                  messageApi.error(`更新失败: ${errMsg}`);
+                                } finally {
+                                  setIsUpdatingSkill(false);
+                                }
+                              }, 30);
                             }}
                           >
-                            {isUpdatingSkill ? "更新中..." : "更新"}
-                          </button>
+                            更新
+                          </Button>
                         </div>
                       )}
                     </div>
