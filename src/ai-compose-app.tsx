@@ -1336,25 +1336,23 @@ function AiComposeApp() {
                         disabled={isRemovingSkill || isUpdatingSkill || !skillsRepoInput.trim()}
                         loading={isAddingSkillsRepo}
                         style={{ opacity: isAddingSkillsRepo || isRemovingSkill || isUpdatingSkill || !skillsRepoInput.trim() ? 0.6 : 1 }}
-                        onClick={() => {
+                        onClick={async () => {
                           if (!skillsRepoInput.trim()) return;
                           setIsAddingSkillsRepo(true);
-                          setTimeout(async () => {
-                            try {
-                              await addSkillsRepository(skillsRepoInput.trim());
-                              messageApi.success("技能安装成功！正在刷新列表...");
-                              setSkillsRepoInput("");
-                              const refreshed = await loadPhysicalSkills();
-                              setSkillsList(refreshed);
-                              const nextSkillsStates = await loadEditorSkillsStates();
-                              hydrateSkillsEditorStates(nextSkillsStates);
-                            } catch (err) {
-                              const errMsg = err instanceof Error ? err.message : String(err);
-                              messageApi.error(`安装失败: ${errMsg}`);
-                            } finally {
-                              setIsAddingSkillsRepo(false);
-                            }
-                          }, 30);
+                          try {
+                            await addSkillsRepository(skillsRepoInput.trim());
+                            messageApi.success("技能安装成功！正在刷新列表...");
+                            setSkillsRepoInput("");
+                            const refreshed = await loadPhysicalSkills();
+                            setSkillsList(refreshed);
+                            const nextSkillsStates = await loadEditorSkillsStates();
+                            hydrateSkillsEditorStates(nextSkillsStates);
+                          } catch (err) {
+                            const errMsg = err instanceof Error ? err.message : String(err);
+                            messageApi.error(`安装失败: ${errMsg}`);
+                          } finally {
+                            setIsAddingSkillsRepo(false);
+                          }
                         }}
                       >
                         安装
@@ -1486,24 +1484,22 @@ function AiComposeApp() {
                             loading={isRemovingSkill}
                             style={{ opacity: isRemovingSkill || isUpdatingSkill || isAddingSkillsRepo || !isSelectedSkillCliManaged ? 0.6 : 1 }}
                             title={!isSelectedSkillCliManaged ? "本地已安装的 Skill 不受 npx skills 管理，不能从来源移除。" : "从 npx skills 全局来源中移除此 Skill。"}
-                            onClick={() => {
+                            onClick={async () => {
                               if (!selectedSkill) return;
                               setIsRemovingSkill(true);
-                              setTimeout(async () => {
-                                try {
-                                  await removeSkill(selectedSkill.id);
-                                  messageApi.success(`已从来源移除 ${selectedSkill.name}。`);
-                                  const refreshed = await loadPhysicalSkills();
-                                  setSkillsList(refreshed);
-                                  const nextSkillsStates = await loadEditorSkillsStates();
-                                  hydrateSkillsEditorStates(nextSkillsStates);
-                                } catch (err) {
-                                  const errMsg = err instanceof Error ? err.message : String(err);
-                                  messageApi.error(`从来源移除失败: ${errMsg}`);
-                                } finally {
-                                  setIsRemovingSkill(false);
-                                }
-                              }, 30);
+                              try {
+                                await removeSkill(selectedSkill.id);
+                                messageApi.success(`已从来源移除 ${selectedSkill.name}。`);
+                                const refreshed = await loadPhysicalSkills();
+                                setSkillsList(refreshed);
+                                const nextSkillsStates = await loadEditorSkillsStates();
+                                hydrateSkillsEditorStates(nextSkillsStates);
+                              } catch (err) {
+                                const errMsg = err instanceof Error ? err.message : String(err);
+                                messageApi.error(`从来源移除失败: ${errMsg}`);
+                              } finally {
+                                setIsRemovingSkill(false);
+                              }
                             }}
                           >
                             从来源移除
@@ -1515,22 +1511,20 @@ function AiComposeApp() {
                             loading={isUpdatingSkill}
                             style={{ opacity: isRemovingSkill || isUpdatingSkill || isAddingSkillsRepo || !isSelectedSkillCliManaged ? 0.6 : 1 }}
                             title={!isSelectedSkillCliManaged ? "本地已安装的 Skill 不受 npx skills 管理，不能在这里更新。" : undefined}
-                            onClick={() => {
+                            onClick={async () => {
                               if (!selectedSkill) return;
                               setIsUpdatingSkill(true);
-                              setTimeout(async () => {
-                                try {
-                                  await updateSkill(selectedSkill.id);
-                                  messageApi.success(`技能 ${selectedSkill.name} 更新成功！`);
-                                  const refreshed = await loadPhysicalSkills();
-                                  setSkillsList(refreshed);
-                                } catch (err) {
-                                  const errMsg = err instanceof Error ? err.message : String(err);
-                                  messageApi.error(`更新失败: ${errMsg}`);
-                                } finally {
-                                  setIsUpdatingSkill(false);
-                                }
-                              }, 30);
+                              try {
+                                await updateSkill(selectedSkill.id);
+                                messageApi.success(`技能 ${selectedSkill.name} 更新成功！`);
+                                const refreshed = await loadPhysicalSkills();
+                                setSkillsList(refreshed);
+                              } catch (err) {
+                                const errMsg = err instanceof Error ? err.message : String(err);
+                                messageApi.error(`更新失败: ${errMsg}`);
+                              } finally {
+                                setIsUpdatingSkill(false);
+                              }
                             }}
                           >
                             更新

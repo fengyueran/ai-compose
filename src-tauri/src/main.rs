@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
+use tokio::process::Command as AsyncCommand;
 
 const MANAGED_BLOCK_START: &str = "<!-- BEGIN AI-COMPOSE -->";
 const MANAGED_BLOCK_END: &str = "<!-- END AI-COMPOSE -->";
@@ -124,7 +125,7 @@ fn json_to_toml(json: &serde_json::Value) -> toml::Value {
 }
 
 #[tauri::command]
-fn apply_prompt_to_editor_target(payload: ApplyPromptPayload) -> Result<ApplyPromptResult, String> {
+async fn apply_prompt_to_editor_target(payload: ApplyPromptPayload) -> Result<ApplyPromptResult, String> {
     let target_path = resolve_editor_agents_path(payload.editor_id)?;
     let parent_directory = target_path
         .parent()
@@ -161,7 +162,7 @@ fn apply_prompt_to_editor_target(payload: ApplyPromptPayload) -> Result<ApplyPro
 }
 
 #[tauri::command]
-fn load_editor_target_states() -> Result<EditorTargetStates, String> {
+async fn load_editor_target_states() -> Result<EditorTargetStates, String> {
     Ok(EditorTargetStates {
         antigravity: build_editor_target_state(EditorId::Antigravity)?,
         codex: build_editor_target_state(EditorId::Codex)?,
@@ -170,7 +171,7 @@ fn load_editor_target_states() -> Result<EditorTargetStates, String> {
 }
 
 #[tauri::command]
-fn load_editor_mcp_states() -> Result<EditorTargetStates, String> {
+async fn load_editor_mcp_states() -> Result<EditorTargetStates, String> {
     Ok(EditorTargetStates {
         antigravity: build_editor_mcp_state(EditorId::Antigravity)?,
         codex: build_editor_mcp_state(EditorId::Codex)?,
@@ -179,7 +180,7 @@ fn load_editor_mcp_states() -> Result<EditorTargetStates, String> {
 }
 
 #[tauri::command]
-fn apply_mcp_to_editor_target(payload: ApplyMcpPayload) -> Result<ApplyMcpResult, String> {
+async fn apply_mcp_to_editor_target(payload: ApplyMcpPayload) -> Result<ApplyMcpResult, String> {
     let target_path = resolve_editor_mcp_path(payload.editor_id)?;
     let parent_directory = target_path
         .parent()
@@ -795,14 +796,14 @@ fn extract_skill_source_entries(value: &serde_json::Value) -> Vec<(String, PathB
         .collect()
 }
 
-#[tauri::command]
-fn load_physical_skills() -> Result<Vec<SkillInfo>, String> {
+async fn load_physical_skills_inner() -> Result<Vec<SkillInfo>, String> {
     let mut skills = Vec::new();
     let mut loaded_ids = std::collections::HashSet::new();
 
-    let npx_output = std::process::Command::new(npx_command_name())
+    let npx_output = AsyncCommand::new(npx_command_name())
         .args(["skills", "ls", "-g", "--json"])
-        .output();
+        .output()
+        .await;
 
     if let Ok(output) = npx_output {
         if output.status.success() {
@@ -846,6 +847,11 @@ fn load_physical_skills() -> Result<Vec<SkillInfo>, String> {
     }
 
     Ok(skills)
+}
+
+#[tauri::command]
+async fn load_physical_skills() -> Result<Vec<SkillInfo>, String> {
+    load_physical_skills_inner().await
 }
 
 fn is_skill_enabled(editor_skills_dir: &Path, skill_id: &str, physical_skill_path: &Path) -> bool {
@@ -902,8 +908,8 @@ fn build_editor_skills_state(
 }
 
 #[tauri::command]
-fn load_editor_skills_states() -> Result<EditorSkillsStates, String> {
-    let physical_skills = load_physical_skills()?;
+async fn load_editor_skills_states() -> Result<EditorSkillsStates, String> {
+    let physical_skills = load_physical_skills_inner().await?;
     Ok(EditorSkillsStates {
         antigravity: build_editor_skills_state(EditorId::Antigravity, &physical_skills)?,
         codex: build_editor_skills_state(EditorId::Codex, &physical_skills)?,
@@ -940,9 +946,9 @@ fn remove_link_or_dir(path: &Path) -> std::io::Result<()> {
 }
 
 #[tauri::command]
-fn apply_skills_to_editor_target(payload: ApplySkillsPayload) -> Result<ApplySkillsResult, String> {
+async fn apply_skills_to_editor_target(payload: ApplySkillsPayload) -> Result<ApplySkillsResult, String> {
     let target_path = resolve_editor_skills_path(payload.editor_id)?;
-    let physical_skills = load_physical_skills()?;
+    let physical_skills = load_physical_skills_inner().await?;
 
     let mut action = ApplyAction::Unchanged;
 
@@ -1002,18 +1008,19 @@ fn apply_skills_to_editor_target(payload: ApplySkillsPayload) -> Result<ApplySki
 }
 
 #[tauri::command]
-fn add_skills_repository(repo: String) -> Result<String, String> {
-    let repo = repo.trim();
-    if !is_safe_repo_source(repo) {
+async fn add_skills_repository(repo: String) -> Result<String, String> {
+    let repo_trimmed = repo.trim().to_string();
+    if !is_safe_repo_source(&repo_trimmed) {
         return Err(
             "仓库源必须使用 owner/repo 格式，且只能包含字母、数字、点、下划线和短横线。"
                 .to_string(),
         );
     }
 
-    let output = std::process::Command::new(npx_command_name())
-        .args(["skills", "add", repo, "-g", "-y"])
-        .output();
+    let output = AsyncCommand::new(npx_command_name())
+        .args(["skills", "add", &repo_trimmed, "-g", "-y"])
+        .output()
+        .await;
 
     match output {
         Ok(out) => {
@@ -1035,19 +1042,21 @@ fn add_skills_repository(repo: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn update_skill(skill_id: String) -> Result<String, String> {
-    let skill_id = skill_id.trim();
-    let output = if skill_id.is_empty() {
-        std::process::Command::new(npx_command_name())
+async fn update_skill(skill_id: String) -> Result<String, String> {
+    let skill_id_trimmed = skill_id.trim().to_string();
+    let output = if skill_id_trimmed.is_empty() {
+        AsyncCommand::new(npx_command_name())
             .args(["skills", "update", "-g", "-y"])
             .output()
+            .await
     } else {
-        if !is_safe_skill_id(skill_id) {
+        if !is_safe_skill_id(&skill_id_trimmed) {
             return Err("技能 ID 只能包含字母、数字、点、下划线和短横线。".to_string());
         }
-        std::process::Command::new(npx_command_name())
-            .args(["skills", "update", skill_id, "-g", "-y"])
+        AsyncCommand::new(npx_command_name())
+            .args(["skills", "update", &skill_id_trimmed, "-g", "-y"])
             .output()
+            .await
     };
 
     match output {
@@ -1070,15 +1079,16 @@ fn update_skill(skill_id: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn remove_skill(skill_id: String) -> Result<String, String> {
-    let skill_id = skill_id.trim();
-    if !is_safe_skill_id(skill_id) {
+async fn remove_skill(skill_id: String) -> Result<String, String> {
+    let skill_id_trimmed = skill_id.trim().to_string();
+    if !is_safe_skill_id(&skill_id_trimmed) {
         return Err("技能 ID 只能包含字母、数字、点、下划线和短横线。".to_string());
     }
 
-    let output = std::process::Command::new(npx_command_name())
-        .args(["skills", "remove", skill_id, "-g", "-y"])
-        .output();
+    let output = AsyncCommand::new(npx_command_name())
+        .args(["skills", "remove", &skill_id_trimmed, "-g", "-y"])
+        .output()
+        .await;
 
     match output {
         Ok(out) => {
