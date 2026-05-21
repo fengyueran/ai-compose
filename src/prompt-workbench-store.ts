@@ -15,8 +15,14 @@ const loadCustomServersFromStorage = (): McpServer[] => {
   try {
     const data = typeof window !== 'undefined' ? localStorage.getItem('ai-compose:custom-mcp-servers') : null
     const list: McpServer[] = data ? JSON.parse(data) : []
-    // 查重：过滤掉任何名字与官方预设服务重名的项，避免历史脏数据引起重复
-    return list.filter(item => !presetMcpServers.some(p => p.name.toLowerCase() === item.name.toLowerCase()))
+    // 过滤掉非 custom- 开头的历史同步脏数据，并查重官方预设服务
+    return list.filter(
+      (item) =>
+        item.id.startsWith('custom-') &&
+        !presetMcpServers.some(
+          (p) => p.name.toLowerCase() === item.name.toLowerCase()
+        )
+    )
   } catch (e) {
     console.error('Failed to load custom MCP servers from storage', e)
     return []
@@ -105,20 +111,17 @@ const syncMcpServersWithLocal = (
   localMcp: Record<string, any> | undefined,
   managedMcp: Record<string, any> | undefined
 ): McpServer[] => {
-  if (!localMcp) {
-    return mcpServers
-  }
+  const safeLocalMcp = localMcp || {}
 
   // 1. 用本地配置更新已有的服务启用状态和配置内容
   const nextServers: McpServer[] = []
   mcpServers.forEach((server) => {
-    const localVal = localMcp[server.name]
+    const localVal = safeLocalMcp[server.name]
     // 必须要含有 command 字段或 url 字段才认为是真正有效启用的服务
     if (localVal && typeof localVal === 'object' && ('command' in localVal || 'url' in localVal)) {
       let source = server.source
       if (source !== 'preset') {
-        const isManaged = managedMcp && server.name in managedMcp
-        source = isManaged ? 'user' : 'external'
+        source = server.id.startsWith('custom-') ? 'user' : 'external'
       }
 
       const transportType = 'url' in localVal ? 'http' : 'stdio'
@@ -150,7 +153,7 @@ const syncMcpServersWithLocal = (
   })
 
   // 2. 将本地存在但工作台列表中没有的自定义服务动态拉取进来
-  Object.entries(localMcp).forEach(([name, val]) => {
+  Object.entries(safeLocalMcp).forEach(([name, val]) => {
     if (!val || typeof val !== 'object' || Array.isArray(val)) {
       return
     }
@@ -161,8 +164,7 @@ const syncMcpServersWithLocal = (
     const exists = nextServers.some((s) => s.name === name)
     if (!exists) {
       const newId = name.toLowerCase().replace(/\s+/g, '-')
-      const isManaged = managedMcp && name in managedMcp
-      const source = isManaged ? 'user' : 'external'
+      const source = 'external'
       const transportType = 'url' in val ? 'http' : 'stdio'
 
       nextServers.push({
@@ -214,7 +216,6 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
         }
       }
 
-      saveCustomServersToStorage(nextMcpServers)
       set({
         activeDomain: domain,
         editorStates: domain === 'Prompt' ? promptEditorStates : mcpEditorStates,
@@ -263,7 +264,6 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
         updatedServers = syncMcpServersWithLocal(mcpServers, targetState.mcpServers, targetState.managedMcpServers)
       }
 
-      saveCustomServersToStorage(updatedServers)
       set((state) => ({
         mcpEditorStates: nextMcpStates,
         editorStates: state.activeDomain === 'MCP' ? nextMcpStates : state.editorStates,
@@ -286,7 +286,6 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
         }
       }
 
-      saveCustomServersToStorage(nextMcpServers)
       set({
         activeEditorId: editorId,
         mcpServers: nextMcpServers,

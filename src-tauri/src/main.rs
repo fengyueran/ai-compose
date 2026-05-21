@@ -383,7 +383,7 @@ fn resolve_editor_mcp_path(editor_id: EditorId) -> Result<PathBuf, String> {
 
     match editor_id {
         EditorId::Antigravity => {
-            Ok(home_path.join(".gemini").join("mcp.json"))
+            Ok(home_path.join(".gemini").join("antigravity").join("mcp_config.json"))
         }
         EditorId::Codex => {
             Ok(home_path.join(".codex").join("config.toml"))
@@ -589,6 +589,14 @@ mod tests {
     }
 
     #[test]
+    fn test_resolve_antigravity_mcp_path() {
+        let path = resolve_editor_mcp_path(EditorId::Antigravity).unwrap();
+        assert!(path.to_string_lossy().contains(".gemini"));
+        assert!(path.to_string_lossy().contains("antigravity"));
+        assert!(path.to_string_lossy().ends_with("mcp_config.json"));
+    }
+
+    #[test]
     fn test_build_cursor_mcp_state() {
         let state = build_editor_mcp_state(EditorId::Cursor).unwrap();
         assert!(state.target_path.contains(".cursor"));
@@ -598,6 +606,21 @@ mod tests {
             assert!(mcp_servers_val.is_object());
             let mcp_servers_obj = mcp_servers_val.as_object().unwrap();
             assert!(mcp_servers_obj.contains_key("figma"));
+        }
+    }
+
+    #[test]
+    fn test_build_antigravity_mcp_state() {
+        let state = build_editor_mcp_state(EditorId::Antigravity).unwrap();
+        assert!(state.target_path.contains(".gemini"));
+        assert!(state.target_path.contains("antigravity"));
+        assert!(state.target_path.contains("mcp_config.json"));
+        if std::path::Path::new(&state.target_path).exists() {
+            // 确保如果存在 mcp_config.json，能正确解析出 mcpServers 的结构
+            if state.mcp_servers.is_some() {
+                let mcp_servers_val = state.mcp_servers.unwrap();
+                assert!(mcp_servers_val.is_object());
+            }
         }
     }
 }
