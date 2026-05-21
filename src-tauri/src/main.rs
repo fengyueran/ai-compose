@@ -389,22 +389,7 @@ fn resolve_editor_mcp_path(editor_id: EditorId) -> Result<PathBuf, String> {
             Ok(home_path.join(".codex").join("config.toml"))
         }
         EditorId::Cursor => {
-            #[cfg(target_os = "macos")]
-            {
-                Ok(home_path.join("Library").join("Application Support").join("Cursor").join("User").join("global-copilot-mcp"))
-            }
-            #[cfg(target_os = "windows")]
-            {
-                if let Ok(appdata) = std::env::var("APPDATA") {
-                    Ok(PathBuf::from(appdata).join("Cursor").join("User").join("global-copilot-mcp"))
-                } else {
-                    Ok(home_path.join("AppData").join("Roaming").join("Cursor").join("User").join("global-copilot-mcp"))
-                }
-            }
-            #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-            {
-                Ok(home_path.join(".config").join("Cursor").join("User").join("global-copilot-mcp"))
-            }
+            Ok(home_path.join(".cursor").join("mcp.json"))
         }
     }
 }
@@ -590,4 +575,29 @@ fn main() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_resolve_cursor_mcp_path() {
+        let path = resolve_editor_mcp_path(EditorId::Cursor).unwrap();
+        assert!(path.to_string_lossy().contains(".cursor"));
+        assert!(path.to_string_lossy().ends_with("mcp.json"));
+    }
+
+    #[test]
+    fn test_build_cursor_mcp_state() {
+        let state = build_editor_mcp_state(EditorId::Cursor).unwrap();
+        assert!(state.target_path.contains(".cursor"));
+        if std::path::Path::new(&state.target_path).exists() {
+            assert!(state.mcp_servers.is_some());
+            let mcp_servers_val = state.mcp_servers.unwrap();
+            assert!(mcp_servers_val.is_object());
+            let mcp_servers_obj = mcp_servers_val.as_object().unwrap();
+            assert!(mcp_servers_obj.contains_key("figma"));
+        }
+    }
 }
