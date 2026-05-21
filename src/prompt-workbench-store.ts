@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-import type { EditorId, EditorTargetState } from './editor-target-command'
+import type { EditorId, EditorTargetState, SkillInfo, EditorSkillsState, EditorSkillsStates } from './editor-target-command'
 import {
   type PromptFragment,
   presetPromptFragments,
@@ -56,13 +56,14 @@ type EditorState = {
 }
 
 type PromptWorkbenchState = {
-  activeDomain: 'Prompt' | 'MCP'
+  activeDomain: 'Prompt' | 'MCP' | 'Skills'
   activeEditorId: EditorId
   applyStatus: ApplyStatus
   applyMessage: string
-  editorStates: Record<EditorId, EditorState>
+  editorStates: Record<EditorId, EditorState> | Record<EditorId, EditorTargetState> | Record<EditorId, EditorSkillsState>
   promptEditorStates: Record<EditorId, EditorState>
   mcpEditorStates: Record<EditorId, EditorTargetState>
+  skillsEditorStates: Record<EditorId, EditorSkillsState>
   isHydratingEditorStates: boolean
   lastAppliedAt: string | null
   presetFragments: PromptFragment[]
@@ -72,10 +73,15 @@ type PromptWorkbenchState = {
   // MCP 状态
   mcpServers: McpServer[]
   selectedMcpServerId: string
+
+  // Skills 状态
+  skills: SkillInfo[]
+  selectedSkillId: string
   
-  selectDomain: (domain: 'Prompt' | 'MCP') => void
+  selectDomain: (domain: 'Prompt' | 'MCP' | 'Skills') => void
   hydratePromptEditorStates: (editorStates: Record<EditorId, EditorTargetState>) => void
   hydrateMcpEditorStates: (editorStates: Record<EditorId, EditorTargetState>) => void
+  hydrateSkillsEditorStates: (editorStates: EditorSkillsStates) => void
   setEditorHydrationPending: (pending: boolean) => void
   selectEditor: (editorId: EditorId) => void
   selectFragment: (fragmentId: string) => void
@@ -93,6 +99,11 @@ type PromptWorkbenchState = {
   addMcpServer: (server: Omit<McpServer, 'id' | 'source'>) => void
   updateMcpServer: (id: string, serverUpdate: Partial<McpServer>) => void
   deleteMcpServer: (id: string) => void
+
+  // Skills actions
+  selectSkill: (skillId: string) => void
+  toggleSkill: (skillId: string) => void
+  setSkillsList: (skills: SkillInfo[]) => void
 }
 
 const defaultSelectedFragmentId = presetPromptFragments[0]?.id ?? ''
@@ -112,6 +123,12 @@ const initialMcpEditorStates = {
   antigravity: { enabled: false, targetPath: '' },
   codex: { enabled: false, targetPath: '' },
   cursor: { enabled: false, targetPath: '' },
+}
+
+const initialSkillsEditorStates = {
+  antigravity: { enabled: false, targetPath: '', enabledSkills: [] },
+  codex: { enabled: false, targetPath: '', enabledSkills: [] },
+  cursor: { enabled: false, targetPath: '', enabledSkills: [] },
 }
 
 const syncMcpServersWithLocal = (
@@ -207,6 +224,7 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
     editorStates: initialEditorStates,
     promptEditorStates: initialEditorStates,
     mcpEditorStates: initialMcpEditorStates,
+    skillsEditorStates: initialSkillsEditorStates,
     isHydratingEditorStates: true,
     lastAppliedAt: null,
     presetFragments: presetPromptFragments,
@@ -214,9 +232,11 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
     enabledFragmentIds: defaultEnabledFragmentIds,
     mcpServers: [...presetMcpServers, ...loadCustomServersFromStorage()],
     selectedMcpServerId: defaultSelectedMcpServerId,
+    skills: [],
+    selectedSkillId: '',
     
     selectDomain: (domain) => {
-      const { promptEditorStates, mcpEditorStates, activeEditorId, mcpServers } = get()
+      const { promptEditorStates, mcpEditorStates, skillsEditorStates, activeEditorId, mcpServers } = get()
       
       let nextMcpServers = mcpServers
       if (domain === 'MCP') {
@@ -228,7 +248,11 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
 
       set({
         activeDomain: domain,
-        editorStates: domain === 'Prompt' ? promptEditorStates : mcpEditorStates,
+        editorStates: domain === 'Prompt' 
+          ? promptEditorStates 
+          : domain === 'MCP' 
+          ? mcpEditorStates 
+          : skillsEditorStates,
         mcpServers: nextMcpServers,
       })
     },
@@ -280,6 +304,19 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
         mcpServers: updatedServers,
       }))
     },
+
+    hydrateSkillsEditorStates: (editorStates) => {
+      const nextSkillsStates = {
+        antigravity: { ...editorStates.antigravity },
+        codex: { ...editorStates.codex },
+        cursor: { ...editorStates.cursor },
+      }
+      set((state) => ({
+        skillsEditorStates: nextSkillsStates,
+        editorStates: state.activeDomain === 'Skills' ? nextSkillsStates : state.editorStates,
+        isHydratingEditorStates: false,
+      }))
+    },
     
     setEditorHydrationPending: (pending) => {
       set({ isHydratingEditorStates: pending })
@@ -307,7 +344,7 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
     },
     
     setEditorEnabled: (editorId, enabled) => {
-      const { activeDomain, promptEditorStates, mcpEditorStates } = get()
+      const { activeDomain, promptEditorStates, mcpEditorStates, skillsEditorStates } = get()
       if (activeDomain === 'Prompt') {
         const nextPromptStates = {
           ...promptEditorStates,
@@ -317,7 +354,7 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
           promptEditorStates: nextPromptStates,
           editorStates: nextPromptStates,
         })
-      } else {
+      } else if (activeDomain === 'MCP') {
         const nextMcpStates = {
           ...mcpEditorStates,
           [editorId]: {
@@ -328,6 +365,18 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
         set({
           mcpEditorStates: nextMcpStates,
           editorStates: nextMcpStates,
+        })
+      } else {
+        const nextSkillsStates = {
+          ...skillsEditorStates,
+          [editorId]: {
+            ...skillsEditorStates[editorId],
+            enabled,
+          },
+        }
+        set({
+          skillsEditorStates: nextSkillsStates,
+          editorStates: nextSkillsStates,
         })
       }
     },
@@ -405,6 +454,47 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
       set({
         mcpServers: nextServers,
         selectedMcpServerId: nextSelectedId,
+      })
+    },
+
+    // Skills Actions
+    selectSkill: (skillId) => {
+      set({ selectedSkillId: skillId })
+    },
+    
+    toggleSkill: (skillId) => {
+      const { activeEditorId, skillsEditorStates } = get()
+      const currentEditorState = skillsEditorStates[activeEditorId]
+      if (!currentEditorState) return
+
+      const isEnabled = currentEditorState.enabledSkills.includes(skillId)
+      const nextEnabledSkills = isEnabled
+        ? currentEditorState.enabledSkills.filter((id) => id !== skillId)
+        : [...currentEditorState.enabledSkills, skillId]
+
+      const nextSkillsStates = {
+        ...skillsEditorStates,
+        [activeEditorId]: {
+          ...currentEditorState,
+          enabledSkills: nextEnabledSkills,
+        },
+      }
+
+      set({
+        skillsEditorStates: nextSkillsStates,
+        editorStates: nextSkillsStates,
+      })
+    },
+
+    setSkillsList: (skills) => {
+      const { selectedSkillId } = get()
+      let nextSelectedId = skills.length > 0 ? selectedSkillId : ''
+      if (skills.length > 0 && (!selectedSkillId || !skills.some((s) => s.id === selectedSkillId))) {
+        nextSelectedId = skills[0].id
+      }
+      set({
+        skills,
+        selectedSkillId: nextSelectedId,
       })
     },
   }),
