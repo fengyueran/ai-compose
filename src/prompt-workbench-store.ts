@@ -488,9 +488,15 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
 
     setSkillsList: (physicalSkills) => {
       const { selectedSkillId } = get()
+
+      const isPresetMatch = (psId: string, presetId: string): boolean => {
+        const pId = psId.toLowerCase();
+        const prId = presetId.toLowerCase();
+        return pId === prId || pId.endsWith('/' + prId) || pId.endsWith('__' + prId);
+      };
       
       const mappedPhysical = physicalSkills.map(ps => {
-        const preset = BUILTIN_SKILLS_PRESET.find(p => p.id === ps.id);
+        const preset = BUILTIN_SKILLS_PRESET.find(p => isPresetMatch(ps.id, p.id));
         return {
           ...ps,
           isBuiltin: !!preset,
@@ -500,7 +506,7 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
       });
 
       const uninstalledBuiltin = BUILTIN_SKILLS_PRESET
-        .filter(p => !physicalSkills.some(ps => ps.id === p.id))
+        .filter(p => !physicalSkills.some(ps => isPresetMatch(ps.id, p.id)))
         .map(p => ({
           id: p.id,
           name: p.name,

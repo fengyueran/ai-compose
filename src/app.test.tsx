@@ -179,7 +179,14 @@ describe('Prompt Workbench', () => {
 
     // Preview apply summary bar checks
     expect(screen.getAllByText('CLI Skill').length).toBeGreaterThan(0)
-    expect(screen.getByRole('button', { name: '从来源移除' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '卸载' })).not.toBeInTheDocument()
+
+    // Click on the CLI Skill row to open the details modal
+    const cliSkillRow = screen.getByRole('button', { name: /CLI Skill/ })
+    await userEvent.click(cliSkillRow)
+
+    // Now the buttons inside the modal should be visible
+    expect(screen.getByRole('button', { name: '卸载' })).toBeInTheDocument()
 
     const filterSelect = screen.getByRole('combobox')
     await userEvent.click(filterSelect)
@@ -213,5 +220,44 @@ describe('Prompt Workbench', () => {
 
     // 恢复 window
     delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
+  })
+
+  test('builtin preset skills stay in list and toggle installed state after setSkillsList', () => {
+    // 初始状态，我们只传入非官方物理技能
+    const store = usePromptWorkbenchStore.getState()
+    
+    // 传入空物理技能列表，所有官方技能都应处于未安装状态在列表中
+    store.setSkillsList([])
+    let currentSkills = usePromptWorkbenchStore.getState().skills
+    // 应该包含 find-skills 等内置技能
+    const findSkillsUninstalled = currentSkills.find(s => s.id === 'find-skills')
+    expect(findSkillsUninstalled).toBeDefined()
+    expect(findSkillsUninstalled?.installed).toBe(false)
+    expect(findSkillsUninstalled?.isBuiltin).toBe(true)
+
+    // 传入安装了的官方技能
+    store.setSkillsList([
+      {
+        id: 'find-skills',
+        name: 'find-skills',
+        description: 'preset desc',
+        content: 'preset content',
+        path: '/mock/path/find-skills',
+        sourceKind: 'cli',
+      }
+    ])
+    currentSkills = usePromptWorkbenchStore.getState().skills
+    const findSkillsInstalled = currentSkills.find(s => s.id === 'find-skills')
+    expect(findSkillsInstalled).toBeDefined()
+    expect(findSkillsInstalled?.installed).toBe(true)
+    expect(findSkillsInstalled?.isBuiltin).toBe(true)
+
+    // 卸载后传入空（模拟卸载官方技能），卡片应当依然在列表中，但 installed 变为 false
+    store.setSkillsList([])
+    currentSkills = usePromptWorkbenchStore.getState().skills
+    const findSkillsAfterUninstall = currentSkills.find(s => s.id === 'find-skills')
+    expect(findSkillsAfterUninstall).toBeDefined()
+    expect(findSkillsAfterUninstall?.installed).toBe(false)
+    expect(findSkillsAfterUninstall?.isBuiltin).toBe(true)
   })
 })

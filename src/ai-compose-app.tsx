@@ -1,4 +1,4 @@
-import { Message, Select, Button, type SelectOption } from "@xinghunm/compass-ui";
+import { Message, Select, Button, Modal, type SelectOption } from "@xinghunm/compass-ui";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -50,6 +50,49 @@ const editorMeta: Record<
     title: "Cursor",
   },
 };
+
+function renderSkillIcon(name: string, id: string) {
+  const lowercaseName = name.toLowerCase();
+  const lowercaseId = id.toLowerCase();
+  const isBrowser = lowercaseName.includes("browser") ||
+                    lowercaseName.includes("chrome") ||
+                    lowercaseId.includes("browser") ||
+                    lowercaseId.includes("chrome");
+
+  if (isBrowser) {
+    return (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--text-soft)" }}>
+        <circle cx="12" cy="12" r="10" />
+        <circle cx="12" cy="12" r="4" />
+        <line x1="21.17" y1="8" x2="12" y2="8" />
+        <line x1="3.95" y1="6.06" x2="8.54" y2="14" />
+        <line x1="10.88" y1="21.94" x2="15.46" y2="14" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="topFaceGrad" x1="5" y1="11" x2="27" y2="11" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#ffd066" />
+          <stop offset="100%" stopColor="#ff8f3d" />
+        </linearGradient>
+        <linearGradient id="leftFaceGrad" x1="5" y1="17" x2="16" y2="23" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#ff4b82" />
+          <stop offset="100%" stopColor="#ff85a7" />
+        </linearGradient>
+        <linearGradient id="rightFaceGrad" x1="16" y1="23" x2="27" y2="17" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#8d46f6" />
+          <stop offset="100%" stopColor="#6358ff" />
+        </linearGradient>
+      </defs>
+      <path d="M16 5L27 11L16 17L5 11Z" fill="url(#topFaceGrad)" />
+      <path d="M5 11L16 17L16 29L5 23Z" fill="url(#leftFaceGrad)" />
+      <path d="M16 17L27 11L27 23L16 29Z" fill="url(#rightFaceGrad)" />
+    </svg>
+  );
+}
 
 function AiComposeApp() {
   const [messageApi, messageContextHolder] = Message.useMessage();
@@ -139,6 +182,7 @@ function AiComposeApp() {
   const [isRemovingSkill, setIsRemovingSkill] = useState(false);
   const [skillsQuery, setSkillsQuery] = useState("");
   const [skillsFilter, setSkillsFilter] = useState<SkillsFilter>("all");
+  const [isSkillModalOpen, setIsSkillModalOpen] = useState(false);
 
   const isSkillsLoading = isHydratingEditorStates || isAddingSkillsRepo || isRemovingSkill || isUpdatingSkill;
 
@@ -1396,20 +1440,35 @@ function AiComposeApp() {
                               className={`skills-list-row${
                                 isSelected ? " skills-list-row--selected" : ""
                               }`}
-                              onClick={() => selectSkill(skill.id)}
+                              onClick={() => {
+                                selectSkill(skill.id);
+                                setIsSkillModalOpen(true);
+                              }}
                               type="button"
                             >
-                              <span className="skills-list-row__content">
-                                <span className="skills-list-row__title-line">
-                                  <span className="skills-list-row__title">{skill.name}</span>
+                              <div className="skill-card__icon-container">
+                                {renderSkillIcon(skill.name, skill.id)}
+                              </div>
+                              <div className="skills-list-row__content">
+                                <div className="skills-list-row__title-line">
+                                  <span className="skills-list-row__title" title={skill.name}>
+                                    {skill.name}
+                                  </span>
                                   <span className={`skill-source-badge ${badgeClass}`}>
                                     {badgeText}
                                   </span>
-                                </span>
-                                <span className="skills-list-row__description">
+                                </div>
+                                <span className="skills-list-row__description" title={skill.description || "无描述"}>
                                   {skill.description || "无描述"}
                                 </span>
-                              </span>
+                              </div>
+                              {isInstalled && (
+                                <span className="skill-card__status-check" aria-label="已安装">
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <polyline points="20 6 9 17 4 12" />
+                                  </svg>
+                                </span>
+                              )}
                             </button>
                           );
                         })
@@ -1417,21 +1476,23 @@ function AiComposeApp() {
                     </div>
                   </div>
 
-                  <section
-                    key={selectedSkillId}
-                    className={`skills-detail-pane${
+                </div>
+
+                <Modal
+                  isOpen={isSkillModalOpen}
+                  onCancel={() => setIsSkillModalOpen(false)}
+                  title={selectedSkill ? `技能详情: ${selectedSkill.name}` : "技能详情"}
+                  footer={null}
+                  width={720}
+                >
+                  {isSkillModalOpen && selectedSkill && (
+                    <div className={`skills-detail-pane${
                       isRemovingSkill || isUpdatingSkill || isAddingSkillsRepo
                         ? " skills-detail-pane--loading"
                         : ""
-                    }`}
-                    aria-labelledby="skill-detail-title"
-                  >
-                    <div className="skills-detail-pane__header">
-                      <div>
-                        <h2 className="skills-detail-pane__title" id="skill-detail-title">
-                          {selectedSkill?.name ?? "选择一个技能"}
-                        </h2>
-                        {selectedSkill ? (
+                    }`}>
+                      <div className="skills-detail-pane__header" style={{ borderBottom: "none", padding: "0 0 16px 0" }}>
+                        <div>
                           <span className={`skill-source-badge ${
                             selectedSkill.isBuiltin
                               ? (selectedSkill.installed ? "skill-source-badge--builtin" : "skill-source-badge--builtin-uninstalled")
@@ -1441,14 +1502,12 @@ function AiComposeApp() {
                               ? (selectedSkill.installed ? "官方" : "官方 (未安装)")
                               : (isSelectedSkillCliManaged ? "skills.sh" : "本地已安装")}
                           </span>
-                        ) : null}
-                        <p className="skills-detail-pane__description">
-                          {selectedSkill?.description || "查看技能详情与 SKILL.md 内容。"}
-                        </p>
-                      </div>
-                      {selectedSkill && (
+                          <p className="skills-detail-pane__description" style={{ marginTop: "12px" }}>
+                            {selectedSkill.description || "无描述"}
+                          </p>
+                        </div>
                         <div className="skills-detail-pane__actions">
-                          {selectedSkill.isBuiltin && !selectedSkill.installed ? (
+                          {selectedSkill.installed === false ? (
                             <Button
                               type="button"
                               className={`fragment-action-btn${isAddingSkillsRepo ? " fragment-action-btn--loading" : ""}`}
@@ -1459,7 +1518,7 @@ function AiComposeApp() {
                                 setIsAddingSkillsRepo(true);
                                 try {
                                   await addSkillsRepository(selectedSkill.repoSource);
-                                  messageApi.success(`官方技能 ${selectedSkill.name} 安装成功！`);
+                                  messageApi.success(`技能 ${selectedSkill.name} 安装成功！`);
                                   const refreshed = await loadPhysicalSkills();
                                   setSkillsList(refreshed);
                                   const nextSkillsStates = await loadEditorSkillsStates();
@@ -1469,13 +1528,13 @@ function AiComposeApp() {
                                   }
                                 } catch (err) {
                                   const errMsg = err instanceof Error ? err.message : String(err);
-                                  messageApi.error(`安装官方技能失败: ${errMsg}`);
+                                  messageApi.error(`安装失败: ${errMsg}`);
                                 } finally {
                                   setIsAddingSkillsRepo(false);
                                 }
                               }}
                             >
-                              安装官方技能
+                              安装
                             </Button>
                           ) : (
                             <>
@@ -1484,14 +1543,13 @@ function AiComposeApp() {
                                 className={`fragment-action-btn${isRemovingSkill ? " fragment-action-btn--loading" : ""}`}
                                 disabled={isUpdatingSkill || isAddingSkillsRepo || !isSelectedSkillCliManaged}
                                 loading={isRemovingSkill}
-                                style={{ opacity: isRemovingSkill || isUpdatingSkill || isAddingSkillsRepo || !isSelectedSkillCliManaged ? 0.6 : 1 }}
-                                title={!isSelectedSkillCliManaged ? "本地已安装的 Skill 不受 skills.sh 管理，不能从来源移除。" : "从 skills.sh 全局来源中移除此 Skill。"}
+                                title={!isSelectedSkillCliManaged ? "本地已安装的 Skill 不受 skills.sh 管理，不能卸载。" : "从 skills.sh 中卸载此 Skill。"}
                                 onClick={async () => {
                                   if (!selectedSkill) return;
                                   setIsRemovingSkill(true);
                                   try {
                                     await removeSkill(selectedSkill.id);
-                                    messageApi.success(`已从来源移除 ${selectedSkill.name}。`);
+                                    messageApi.success(`已成功卸载技能 ${selectedSkill.name}。`);
                                     const refreshed = await loadPhysicalSkills();
                                     setSkillsList(refreshed);
                                     const nextSkillsStates = await loadEditorSkillsStates();
@@ -1499,22 +1557,22 @@ function AiComposeApp() {
                                     if (isCurrentEditorEnabled) {
                                       await applyToEditor(activeEditorId, true);
                                     }
+                                    setIsSkillModalOpen(false);
                                   } catch (err) {
                                     const errMsg = err instanceof Error ? err.message : String(err);
-                                    messageApi.error(`从来源移除失败: ${errMsg}`);
+                                    messageApi.error(`卸载失败: ${errMsg}`);
                                   } finally {
                                     setIsRemovingSkill(false);
                                   }
                                 }}
                               >
-                                从来源移除
+                                卸载
                               </Button>
                               <Button
                                 type="button"
                                 className={`fragment-action-btn${isUpdatingSkill ? " fragment-action-btn--loading" : ""}`}
                                 disabled={isRemovingSkill || isAddingSkillsRepo || !isSelectedSkillCliManaged}
                                 loading={isUpdatingSkill}
-                                style={{ opacity: isRemovingSkill || isUpdatingSkill || isAddingSkillsRepo || !isSelectedSkillCliManaged ? 0.6 : 1 }}
                                 title={!isSelectedSkillCliManaged ? "本地已安装的 Skill 不受 skills.sh 管理，不能在这里更新。" : undefined}
                                 onClick={async () => {
                                   if (!selectedSkill) return;
@@ -1540,48 +1598,40 @@ function AiComposeApp() {
                             </>
                           )}
                         </div>
-                      )}
-                    </div>
+                      </div>
 
-                    <div className="skills-detail-pane__body">
-                      {selectedSkill ? (
-                        <>
-                          <p className="skills-detail-pane__path">
-                            <strong>来源类型：</strong>
-                            {selectedSkill.isBuiltin
-                              ? (selectedSkill.installed
-                                ? "官方技能（已安装，可通过 skills.sh 管理）"
-                                : "官方技能（未安装，请先安装）")
-                              : (isSelectedSkillCliManaged
-                                ? "skills.sh 管理，可创建目标软链接"
-                                : "本地/目标目录扫描，只读")}
-                          </p>
-                          <p className="skills-detail-pane__path">
-                            <strong>物理来源路径：</strong>
-                            {selectedSkill.isBuiltin && !selectedSkill.installed
-                              ? "未安装，暂无物理路径"
-                              : selectedSkill.path}
-                          </p>
-                          <p className="skills-detail-pane__path">
-                            <strong>目标软链接：</strong>
-                            {selectedSkill.isBuiltin && !selectedSkill.installed
-                              ? "未安装，暂不可创建软链接"
-                              : (isSelectedSkillCliManaged
-                                ? (selectedSkillTargetLink || "未检测到目标路径")
-                                : "本地已安装项不创建目标软链接")}
-                          </p>
-                          <pre className="skills-detail-pane__markdown">
-                            <code>{selectedSkill.content || "(SKILL.md 内容为空)"}</code>
-                          </pre>
-                        </>
-                      ) : (
-                        <p className="skills-list-empty">
-                          请从左侧列表中选择一个技能查看详情。
+                      <div className="skills-detail-pane__body" style={{ borderTop: "1px solid var(--panel-border)", paddingTop: "16px" }}>
+                        <p className="skills-detail-pane__path">
+                          <strong>来源类型：</strong>
+                          {selectedSkill.isBuiltin
+                            ? (selectedSkill.installed
+                              ? "官方技能（已安装，可通过 skills.sh 管理）"
+                              : "官方技能（未安装，请先安装）")
+                            : (isSelectedSkillCliManaged
+                              ? "skills.sh 管理，可创建目标软链接"
+                              : "本地/目标目录扫描，只读")}
                         </p>
-                      )}
+                        <p className="skills-detail-pane__path">
+                          <strong>物理来源路径：</strong>
+                          {selectedSkill.isBuiltin && !selectedSkill.installed
+                            ? "未安装，暂无物理路径"
+                            : selectedSkill.path}
+                        </p>
+                        <p className="skills-detail-pane__path">
+                          <strong>目标软链接：</strong>
+                          {selectedSkill.isBuiltin && !selectedSkill.installed
+                            ? "未安装，暂不可创建软链接"
+                            : (isSelectedSkillCliManaged
+                              ? (selectedSkillTargetLink || "未检测到目标路径")
+                              : "本地已安装项不创建目标软链接")}
+                        </p>
+                        <pre className="skills-detail-pane__markdown" style={{ marginTop: "16px" }}>
+                          <code>{selectedSkill.content || "(SKILL.md 内容为空)"}</code>
+                        </pre>
+                      </div>
                     </div>
-                  </section>
-                </div>
+                  )}
+                </Modal>
 
               </section>
             )}
