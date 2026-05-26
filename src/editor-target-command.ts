@@ -217,9 +217,9 @@ export function normalizeRepoSource(repo: string): string {
   trimmed = trimmed.replace(/\/+$/, "");
 
   // 去除 http/https
-  let withoutScheme = trimmed.replace(/^https?:\/\//, "");
+  const withoutScheme = trimmed.replace(/^https?:\/\//, "");
   // 去除 www.
-  let withoutWww = withoutScheme.replace(/^www\./, "");
+  const withoutWww = withoutScheme.replace(/^www\./, "");
   // 去除 github.com/
   let githubPath = withoutWww.replace(/^github\.com\//, "");
 
@@ -227,7 +227,7 @@ export function normalizeRepoSource(repo: string): string {
   githubPath = githubPath.split(/[?#]/)[0];
 
   // 去除 .git 后缀和尾部斜杠
-  let pathWithoutSuffix = githubPath.replace(/\.git$/, "").replace(/\/+$/, "");
+  const pathWithoutSuffix = githubPath.replace(/\.git$/, "").replace(/\/+$/, "");
 
   // 如果是 owner/repo 格式，只保留前两段
   const parts = pathWithoutSuffix.split("/");
@@ -236,6 +236,5 @@ export function normalizeRepoSource(repo: string): string {
   }
   return pathWithoutSuffix;
 }
-
 
 

@@ -337,7 +337,10 @@ function AiComposeApp() {
   }, [enabledMcp]);
 
   const activeSkillsTargetPath = skillsEditorStates[activeEditorId]?.targetPath ?? "";
-  const activeEnabledSkillIds = skillsEditorStates[activeEditorId]?.enabledSkills ?? [];
+  const activeEnabledSkillIds = useMemo(
+    () => skillsEditorStates[activeEditorId]?.enabledSkills ?? [],
+    [skillsEditorStates, activeEditorId],
+  );
   const showEditorToggle = activeDomain !== "Skills";
 
   const selectedSource = useMemo(() => {
