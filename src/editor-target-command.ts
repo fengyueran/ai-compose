@@ -180,6 +180,14 @@ export async function openExternalUrl(url: string): Promise<void> {
   return invoke<void>('open_external_url', { url })
 }
 
+export async function openLocalPath(path: string): Promise<void> {
+  return invoke<void>('open_local_path', { path })
+}
+
+export async function revealLocalPath(path: string): Promise<void> {
+  return invoke<void>('reveal_local_path', { path })
+}
+
 export async function updateSkill(skillId: string): Promise<string> {
   return invoke<string>('update_skill', { skillId })
 }

@@ -857,6 +857,14 @@ fn is_safe_external_url(url: &str) -> bool {
     trimmed.starts_with("https://") || trimmed.starts_with("http://")
 }
 
+fn is_safe_local_path(path: &str) -> bool {
+    let trimmed = path.trim();
+    !trimmed.is_empty()
+        && !trimmed.contains('\n')
+        && !trimmed.contains('\r')
+        && !trimmed.contains('\0')
+}
+
 fn normalize_repo_source(repo: &str) -> Option<String> {
     let trimmed = repo.trim().trim_end_matches('/');
     if is_safe_repo_source(trimmed) {
@@ -1343,6 +1351,71 @@ async fn open_external_url(url: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn open_local_path(path: String) -> Result<(), String> {
+    let trimmed = path.trim().to_string();
+    if !is_safe_local_path(&trimmed) {
+        return Err("仅支持打开安全的本地路径。".to_string());
+    }
+
+    let path_buf = PathBuf::from(&trimmed);
+    if !path_buf.exists() {
+        return Err("目标本地路径不存在，无法打开。".to_string());
+    }
+
+    let mut command = if cfg!(target_os = "macos") {
+        let mut cmd = std::process::Command::new("open");
+        cmd.arg(&trimmed);
+        cmd
+    } else if cfg!(target_os = "windows") {
+        let mut cmd = std::process::Command::new("cmd");
+        cmd.args(["/C", "start", "", &trimmed]);
+        cmd
+    } else {
+        let mut cmd = std::process::Command::new("xdg-open");
+        cmd.arg(&trimmed);
+        cmd
+    };
+
+    command
+        .spawn()
+        .map_err(|e| format!("打开本地路径失败：{e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn reveal_local_path(path: String) -> Result<(), String> {
+    let trimmed = path.trim().to_string();
+    if !is_safe_local_path(&trimmed) {
+        return Err("仅支持定位安全的本地路径。".to_string());
+    }
+
+    let path_buf = PathBuf::from(&trimmed);
+    if !path_buf.exists() {
+        return Err("目标本地路径不存在，无法定位。".to_string());
+    }
+
+    let mut command = if cfg!(target_os = "macos") {
+        let mut cmd = std::process::Command::new("open");
+        cmd.args(["-R", &trimmed]);
+        cmd
+    } else if cfg!(target_os = "windows") {
+        let mut cmd = std::process::Command::new("explorer");
+        cmd.arg(format!("/select,{}", trimmed));
+        cmd
+    } else {
+        let parent = path_buf.parent().unwrap_or(&path_buf);
+        let mut cmd = std::process::Command::new("xdg-open");
+        cmd.arg(parent);
+        cmd
+    };
+
+    command
+        .spawn()
+        .map_err(|e| format!("定位本地路径失败：{e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
 async fn update_skill(skill_id: String) -> Result<String, String> {
     let skill_id_trimmed = skill_id.trim().to_string();
     let output = if skill_id_trimmed.is_empty() {
@@ -1426,6 +1499,8 @@ fn main() {
             load_single_skill_command,
             add_skills_repository,
             open_external_url,
+            open_local_path,
+            reveal_local_path,
             update_skill,
             remove_skill
         ])
@@ -1603,6 +1678,9 @@ mod tests {
         assert!(is_safe_external_url("http://127.0.0.1:3000"));
         assert!(!is_safe_external_url("javascript:alert(1)"));
         assert!(!is_safe_external_url("file:///tmp/test"));
+        assert!(is_safe_local_path("/Users/xinghunm/.agents/skills/brainstorming"));
+        assert!(!is_safe_local_path(""));
+        assert!(!is_safe_local_path("/tmp/test\nnext"));
         assert_eq!(
             normalize_repo_source("https://github.com/vercel-labs/agent-skills"),
             Some("vercel-labs/agent-skills".to_string())

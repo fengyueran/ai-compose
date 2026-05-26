@@ -856,6 +856,23 @@
   color: var(--accent);
 }
 
+.skills-detail-pane__link-button {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--accent-strong);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  word-break: break-all;
+}
+
+.skills-detail-pane__link-button:hover {
+  color: var(--accent);
+}
+
 .skills-detail-pane__markdown {
   margin: 0;
   padding: 16px;

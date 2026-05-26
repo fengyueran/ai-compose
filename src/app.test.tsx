@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, test, vi } from 'vitest'
 
 import AiComposeApp from './ai-compose-app'
-import { addSkillsRepository, applySkillsToEditorTarget, linkSkillToEditor, loadEditorInstalledSkills, loadEditorMcpStates, loadEditorSkillsStates, loadEditorTargetStates, loadPhysicalSkills, loadSingleSkill, openExternalUrl, removeSkill, unlinkSkillFromEditor, updateSkill } from './editor-target-command'
+import { addSkillsRepository, applySkillsToEditorTarget, linkSkillToEditor, loadEditorInstalledSkills, loadEditorMcpStates, loadEditorSkillsStates, loadEditorTargetStates, loadPhysicalSkills, loadSingleSkill, openExternalUrl, openLocalPath, revealLocalPath, removeSkill, unlinkSkillFromEditor, updateSkill } from './editor-target-command'
 import { usePromptWorkbenchStore } from './prompt-workbench-store'
 
 vi.mock('./editor-target-command', async () => {
@@ -19,6 +19,8 @@ vi.mock('./editor-target-command', async () => {
     loadPhysicalSkills: vi.fn(),
     loadSingleSkill: vi.fn(),
     openExternalUrl: vi.fn(),
+    openLocalPath: vi.fn(),
+    revealLocalPath: vi.fn(),
     linkSkillToEditor: vi.fn(),
     removeSkill: vi.fn(),
     unlinkSkillFromEditor: vi.fn(),
@@ -405,6 +407,90 @@ describe('Prompt Workbench', () => {
 
     await userEvent.click(repoLink)
     expect(openExternalUrl).toHaveBeenCalledWith('https://github.com/fengyueran/skills')
+
+    delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
+  })
+
+  test('renders physical source path and target link path as clickable local paths in skill details', async () => {
+    ;(window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {}
+    vi.mocked(loadEditorTargetStates).mockResolvedValue({
+      antigravity: { enabled: false, targetPath: '' },
+      codex: { enabled: false, targetPath: '' },
+      cursor: { enabled: true, targetPath: '/Users/test/.cursor/AGENTS.md' },
+    } as never)
+    vi.mocked(loadEditorMcpStates).mockResolvedValue({
+      antigravity: { enabled: false, targetPath: '' },
+      codex: { enabled: false, targetPath: '' },
+      cursor: { enabled: false, targetPath: '' },
+    } as never)
+    vi.mocked(loadEditorSkillsStates).mockResolvedValue({
+      antigravity: { enabled: false, targetPath: '', enabledSkills: [] },
+      codex: { enabled: false, targetPath: '', enabledSkills: [] },
+      cursor: { enabled: true, targetPath: '/Users/test/.cursor/skills', enabledSkills: ['react-development'] },
+    })
+    vi.mocked(loadPhysicalSkills).mockResolvedValue([
+      {
+        id: 'react-development',
+        name: 'react-development',
+        description: 'Installed from a custom repo',
+        content: '# react-development',
+        path: '/Users/test/.agents/skills/react-development',
+        sourceKind: 'cli',
+        repoSource: 'fengyueran/skills',
+      },
+    ])
+    vi.mocked(loadEditorInstalledSkills).mockResolvedValue([
+      {
+        id: 'react-development',
+        name: 'react-development',
+        description: 'Installed from a custom repo',
+        content: '# react-development',
+        path: '/Users/test/.agents/skills/react-development',
+        sourceKind: 'cli',
+        repoSource: 'fengyueran/skills',
+      },
+    ])
+    usePromptWorkbenchStore.setState({
+      activeDomain: 'Skills',
+      activeEditorId: 'cursor',
+      editorStates: {
+        antigravity: { enabled: false, targetPath: '', enabledSkills: [] },
+        codex: { enabled: false, targetPath: '', enabledSkills: [] },
+        cursor: { enabled: true, targetPath: '/Users/test/.cursor/skills', enabledSkills: ['react-development'] },
+      },
+      skillsEditorStates: {
+        antigravity: { enabled: false, targetPath: '', enabledSkills: [] },
+        codex: { enabled: false, targetPath: '', enabledSkills: [] },
+        cursor: { enabled: true, targetPath: '/Users/test/.cursor/skills', enabledSkills: ['react-development'] },
+      },
+      skills: [
+        {
+          id: 'react-development',
+          name: 'react-development',
+          description: 'Installed from a custom repo',
+          content: '# react-development',
+          path: '/Users/test/.agents/skills/react-development',
+          sourceKind: 'cli',
+          repoSource: 'fengyueran/skills',
+        },
+      ],
+      selectedSkillId: 'react-development',
+      isHydratingEditorStates: false,
+    })
+
+    render(<AiComposeApp />)
+
+    await userEvent.click(screen.getByRole('button', { name: /react-development/ }))
+
+    const dialog = within(screen.getByRole('dialog'))
+    const physicalPathButton = dialog.getByRole('button', { name: '/Users/test/.agents/skills/react-development' })
+    const targetPathButton = dialog.getByRole('button', { name: '/Users/test/.cursor/skills/react-development' })
+
+    await userEvent.click(physicalPathButton)
+    await userEvent.click(targetPathButton)
+
+    expect(openLocalPath).toHaveBeenCalledWith('/Users/test/.agents/skills/react-development')
+    expect(revealLocalPath).toHaveBeenCalledWith('/Users/test/.cursor/skills/react-development')
 
     delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
   })

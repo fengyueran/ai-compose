@@ -15,6 +15,8 @@ import {
   updateSkill,
   unlinkSkillFromEditor,
   openExternalUrl,
+  openLocalPath,
+  revealLocalPath,
   type EditorId,
   type SkillInfo,
   isTauriRuntime,
@@ -73,6 +75,27 @@ async function openSkillRepoUrl(url: string): Promise<void> {
     return;
   }
   window.open(url, "_blank", "noopener,noreferrer");
+}
+
+async function openSkillLocalPath(path: string): Promise<void> {
+  if (isTauriRuntime()) {
+    await openLocalPath(path);
+    return;
+  }
+  window.open(`file://${path}`, "_blank", "noopener,noreferrer");
+}
+
+async function revealSkillLocalPath(path: string): Promise<void> {
+  if (isTauriRuntime()) {
+    await revealLocalPath(path);
+    return;
+  }
+
+  const normalizedPath = path.replace(/\/+$/, "");
+  const parentPath = normalizedPath.includes("/")
+    ? normalizedPath.slice(0, normalizedPath.lastIndexOf("/")) || "/"
+    : normalizedPath;
+  window.open(`file://${parentPath}`, "_blank", "noopener,noreferrer");
 }
 
 async function loadVisibleSkillsForEditor(editorId: EditorId): Promise<SkillInfo[]> {
@@ -361,6 +384,12 @@ function AiComposeApp() {
   const selectedSkillTargetLink = selectedSkill && activeSkillsTargetPath
     ? `${activeSkillsTargetPath}/${selectedSkill.id}`
     : "";
+  const selectedSkillPhysicalPath = selectedSkill?.isBuiltin && !selectedSkill.installed
+    ? ""
+    : (selectedSkill?.path || "");
+  const selectedSkillLinkPath = selectedSkill?.isBuiltin && !selectedSkill.installed
+    ? ""
+    : (selectedSkillTargetLink || selectedSkill?.path || "");
   const isSelectedSkillCliManaged = selectedSkill?.sourceKind === "cli";
   const isSelectedSkillLinked = selectedSkill
     ? activeEnabledSkillIds.includes(selectedSkill.id)
@@ -1766,15 +1795,31 @@ function AiComposeApp() {
                         </p>
                         <p className="skills-detail-pane__path">
                           <strong>物理来源路径：</strong>
-                          {selectedSkill.isBuiltin && !selectedSkill.installed
-                            ? "未安装，暂无物理路径"
-                            : selectedSkill.path}
+                          {selectedSkillPhysicalPath ? (
+                            <button
+                              className="skills-detail-pane__link-button"
+                              onClick={() => {
+                                void openSkillLocalPath(selectedSkillPhysicalPath);
+                              }}
+                              type="button"
+                            >
+                              {selectedSkillPhysicalPath}
+                            </button>
+                          ) : "未安装，暂无物理路径"}
                         </p>
                         <p className="skills-detail-pane__path">
                           <strong>目标软链接：</strong>
-                          {selectedSkill.isBuiltin && !selectedSkill.installed
-                            ? "未安装，暂不可创建软链接"
-                            : (selectedSkillTargetLink || selectedSkill.path || "未检测到目标路径")}
+                          {selectedSkillLinkPath ? (
+                            <button
+                              className="skills-detail-pane__link-button"
+                              onClick={() => {
+                                void revealSkillLocalPath(selectedSkillLinkPath);
+                              }}
+                              type="button"
+                            >
+                              {selectedSkillLinkPath}
+                            </button>
+                          ) : "未安装，暂不可创建软链接"}
                         </p>
                         <pre className="skills-detail-pane__markdown" style={{ marginTop: "16px" }}>
                           <code>{selectedSkill.content || "(SKILL.md 内容为空)"}</code>
