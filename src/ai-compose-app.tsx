@@ -32,7 +32,7 @@ type SkillsFilter = "all" | "local" | "cli";
 
 const skillsFilterOptions: SelectOption[] = [
   { label: "全部", value: "all" },
-  { label: "官方 / skills.sh", value: "cli" },
+  { label: "官方", value: "cli" },
   { label: "本地已安装", value: "local" },
 ];
 
@@ -259,11 +259,11 @@ function AiComposeApp() {
     const normalizedQuery = skillsQuery.trim().toLowerCase();
 
     return skills.filter((skill) => {
-      const isCliManaged = skill.sourceKind === "cli";
-      if (skillsFilter === "cli" && !isCliManaged) {
+      const isOfficial = Boolean(skill.isBuiltin);
+      if (skillsFilter === "cli" && !isOfficial) {
         return false;
       }
-      if (skillsFilter === "local" && isCliManaged) {
+      if (skillsFilter === "local" && isOfficial) {
         return false;
       }
       if (!normalizedQuery) {
@@ -283,7 +283,7 @@ function AiComposeApp() {
 
     return [
       { key: "builtin", title: "官方技能", skills: builtin },
-      { key: "local", title: "本地技能", skills: local },
+      { key: "local", title: "非官方技能", skills: local },
     ].filter((group) => group.skills.length > 0);
   }, [filteredSkills]);
 
@@ -302,9 +302,7 @@ function AiComposeApp() {
     !isSelectedSkillLinked &&
     (isSelectedSkillCliManaged || selectedSkill.isBuiltin)
   );
-  const shouldShowSelectedSkillSourceBadge = Boolean(
-    selectedSkill && (selectedSkill.isBuiltin || !isSelectedSkillCliManaged),
-  );
+  const shouldShowSelectedSkillSourceBadge = Boolean(selectedSkill);
 
   const refreshCurrentEditorSkills = async (editorId: EditorId) => {
     const installedSkills = await loadEditorInstalledSkills({ editorId });
@@ -314,9 +312,8 @@ function AiComposeApp() {
 
   const renderSkillRow = (skill: typeof skills[number]) => {
     const isSelected = skill.id === selectedSkillId;
-    const isCliManaged = skill.sourceKind === "cli";
     const isLinkedToEditor = activeEnabledSkillIds.includes(skill.id);
-    const shouldShowSourceBadge = skill.isBuiltin || !isCliManaged;
+    const shouldShowSourceBadge = true;
 
     const badgeText = skill.isBuiltin ? "官方" : "本地已安装";
     const badgeClass = skill.isBuiltin
@@ -1394,7 +1391,7 @@ function AiComposeApp() {
                         当前编辑器 Skills
                       </h2>
                       <p className="panel__subtitle">
-                        展示官方技能目录，以及当前 {editorMeta[activeEditorId].title} 已安装的本地技能；可从仓库安装并直接链接到当前编辑器。
+                        展示官方技能目录，以及当前 {editorMeta[activeEditorId].title} 已安装的非官方技能；可从仓库安装并直接链接到当前编辑器。
                       </p>
                     </div>
                     <span className="chip">官方 {builtinSkills.length} 项 · 已安装 {installedSkills.length} 项</span>
@@ -1425,7 +1422,7 @@ function AiComposeApp() {
                     <div className="skills-manager__install">
                       <input
                         className="form-input"
-                        placeholder="安装仓库并链接到当前编辑器，如 vercel-labs/agent-skills"
+                        placeholder="安装仓库或 GitHub 链接并链接到当前编辑器，如 vercel-labs/agent-skills"
                         value={skillsRepoInput}
                         onChange={(event) => setSkillsRepoInput(event.target.value)}
                       />
@@ -1615,7 +1612,7 @@ function AiComposeApp() {
                                 disabled={isUpdatingSkill || isAddingSkillsRepo || !isSelectedSkillCliManaged || !isSelectedSkillLinked}
                                 loading={isRemovingSkill}
                                 title={!isSelectedSkillCliManaged
-                                  ? "本地已安装的 Skill 不受 skills.sh 管理，不能取消链接。"
+                                  ? "当前技能不支持取消链接。"
                                   : !isSelectedSkillLinked
                                     ? `当前 ${editorMeta[activeEditorId].title} 未链接此 Skill。`
                                     : `取消 ${editorMeta[activeEditorId].title} 中此 Skill 的软链接。`}
@@ -1649,7 +1646,7 @@ function AiComposeApp() {
                                 className={`fragment-action-btn${isUpdatingSkill ? " fragment-action-btn--loading" : ""}`}
                                 disabled={isRemovingSkill || isAddingSkillsRepo || !isSelectedSkillCliManaged}
                                 loading={isUpdatingSkill}
-                                title={!isSelectedSkillCliManaged ? "本地已安装的 Skill 不受 skills.sh 管理，不能在这里更新。" : undefined}
+                                title={!isSelectedSkillCliManaged ? "当前技能不支持在这里更新。" : undefined}
                                 onClick={async () => {
                                   if (!selectedSkill) return;
                                   const skillId = selectedSkill.id;
@@ -1685,11 +1682,9 @@ function AiComposeApp() {
                           <strong>来源类型：</strong>
                           {selectedSkill.isBuiltin
                             ? (selectedSkill.installed
-                              ? "官方技能（已安装，可通过 skills.sh 管理）"
+                              ? "官方技能（已安装）"
                               : "官方技能（未安装，请先安装）")
-                            : (isSelectedSkillCliManaged
-                              ? "skills.sh 管理，可创建目标软链接"
-                              : "本地/目标目录扫描，只读")}
+                            : "非官方技能（本地已安装）"}
                         </p>
                         <p className="skills-detail-pane__path">
                           <strong>物理来源路径：</strong>
@@ -1701,9 +1696,7 @@ function AiComposeApp() {
                           <strong>目标软链接：</strong>
                           {selectedSkill.isBuiltin && !selectedSkill.installed
                             ? "未安装，暂不可创建软链接"
-                            : (isSelectedSkillCliManaged
-                              ? (selectedSkillTargetLink || "未检测到目标路径")
-                              : "本地已安装项不创建目标软链接")}
+                            : (selectedSkillTargetLink || selectedSkill.path || "未检测到目标路径")}
                         </p>
                         <pre className="skills-detail-pane__markdown" style={{ marginTop: "16px" }}>
                           <code>{selectedSkill.content || "(SKILL.md 内容为空)"}</code>

@@ -125,7 +125,9 @@ fn json_to_toml(json: &serde_json::Value) -> toml::Value {
 }
 
 #[tauri::command]
-async fn apply_prompt_to_editor_target(payload: ApplyPromptPayload) -> Result<ApplyPromptResult, String> {
+async fn apply_prompt_to_editor_target(
+    payload: ApplyPromptPayload,
+) -> Result<ApplyPromptResult, String> {
     let target_path = resolve_editor_agents_path(payload.editor_id)?;
     let parent_directory = target_path
         .parent()
@@ -814,6 +816,38 @@ fn is_safe_repo_source(repo: &str) -> bool {
         && name.chars().all(is_safe_cli_identifier_char)
 }
 
+fn normalize_repo_source(repo: &str) -> Option<String> {
+    let trimmed = repo.trim().trim_end_matches('/');
+    if is_safe_repo_source(trimmed) {
+        return Some(trimmed.to_string());
+    }
+
+    let without_scheme = trimmed
+        .strip_prefix("https://")
+        .or_else(|| trimmed.strip_prefix("http://"))
+        .unwrap_or(trimmed);
+    let without_www = without_scheme
+        .strip_prefix("www.")
+        .unwrap_or(without_scheme);
+    let github_path = without_www.strip_prefix("github.com/")?;
+    let github_path = github_path.split(['?', '#']).next().unwrap_or(github_path);
+    let path_without_suffix = github_path.trim_end_matches('/');
+    let path_without_suffix = path_without_suffix
+        .strip_suffix(".git")
+        .unwrap_or(path_without_suffix)
+        .trim_end_matches('/');
+
+    let mut parts = path_without_suffix.split('/');
+    let owner = parts.next().unwrap_or_default();
+    let name = parts.next().unwrap_or_default();
+    if owner.is_empty() || name.is_empty() || parts.next().is_some() {
+        return None;
+    }
+
+    let normalized = format!("{owner}/{name}");
+    is_safe_repo_source(&normalized).then_some(normalized)
+}
+
 fn is_safe_skill_id(skill_id: &str) -> bool {
     !skill_id.is_empty()
         && !skill_id.contains('/')
@@ -917,7 +951,10 @@ fn load_global_skills() -> Result<Vec<SkillInfo>, String> {
         return Ok(Vec::new());
     }
 
-    Ok(collect_skills_from_directory(&global_root, &managed_skill_ids))
+    Ok(collect_skills_from_directory(
+        &global_root,
+        &managed_skill_ids,
+    ))
 }
 
 fn load_editor_installed_skills_inner(editor_id: EditorId) -> Result<Vec<SkillInfo>, String> {
@@ -927,7 +964,10 @@ fn load_editor_installed_skills_inner(editor_id: EditorId) -> Result<Vec<SkillIn
     }
 
     let managed_skill_ids = load_skills_cli_lock_ids();
-    Ok(collect_skills_from_directory(&target_path, &managed_skill_ids))
+    Ok(collect_skills_from_directory(
+        &target_path,
+        &managed_skill_ids,
+    ))
 }
 
 async fn load_physical_skills_inner() -> Result<Vec<SkillInfo>, String> {
@@ -965,9 +1005,7 @@ fn is_skill_enabled(editor_skills_dir: &Path, skill_id: &str, physical_skill_pat
     false
 }
 
-fn build_editor_skills_state(
-    editor_id: EditorId,
-) -> Result<EditorSkillsState, String> {
+fn build_editor_skills_state(editor_id: EditorId) -> Result<EditorSkillsState, String> {
     let target_path = resolve_editor_skills_path(editor_id)?;
     let enabled_skills = load_editor_installed_skills_inner(editor_id)?
         .into_iter()
@@ -1028,7 +1066,9 @@ fn remove_link_or_dir(path: &Path) -> std::io::Result<()> {
 }
 
 #[tauri::command]
-async fn apply_skills_to_editor_target(payload: ApplySkillsPayload) -> Result<ApplySkillsResult, String> {
+async fn apply_skills_to_editor_target(
+    payload: ApplySkillsPayload,
+) -> Result<ApplySkillsResult, String> {
     let target_path = resolve_editor_skills_path(payload.editor_id)?;
     let physical_skills = load_physical_skills_inner().await?;
 
@@ -1090,7 +1130,9 @@ async fn apply_skills_to_editor_target(payload: ApplySkillsPayload) -> Result<Ap
 }
 
 #[tauri::command]
-async fn unlink_skill_from_editor(payload: UnlinkSkillPayload) -> Result<ApplySkillsResult, String> {
+async fn unlink_skill_from_editor(
+    payload: UnlinkSkillPayload,
+) -> Result<ApplySkillsResult, String> {
     let skill_id_trimmed = payload.skill_id.trim().to_string();
     if !is_safe_skill_id(&skill_id_trimmed) {
         return Err("技能 ID 只能包含字母、数字、点、下划线和短横线。".to_string());
@@ -1176,13 +1218,12 @@ async fn load_single_skill_command(payload: LoadSingleSkillPayload) -> Result<Sk
 
 #[tauri::command]
 async fn add_skills_repository(repo: String) -> Result<Vec<SkillInfo>, String> {
-    let repo_trimmed = repo.trim().to_string();
-    if !is_safe_repo_source(&repo_trimmed) {
+    let Some(repo_trimmed) = normalize_repo_source(&repo) else {
         return Err(
-            "仓库源必须使用 owner/repo 格式，且只能包含字母、数字、点、下划线和短横线。"
+            "仓库源必须使用 owner/repo 格式，或提供对应的 GitHub 仓库链接；且只能包含字母、数字、点、下划线和短横线。"
                 .to_string(),
         );
-    }
+    };
 
     let output = AsyncCommand::new(npx_command_name())
         .args(["skills", "add", &repo_trimmed, "-g", "-y"])
@@ -1417,8 +1458,11 @@ mod tests {
 
         let skills = collect_skills_from_directory(&root.join("editor"), &managed_ids);
         assert_eq!(skills.len(), 2);
-        assert!(skills.iter().any(|skill| skill.id == "find-skills" && skill.source_kind == SkillSourceKind::Cli));
-        assert!(skills.iter().any(|skill| skill.id == "local-skill" && skill.source_kind == SkillSourceKind::FallbackDirectory));
+        assert!(skills
+            .iter()
+            .any(|skill| skill.id == "find-skills" && skill.source_kind == SkillSourceKind::Cli));
+        assert!(skills.iter().any(|skill| skill.id == "local-skill"
+            && skill.source_kind == SkillSourceKind::FallbackDirectory));
 
         fs::remove_dir_all(root).unwrap();
     }
@@ -1454,9 +1498,31 @@ mod tests {
     fn test_cli_input_validation_rejects_shell_like_values() {
         assert!(is_safe_repo_source("vercel-labs/agent-skills"));
         assert!(!is_safe_repo_source("vercel-labs/agent-skills;rm"));
-        assert!(!is_safe_repo_source(
-            "https://github.com/vercel-labs/agent-skills"
-        ));
+        assert_eq!(
+            normalize_repo_source("https://github.com/vercel-labs/agent-skills"),
+            Some("vercel-labs/agent-skills".to_string())
+        );
+        assert_eq!(
+            normalize_repo_source("github.com/vercel-labs/agent-skills/"),
+            Some("vercel-labs/agent-skills".to_string())
+        );
+        assert_eq!(
+            normalize_repo_source("https://github.com/vercel-labs/agent-skills.git"),
+            Some("vercel-labs/agent-skills".to_string())
+        );
+        assert_eq!(
+            normalize_repo_source("https://github.com/vercel-labs/agent-skills?tab=readme-ov-file"),
+            Some("vercel-labs/agent-skills".to_string())
+        );
+        assert_eq!(
+            normalize_repo_source("https://github.com/vercel-labs/agent-skills/tree/main"),
+            None
+        );
+        assert_eq!(
+            normalize_repo_source("https://example.com/vercel-labs/agent-skills"),
+            None
+        );
+        assert_eq!(normalize_repo_source("vercel-labs/agent-skills;rm"), None);
 
         assert!(is_safe_skill_id("react-development"));
         assert!(!is_safe_skill_id("../react-development"));

@@ -194,7 +194,7 @@ describe('Prompt Workbench', () => {
     render(<AiComposeApp />)
 
     expect(screen.getByText(/官方技能 0 项 · 当前编辑器已安装 2 项/)).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '本地技能' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '非官方技能' })).toBeInTheDocument()
     expect(screen.getAllByText('本地已安装').length).toBeGreaterThan(0)
     expect(screen.queryByText('skills.sh')).not.toBeInTheDocument()
     expect(screen.getByText(/Scanned from an editor target directory/)).toBeInTheDocument()
@@ -218,12 +218,12 @@ describe('Prompt Workbench', () => {
     // Check filter by '本地已安装'
     await userEvent.click(screen.getByRole('option', { name: '本地已安装' }))
     expect(screen.getByRole('button', { name: /Local Scan Skill/ })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /CLI Skill/ })).not.toBeInTheDocument()
-
-    // Check filter by '官方 / skills.sh'
-    await userEvent.click(filterSelect)
-    await userEvent.click(screen.getByRole('option', { name: '官方 / skills.sh' }))
     expect(screen.getByRole('button', { name: /CLI Skill/ })).toBeInTheDocument()
+
+    // Check filter by '官方'
+    await userEvent.click(filterSelect)
+    await userEvent.click(screen.getByRole('option', { name: '官方' }))
+    expect(screen.queryByRole('button', { name: /CLI Skill/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Local Scan Skill/ })).not.toBeInTheDocument()
   })
 
@@ -267,9 +267,9 @@ describe('Prompt Workbench', () => {
     render(<AiComposeApp />)
 
     expect(screen.getByRole('heading', { name: '官方技能' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '本地技能' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '非官方技能' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: '官方技能' })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: '本地技能' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '非官方技能' })).toBeInTheDocument()
   })
 
   test('renders loading state for skills list when hydrating', () => {
@@ -491,7 +491,7 @@ describe('Prompt Workbench', () => {
     render(<AiComposeApp />)
 
     await userEvent.type(
-      screen.getByPlaceholderText('安装仓库并链接到当前编辑器，如 vercel-labs/agent-skills'),
+      screen.getByPlaceholderText('安装仓库或 GitHub 链接并链接到当前编辑器，如 vercel-labs/agent-skills'),
       'vercel-labs/skills',
     )
     await userEvent.click(screen.getByRole('button', { name: '安装' }))
@@ -579,7 +579,7 @@ describe('Prompt Workbench', () => {
     render(<AiComposeApp />)
 
     await userEvent.type(
-      screen.getByPlaceholderText('安装仓库并链接到当前编辑器，如 vercel-labs/agent-skills'),
+      screen.getByPlaceholderText('安装仓库或 GitHub 链接并链接到当前编辑器，如 vercel-labs/agent-skills'),
       'vercel-labs/skills',
     )
     await userEvent.click(screen.getByRole('button', { name: '安装' }))
