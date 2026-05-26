@@ -176,6 +176,10 @@ export async function addSkillsRepository(repo: string): Promise<AddSkillsReposi
   return invoke<AddSkillsRepositoryResult>('add_skills_repository', { repo })
 }
 
+export async function openExternalUrl(url: string): Promise<void> {
+  return invoke<void>('open_external_url', { url })
+}
+
 export async function updateSkill(skillId: string): Promise<string> {
   return invoke<string>('update_skill', { skillId })
 }

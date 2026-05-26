@@ -585,6 +585,8 @@ pub struct SkillInfo {
     content: String,
     path: String,
     source_kind: SkillSourceKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    repo_source: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
@@ -739,6 +741,26 @@ fn load_skills_cli_ids_by_repo(repo: &str) -> std::collections::HashSet<String> 
         .unwrap_or_default()
 }
 
+fn load_skills_cli_repo_sources() -> std::collections::HashMap<String, String> {
+    let Some(lock_json) = load_skills_cli_lock_json() else {
+        return std::collections::HashMap::new();
+    };
+
+    lock_json
+        .get("skills")
+        .and_then(|skills| skills.as_object())
+        .map(|skills| {
+            skills
+                .iter()
+                .filter_map(|(skill_id, entry)| {
+                    let source = entry.get("source").and_then(|value| value.as_str())?;
+                    Some((skill_id.clone(), source.to_string()))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 fn classify_cli_skill_source(
     path: &Path,
     skill_id: &str,
@@ -751,7 +773,12 @@ fn classify_cli_skill_source(
     }
 }
 
-fn load_single_skill(path: &Path, id: &str, source_kind: SkillSourceKind) -> Option<SkillInfo> {
+fn load_single_skill(
+    path: &Path,
+    id: &str,
+    source_kind: SkillSourceKind,
+    repo_source: Option<String>,
+) -> Option<SkillInfo> {
     let skill_md_path = path.join("SKILL.md");
     if !skill_md_path.exists() {
         return None;
@@ -793,6 +820,7 @@ fn load_single_skill(path: &Path, id: &str, source_kind: SkillSourceKind) -> Opt
         content: body,
         path: path.display().to_string(),
         source_kind,
+        repo_source,
     })
 }
 
@@ -814,6 +842,19 @@ fn is_safe_repo_source(repo: &str) -> bool {
         && parts.next().is_none()
         && owner.chars().all(is_safe_cli_identifier_char)
         && name.chars().all(is_safe_cli_identifier_char)
+}
+
+fn is_safe_external_url(url: &str) -> bool {
+    let trimmed = url.trim();
+    if trimmed.is_empty()
+        || trimmed.contains('\n')
+        || trimmed.contains('\r')
+        || trimmed.contains('\0')
+    {
+        return false;
+    }
+
+    trimmed.starts_with("https://") || trimmed.starts_with("http://")
 }
 
 fn normalize_repo_source(repo: &str) -> Option<String> {
@@ -890,6 +931,7 @@ fn extract_skill_source_entries(value: &serde_json::Value) -> Vec<(String, PathB
 fn collect_skills_from_directory(
     directory: &Path,
     managed_skill_ids: &std::collections::HashSet<String>,
+    repo_sources: &std::collections::HashMap<String, String>,
 ) -> Vec<SkillInfo> {
     let mut skills = Vec::new();
     let mut loaded_ids = std::collections::HashSet::new();
@@ -929,7 +971,12 @@ fn collect_skills_from_directory(
         };
 
         let source_kind = classify_cli_skill_source(&source_path, &skill_id, managed_skill_ids);
-        if let Some(skill) = load_single_skill(&source_path, &skill_id, source_kind) {
+        let repo_source = if source_kind == SkillSourceKind::Cli {
+            repo_sources.get(&skill_id).cloned()
+        } else {
+            None
+        };
+        if let Some(skill) = load_single_skill(&source_path, &skill_id, source_kind, repo_source) {
             if loaded_ids.insert(skill.id.clone()) {
                 skills.push(skill);
             }
@@ -945,6 +992,7 @@ fn resolve_global_skills_root() -> Result<PathBuf, String> {
 
 fn load_global_skills() -> Result<Vec<SkillInfo>, String> {
     let managed_skill_ids = load_skills_cli_lock_ids();
+    let repo_sources = load_skills_cli_repo_sources();
     let global_root = resolve_global_skills_root()?;
 
     if !global_root.exists() || !global_root.is_dir() {
@@ -954,6 +1002,7 @@ fn load_global_skills() -> Result<Vec<SkillInfo>, String> {
     Ok(collect_skills_from_directory(
         &global_root,
         &managed_skill_ids,
+        &repo_sources,
     ))
 }
 
@@ -964,9 +1013,11 @@ fn load_editor_installed_skills_inner(editor_id: EditorId) -> Result<Vec<SkillIn
     }
 
     let managed_skill_ids = load_skills_cli_lock_ids();
+    let repo_sources = load_skills_cli_repo_sources();
     Ok(collect_skills_from_directory(
         &target_path,
         &managed_skill_ids,
+        &repo_sources,
     ))
 }
 
@@ -1212,8 +1263,18 @@ async fn link_skill_to_editor(payload: LinkSkillPayload) -> Result<ApplySkillsRe
 
 #[tauri::command]
 async fn load_single_skill_command(payload: LoadSingleSkillPayload) -> Result<SkillInfo, String> {
-    load_single_skill(Path::new(&payload.path), &payload.id, payload.source_kind)
-        .ok_or_else(|| format!("无法读取技能 {} 的最新内容。", payload.id))
+    let repo_source = if payload.source_kind == SkillSourceKind::Cli {
+        load_skills_cli_repo_sources().get(&payload.id).cloned()
+    } else {
+        None
+    };
+    load_single_skill(
+        Path::new(&payload.path),
+        &payload.id,
+        payload.source_kind,
+        repo_source,
+    )
+    .ok_or_else(|| format!("无法读取技能 {} 的最新内容。", payload.id))
 }
 
 #[tauri::command]
@@ -1252,6 +1313,33 @@ async fn add_skills_repository(repo: String) -> Result<Vec<SkillInfo>, String> {
         }
         Err(e) => Err(format!("无法运行安装命令：{e}")),
     }
+}
+
+#[tauri::command]
+async fn open_external_url(url: String) -> Result<(), String> {
+    let trimmed = url.trim().to_string();
+    if !is_safe_external_url(&trimmed) {
+        return Err("仅支持打开安全的 http/https 外部链接。".to_string());
+    }
+
+    let mut command = if cfg!(target_os = "macos") {
+        let mut cmd = std::process::Command::new("open");
+        cmd.arg(&trimmed);
+        cmd
+    } else if cfg!(target_os = "windows") {
+        let mut cmd = std::process::Command::new("cmd");
+        cmd.args(["/C", "start", "", &trimmed]);
+        cmd
+    } else {
+        let mut cmd = std::process::Command::new("xdg-open");
+        cmd.arg(&trimmed);
+        cmd
+    };
+
+    command
+        .spawn()
+        .map_err(|e| format!("打开外部链接失败：{e}"))?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -1337,6 +1425,7 @@ fn main() {
             link_skill_to_editor,
             load_single_skill_command,
             add_skills_repository,
+            open_external_url,
             update_skill,
             remove_skill
         ])
@@ -1411,13 +1500,19 @@ mod tests {
         )
         .unwrap();
 
-        let skill =
-            load_single_skill(&skill_dir, "react-development", SkillSourceKind::Cli).unwrap();
+        let skill = load_single_skill(
+            &skill_dir,
+            "react-development",
+            SkillSourceKind::Cli,
+            Some("fengyueran/skills".to_string()),
+        )
+        .unwrap();
         assert_eq!(skill.id, "react-development");
         assert_eq!(skill.name, "React Development");
         assert_eq!(skill.description, "React task router");
         assert_eq!(skill.content, "# Usage\n\nUse it.");
         assert_eq!(skill.source_kind, SkillSourceKind::Cli);
+        assert_eq!(skill.repo_source.as_deref(), Some("fengyueran/skills"));
 
         fs::remove_dir_all(root).unwrap();
     }
@@ -1456,13 +1551,19 @@ mod tests {
         let mut managed_ids = std::collections::HashSet::new();
         managed_ids.insert("find-skills".to_string());
 
-        let skills = collect_skills_from_directory(&root.join("editor"), &managed_ids);
+        let repo_sources = std::collections::HashMap::from([(
+            "find-skills".to_string(),
+            "vercel-labs/skills".to_string(),
+        )]);
+        let skills =
+            collect_skills_from_directory(&root.join("editor"), &managed_ids, &repo_sources);
         assert_eq!(skills.len(), 2);
-        assert!(skills
-            .iter()
-            .any(|skill| skill.id == "find-skills" && skill.source_kind == SkillSourceKind::Cli));
+        assert!(skills.iter().any(|skill| skill.id == "find-skills"
+            && skill.source_kind == SkillSourceKind::Cli
+            && skill.repo_source.as_deref() == Some("vercel-labs/skills")));
         assert!(skills.iter().any(|skill| skill.id == "local-skill"
-            && skill.source_kind == SkillSourceKind::FallbackDirectory));
+            && skill.source_kind == SkillSourceKind::FallbackDirectory
+            && skill.repo_source.is_none()));
 
         fs::remove_dir_all(root).unwrap();
     }
@@ -1498,6 +1599,10 @@ mod tests {
     fn test_cli_input_validation_rejects_shell_like_values() {
         assert!(is_safe_repo_source("vercel-labs/agent-skills"));
         assert!(!is_safe_repo_source("vercel-labs/agent-skills;rm"));
+        assert!(is_safe_external_url("https://github.com/fengyueran/skills"));
+        assert!(is_safe_external_url("http://127.0.0.1:3000"));
+        assert!(!is_safe_external_url("javascript:alert(1)"));
+        assert!(!is_safe_external_url("file:///tmp/test"));
         assert_eq!(
             normalize_repo_source("https://github.com/vercel-labs/agent-skills"),
             Some("vercel-labs/agent-skills".to_string())
@@ -1543,6 +1648,7 @@ mod tests {
             &physical_dir,
             "local-skill",
             SkillSourceKind::FallbackDirectory,
+            None,
         )
         .unwrap();
         let mut enabled_skills = Vec::new();

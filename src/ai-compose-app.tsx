@@ -6,6 +6,7 @@ import {
   loadEditorTargetStates,
   applyMcpToEditorTarget,
   loadEditorMcpStates,
+  loadPhysicalSkills,
   loadEditorSkillsStates,
   loadEditorInstalledSkills,
   addSkillsRepository,
@@ -13,7 +14,9 @@ import {
   loadSingleSkill,
   updateSkill,
   unlinkSkillFromEditor,
+  openExternalUrl,
   type EditorId,
+  type SkillInfo,
   isTauriRuntime,
 } from "./editor-target-command";
 import { composeManagedPromptBlock } from "./compose-prompt";
@@ -28,13 +31,66 @@ const configurationDomains = [
   { name: "Profiles", isAvailable: false },
 ] as const;
 
-type SkillsFilter = "all" | "local" | "cli";
+type SkillsFilter = "all" | "official" | "repository" | "local";
+
+type SkillDisplaySource = "official" | "repository" | "local";
 
 const skillsFilterOptions: SelectOption[] = [
   { label: "全部", value: "all" },
-  { label: "官方", value: "cli" },
-  { label: "本地已安装", value: "local" },
+  { label: "官方", value: "official" },
+  { label: "第三方", value: "repository" },
+  { label: "本地目录", value: "local" },
 ];
+
+function getSkillDisplaySource(skill: SkillInfo): SkillDisplaySource {
+  if (skill.isBuiltin) {
+    return "official";
+  }
+  if (skill.sourceKind === "cli") {
+    return "repository";
+  }
+  return "local";
+}
+
+function getSkillSourceBadgeMeta(skill: SkillInfo): { text: string; className: string } {
+  const source = getSkillDisplaySource(skill);
+  if (source === "official") {
+    return { text: "官方", className: "skill-source-badge--builtin" };
+  }
+  if (source === "repository") {
+    return { text: "第三方", className: "skill-source-badge--repository" };
+  }
+  return { text: "本地已安装", className: "skill-source-badge--readonly" };
+}
+
+function getSkillRepoUrl(repoSource: string): string {
+  return `https://github.com/${repoSource}`;
+}
+
+async function openSkillRepoUrl(url: string): Promise<void> {
+  if (isTauriRuntime()) {
+    await openExternalUrl(url);
+    return;
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+async function loadVisibleSkillsForEditor(editorId: EditorId): Promise<SkillInfo[]> {
+  const [globalSkills, editorInstalledSkills] = await Promise.all([
+    loadPhysicalSkills(),
+    loadEditorInstalledSkills({ editorId }),
+  ]);
+  const mergedSkills = new Map<string, SkillInfo>();
+
+  for (const skill of globalSkills) {
+    mergedSkills.set(skill.id, skill);
+  }
+  for (const skill of editorInstalledSkills) {
+    mergedSkills.set(skill.id, skill);
+  }
+
+  return Array.from(mergedSkills.values());
+}
 
 const editorMeta: Record<
   EditorId,
@@ -259,11 +315,14 @@ function AiComposeApp() {
     const normalizedQuery = skillsQuery.trim().toLowerCase();
 
     return skills.filter((skill) => {
-      const isOfficial = Boolean(skill.isBuiltin);
-      if (skillsFilter === "cli" && !isOfficial) {
+      const source = getSkillDisplaySource(skill);
+      if (skillsFilter === "official" && source !== "official") {
         return false;
       }
-      if (skillsFilter === "local" && isOfficial) {
+      if (skillsFilter === "repository" && source !== "repository") {
+        return false;
+      }
+      if (skillsFilter === "local" && source !== "local") {
         return false;
       }
       if (!normalizedQuery) {
@@ -278,18 +337,27 @@ function AiComposeApp() {
   }, [skills, skillsFilter, skillsQuery]);
 
   const groupedFilteredSkills = useMemo(() => {
-    const builtin = filteredSkills.filter((skill) => skill.isBuiltin);
-    const local = filteredSkills.filter((skill) => !skill.isBuiltin);
+    const builtin = filteredSkills.filter(
+      (skill) => getSkillDisplaySource(skill) === "official",
+    );
+    const repository = filteredSkills.filter(
+      (skill) => getSkillDisplaySource(skill) === "repository",
+    );
+    const local = filteredSkills.filter(
+      (skill) => getSkillDisplaySource(skill) === "local",
+    );
 
     return [
-      { key: "builtin", title: "官方技能", skills: builtin },
-      { key: "local", title: "非官方技能", skills: local },
+      { key: "builtin", title: "官方 Skills", skills: builtin },
+      { key: "repository", title: "第三方 Skills", skills: repository },
+      { key: "local", title: "本地 Skills", skills: local },
     ].filter((group) => group.skills.length > 0);
   }, [filteredSkills]);
 
 
   const activeSkillsTargetPath = skillsEditorStates[activeEditorId]?.targetPath ?? "";
   const activeEnabledSkillIds = skillsEditorStates[activeEditorId]?.enabledSkills ?? [];
+  const currentEditorInstalledCount = activeEnabledSkillIds.length;
   const selectedSkillTargetLink = selectedSkill && activeSkillsTargetPath
     ? `${activeSkillsTargetPath}/${selectedSkill.id}`
     : "";
@@ -305,20 +373,15 @@ function AiComposeApp() {
   const shouldShowSelectedSkillSourceBadge = Boolean(selectedSkill);
 
   const refreshCurrentEditorSkills = async (editorId: EditorId) => {
-    const installedSkills = await loadEditorInstalledSkills({ editorId });
-    setSkillsList(installedSkills);
-    return installedSkills;
+    const visibleSkills = await loadVisibleSkillsForEditor(editorId);
+    setSkillsList(visibleSkills);
+    return visibleSkills;
   };
 
   const renderSkillRow = (skill: typeof skills[number]) => {
     const isSelected = skill.id === selectedSkillId;
     const isLinkedToEditor = activeEnabledSkillIds.includes(skill.id);
-    const shouldShowSourceBadge = true;
-
-    const badgeText = skill.isBuiltin ? "官方" : "本地已安装";
-    const badgeClass = skill.isBuiltin
-      ? "skill-source-badge--builtin"
-      : "skill-source-badge--readonly";
+    const badgeMeta = getSkillSourceBadgeMeta(skill);
 
     return (
       <button
@@ -340,11 +403,9 @@ function AiComposeApp() {
             <span className="skills-list-row__title" title={skill.name}>
               {skill.name}
             </span>
-            {shouldShowSourceBadge && (
-              <span className={`skill-source-badge ${badgeClass}`}>
-                {badgeText}
-              </span>
-            )}
+            <span className={`skill-source-badge ${badgeMeta.className}`}>
+              {badgeMeta.text}
+            </span>
           </div>
           <span className="skills-list-row__description" title={skill.description || "无描述"}>
             {skill.description || "无描述"}
@@ -549,7 +610,7 @@ function AiComposeApp() {
 
       setIsSkillsListLoading(true);
       try {
-        const installedSkills = await loadEditorInstalledSkills({ editorId: activeEditorId });
+        const installedSkills = await loadVisibleSkillsForEditor(activeEditorId);
         if (!isSubscribed) {
           return;
         }
@@ -1391,7 +1452,7 @@ function AiComposeApp() {
                         当前编辑器 Skills
                       </h2>
                       <p className="panel__subtitle">
-                        展示官方技能目录，以及当前 {editorMeta[activeEditorId].title} 已安装的非官方技能；可从仓库安装并直接链接到当前编辑器。
+                        展示官方 Skills、第三方 Skills，以及当前 {editorMeta[activeEditorId].title} 本地目录中的 Skills；可从仓库安装并直接链接到当前编辑器。
                       </p>
                     </div>
                     <span className="chip">官方 {builtinSkills.length} 项 · 已安装 {installedSkills.length} 项</span>
@@ -1450,7 +1511,7 @@ function AiComposeApp() {
                             messageApi.success(
                               installedSkills.length > 0
                                 ? `已安装并链接 ${installedSkills.length} 个技能到 ${editorMeta[activeEditorId].title}。`
-                                : "仓库安装完成，但未检测到可链接的技能。",
+                                : "第三方 Skills 安装完成，但未检测到可链接的技能。",
                             );
                             setSkillsRepoInput("");
                           } catch (err) {
@@ -1470,7 +1531,7 @@ function AiComposeApp() {
                 <div className="skills-manager__body">
                   <div className="skills-list-pane">
                     <div className="skills-list-pane__summary">
-                      <span>官方技能 {builtinSkills.length} 项 · 当前编辑器已安装 {installedSkills.length} 项</span>
+                      <span>官方 Skills {builtinSkills.length} 项 · 当前编辑器已安装 {currentEditorInstalledCount} 项</span>
                       <span>目标：{activeSkillsTargetPath || "未检测到目标路径"}</span>
                     </div>
 
@@ -1524,12 +1585,8 @@ function AiComposeApp() {
                       <div className="skills-detail-pane__header" style={{ borderBottom: "none", padding: "0 0 16px 0" }}>
                         <div>
                           {shouldShowSelectedSkillSourceBadge && (
-                            <span className={`skill-source-badge ${
-                              selectedSkill.isBuiltin
-                                ? "skill-source-badge--builtin"
-                                : "skill-source-badge--readonly"
-                            }`}>
-                              {selectedSkill.isBuiltin ? "官方" : "本地已安装"}
+                            <span className={`skill-source-badge ${getSkillSourceBadgeMeta(selectedSkill).className}`}>
+                              {getSkillSourceBadgeMeta(selectedSkill).text}
                             </span>
                           )}
                           <p className="skills-detail-pane__description" style={{ marginTop: "12px" }}>
@@ -1682,9 +1739,30 @@ function AiComposeApp() {
                           <strong>来源类型：</strong>
                           {selectedSkill.isBuiltin
                             ? (selectedSkill.installed
-                              ? "官方技能（已安装）"
-                              : "官方技能（未安装，请先安装）")
-                            : "非官方技能（本地已安装）"}
+                              ? "官方 Skills（已安装）"
+                              : "官方 Skills（未安装，请先安装）")
+                            : selectedSkill.sourceKind === "cli"
+                              ? (selectedSkill.repoSource
+                                ? `第三方 Skills（来自 ${selectedSkill.repoSource}）`
+                                : "第三方 Skills（来源仓库未知）")
+                              : "本地 Skills（来自本地目录）"}
+                        </p>
+                        <p className="skills-detail-pane__path">
+                          <strong>来源仓库：</strong>
+                          {selectedSkill.repoSource ? (
+                            <a
+                              className="skills-detail-pane__link"
+                              href={getSkillRepoUrl(selectedSkill.repoSource)}
+                              onClick={(event) => {
+                                event.preventDefault();
+                                void openSkillRepoUrl(getSkillRepoUrl(selectedSkill.repoSource!));
+                              }}
+                              rel="noreferrer"
+                              target="_blank"
+                            >
+                              {selectedSkill.repoSource}
+                            </a>
+                          ) : "无"}
                         </p>
                         <p className="skills-detail-pane__path">
                           <strong>物理来源路径：</strong>

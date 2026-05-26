@@ -718,6 +718,12 @@
   border: 1px solid rgba(0, 122, 255, 0.2);
 }
 
+.skill-source-badge--repository {
+  background: rgba(47, 125, 87, 0.12);
+  color: #2f7d57;
+  border: 1px solid rgba(47, 125, 87, 0.22);
+}
+
 .skill-source-badge--builtin-uninstalled {
   background: rgba(0, 122, 255, 0.04);
   color: rgba(0, 122, 255, 0.6);
@@ -838,6 +844,16 @@
   color: var(--text-soft);
   font-size: 0.82rem;
   word-break: break-all;
+}
+
+.skills-detail-pane__link {
+  color: var(--accent-strong);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.skills-detail-pane__link:hover {
+  color: var(--accent);
 }
 
 .skills-detail-pane__markdown {
