@@ -103,6 +103,17 @@ describe('Prompt Workbench', () => {
     expect(screen.getByText(/\[mcp_servers\.memory\]/)).toBeInTheDocument()
   })
 
+  test('hides editor enable switches in skills domain', async () => {
+    const { container } = render(<AiComposeApp />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Skills' }))
+
+    const editorPanel = screen.getByRole('heading', { name: '编辑器' }).closest('section')!
+    expect(within(editorPanel).queryByText('已启用')).not.toBeInTheDocument()
+    expect(within(editorPanel).queryByText('已关闭')).not.toBeInTheDocument()
+    expect(container.querySelectorAll('.editor-toggle')).toHaveLength(0)
+  })
+
   test('adds a custom MCP server and saves it with correct style variables', async () => {
     render(<AiComposeApp />)
 
@@ -391,6 +402,47 @@ describe('Prompt Workbench', () => {
     const skillRow = screen.getByRole('button', { name: /react-development/ })
     expect(within(skillRow).getByText('第三方')).toBeInTheDocument()
     expect(within(skillRow).queryByText('fengyueran/skills')).not.toBeInTheDocument()
+  })
+
+  test('shows synced repository skills even before they are linked to the current editor', () => {
+    usePromptWorkbenchStore.setState({
+      activeDomain: 'Skills',
+      activeEditorId: 'antigravity',
+      editorStates: {
+        antigravity: { enabled: false, targetPath: '~/.gemini/antigravity/skills', enabledSkills: [] },
+        codex: { enabled: false, targetPath: '', enabledSkills: [] },
+        cursor: { enabled: false, targetPath: '', enabledSkills: [] },
+      },
+      skillsEditorStates: {
+        antigravity: { enabled: false, targetPath: '/Users/test/.gemini/antigravity/skills', enabledSkills: [] },
+        codex: { enabled: false, targetPath: '', enabledSkills: [] },
+        cursor: { enabled: false, targetPath: '', enabledSkills: [] },
+      },
+      skillSources: [
+        { id: 'preset', type: 'preset', name: '官方预设', value: '' },
+        { id: 'repo:fengyueran/skills', type: 'repo', name: 'fengyueran/skills', value: 'fengyueran/skills' }
+      ],
+      selectedSkillSourceId: 'repo:fengyueran/skills',
+      skills: [
+        {
+          id: 'react-development',
+          name: 'react-development',
+          description: 'Installed from a custom repo',
+          content: '# react-development',
+          path: '/Users/test/.agents/skills/react-development',
+          sourceKind: 'cli',
+          repoSource: 'fengyueran/skills',
+        },
+      ],
+      selectedSkillId: 'react-development',
+      isHydratingEditorStates: false,
+    })
+
+    render(<AiComposeApp />)
+
+    expect(screen.getByRole('button', { name: /react-development/ })).toBeInTheDocument()
+    expect(screen.getByText(/共 1 项/)).toBeInTheDocument()
+    expect(screen.getByText(/未链接 1/)).toBeInTheDocument()
   })
 
   test('renders physical source path and target link path as clickable local paths in skill details', async () => {

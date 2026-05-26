@@ -668,7 +668,7 @@ fn get_home_dir() -> Result<PathBuf, String> {
 fn resolve_editor_skills_path(editor_id: EditorId) -> Result<PathBuf, String> {
     let home = get_home_dir()?;
     match editor_id {
-        EditorId::Antigravity => Ok(home.join(".gemini").join("skills")),
+        EditorId::Antigravity => Ok(home.join(".gemini").join("antigravity").join("skills")),
         EditorId::Codex => Ok(home.join(".codex").join("skills")),
         EditorId::Cursor => Ok(home.join(".cursor").join("skills")),
     }
@@ -682,7 +682,7 @@ fn is_editor_skills_target_path(path: &Path) -> bool {
     let target_roots = [
         home.join(".codex").join("skills"),
         home.join(".cursor").join("skills"),
-        home.join(".gemini").join("skills"),
+        home.join(".gemini").join("antigravity").join("skills"),
     ];
 
     target_roots.iter().any(|target_root| {
@@ -1615,6 +1615,22 @@ mod tests {
     }
 
     #[test]
+    fn test_resolve_antigravity_skills_path() {
+        let path = resolve_editor_skills_path(EditorId::Antigravity).unwrap();
+        assert!(path.to_string_lossy().contains(".gemini"));
+        assert!(path.to_string_lossy().contains("antigravity"));
+        assert!(path.to_string_lossy().ends_with("skills"));
+    }
+
+    #[test]
+    fn test_build_antigravity_skills_state() {
+        let state = build_editor_skills_state(EditorId::Antigravity).unwrap();
+        assert!(state.target_path.contains(".gemini"));
+        assert!(state.target_path.contains("antigravity"));
+        assert!(state.target_path.ends_with("skills"));
+    }
+
+    #[test]
     fn test_load_single_skill_extracts_front_matter_and_body() {
         let root = unique_test_dir("skill-frontmatter");
         let skill_dir = root.join("react-development");
@@ -1848,4 +1864,3 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 }
-

@@ -338,6 +338,7 @@ function AiComposeApp() {
 
   const activeSkillsTargetPath = skillsEditorStates[activeEditorId]?.targetPath ?? "";
   const activeEnabledSkillIds = skillsEditorStates[activeEditorId]?.enabledSkills ?? [];
+  const showEditorToggle = activeDomain !== "Skills";
 
   const selectedSource = useMemo(() => {
     return skillSources.find((s) => s.id === selectedSkillSourceId) || skillSources[0];
@@ -347,21 +348,25 @@ function AiComposeApp() {
     const normalizedQuery = skillsQuery.trim().toLowerCase();
 
     return skills.filter((skill) => {
-      // 0. 基础范围：只显示官方预设 或 已链接到当前编辑器的技能
+      const matchesSelectedSource = selectedSource.type === "all"
+        ? true
+        : selectedSource.type === "preset"
+          ? !!skill.isBuiltin
+          : selectedSource.type === "repo"
+            ? normalizeRepoSource(skill.repoSource || "") === normalizeRepoSource(selectedSource.value)
+            : !!skill.path && skill.path.toLowerCase().startsWith(selectedSource.value.toLowerCase());
+
+      // 0. 基础范围：官方预设始终显示；已链接技能始终显示；
+      // 选中具体 repo / 本地源时，也允许显示该源下已同步但未链接到当前编辑器的技能。
       const isLinked = activeEnabledSkillIds.includes(skill.id);
-      if (!skill.isBuiltin && !isLinked) return false;
+      const canShowUnlinkedSourceSkill = selectedSource.type === "repo" || selectedSource.type === "local";
+      if (!skill.isBuiltin && !isLinked && !(canShowUnlinkedSourceSkill && matchesSelectedSource)) {
+        return false;
+      }
 
       // 1. Filter by selected source
-      if (selectedSource.type === "all") {
-        // 全部，不过滤来源
-      } else if (selectedSource.type === "preset") {
-        if (!skill.isBuiltin) return false;
-      } else if (selectedSource.type === "repo") {
-        if (normalizeRepoSource(skill.repoSource || "") !== normalizeRepoSource(selectedSource.value)) return false;
-      } else if (selectedSource.type === "local") {
-        if (!skill.path || !skill.path.toLowerCase().startsWith(selectedSource.value.toLowerCase())) {
-          return false;
-        }
+      if (!matchesSelectedSource) {
+        return false;
       }
 
       // 2. Filter by link status
@@ -998,26 +1003,30 @@ function AiComposeApp() {
                     >
                       <div className="side-nav__item-main">
                         <span>{editorMeta[editorId].title}</span>
-                        <span className="side-nav__item-state">
-                          {editorStates[editorId].enabled ? "已启用" : "已关闭"}
-                        </span>
+                        {showEditorToggle ? (
+                          <span className="side-nav__item-state">
+                            {editorStates[editorId].enabled ? "已启用" : "已关闭"}
+                          </span>
+                        ) : null}
                       </div>
                     </button>
-                    <button
-                      aria-pressed={editorStates[editorId].enabled}
-                      className={`editor-toggle${
-                        editorStates[editorId].enabled
-                          ? " editor-toggle--enabled"
-                          : ""
-                      }`}
-                      disabled={isHydratingEditorStates || activeDomain === "Skills"}
-                      onClick={() => {
-                        void handleToggleEditor(editorId);
-                      }}
-                      type="button"
-                    >
-                      <span className="editor-toggle__thumb" />
-                    </button>
+                    {showEditorToggle ? (
+                      <button
+                        aria-pressed={editorStates[editorId].enabled}
+                        className={`editor-toggle${
+                          editorStates[editorId].enabled
+                            ? " editor-toggle--enabled"
+                            : ""
+                        }`}
+                        disabled={isHydratingEditorStates}
+                        onClick={() => {
+                          void handleToggleEditor(editorId);
+                        }}
+                        type="button"
+                      >
+                        <span className="editor-toggle__thumb" />
+                      </button>
+                    ) : null}
                   </div>
                 ))}
               </div>
