@@ -88,6 +88,7 @@ type PromptWorkbenchState = {
   editorStates: Record<EditorId, EditorState> | Record<EditorId, EditorTargetState> | Record<EditorId, EditorSkillsState>
   promptEditorStates: Record<EditorId, EditorState>
   mcpEditorStates: Record<EditorId, EditorTargetState>
+  mcpEnabledServerIdsByEditor: Record<EditorId, string[]>
   skillsEditorStates: Record<EditorId, EditorSkillsState>
   isHydratingEditorStates: boolean
   lastAppliedAt: string | null
@@ -122,7 +123,7 @@ type PromptWorkbenchState = {
   
   // MCP actions
   selectMcpServer: (serverId: string) => void
-  toggleMcpServer: (serverId: string) => void
+  toggleMcpServerForEditor: (editorId: EditorId, serverId: string) => void
   addMcpServer: (server: Omit<McpServer, 'id' | 'source'>) => void
   updateMcpServer: (id: string, serverUpdate: Partial<McpServer>) => void
   deleteMcpServer: (id: string) => void
@@ -130,6 +131,7 @@ type PromptWorkbenchState = {
   // Skills actions
   selectSkill: (skillId: string) => void
   toggleSkill: (skillId: string) => void
+  toggleSkillForEditor: (editorId: EditorId, skillId: string) => void
   setSkillsList: (skills: SkillInfo[]) => void
   replaceSkill: (skill: SkillInfo) => void
   addSkillSource: (source: Omit<SkillSource, 'id'>) => void
@@ -154,6 +156,12 @@ const initialMcpEditorStates = {
   antigravity: { enabled: false, targetPath: '' },
   codex: { enabled: false, targetPath: '' },
   cursor: { enabled: false, targetPath: '' },
+}
+
+const initialMcpEnabledServerIdsByEditor = {
+  antigravity: presetMcpServers.filter((server) => server.enabled).map((server) => server.id),
+  codex: presetMcpServers.filter((server) => server.enabled).map((server) => server.id),
+  cursor: presetMcpServers.filter((server) => server.enabled).map((server) => server.id),
 }
 
 const initialSkillsEditorStates = {
@@ -246,6 +254,40 @@ const syncMcpServersWithLocal = (
   return nextServers
 }
 
+const resolveMcpServerIdsFromManaged = (
+  managedMcp: Record<string, unknown> | undefined,
+  mcpServers: McpServer[],
+): string[] => {
+  if (!managedMcp) {
+    return []
+  }
+
+  return Object.entries(managedMcp)
+    .filter(([, value]) => value && typeof value === 'object' && ('command' in value || 'url' in value))
+    .map(([name]) => mcpServers.find((server) => server.name === name)?.id ?? name.toLowerCase().replace(/\s+/g, '-'))
+}
+
+const buildEnabledServerIdsByEditor = (
+  nextMcpStates: Record<EditorId, EditorTargetState>,
+  updatedServers: McpServer[],
+): Record<EditorId, string[]> => {
+  const nextEnabledIds: Record<EditorId, string[]> = {
+    antigravity: resolveMcpServerIdsFromManaged(nextMcpStates.antigravity.managedMcpServers, updatedServers),
+    codex: resolveMcpServerIdsFromManaged(nextMcpStates.codex.managedMcpServers, updatedServers),
+    cursor: resolveMcpServerIdsFromManaged(nextMcpStates.cursor.managedMcpServers, updatedServers),
+  }
+
+  ;(Object.keys(nextEnabledIds) as EditorId[]).forEach((editorId) => {
+    if (nextEnabledIds[editorId].length === 0 && !nextMcpStates[editorId].managedMcpServers) {
+      nextEnabledIds[editorId] = presetMcpServers
+        .filter((server) => server.enabled)
+        .map((server) => server.id)
+    }
+  })
+
+  return nextEnabledIds
+}
+
 export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
   (set, get) => ({
     activeDomain: 'Prompt',
@@ -255,6 +297,7 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
     editorStates: initialEditorStates,
     promptEditorStates: initialEditorStates,
     mcpEditorStates: initialMcpEditorStates,
+    mcpEnabledServerIdsByEditor: initialMcpEnabledServerIdsByEditor,
     skillsEditorStates: initialSkillsEditorStates,
     isHydratingEditorStates: true,
     lastAppliedAt: null,
@@ -335,8 +378,11 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
         updatedServers = syncMcpServersWithLocal(mcpServers, targetState.mcpServers, targetState.managedMcpServers)
       }
 
+      const nextEnabledIdsByEditor = buildEnabledServerIdsByEditor(nextMcpStates, updatedServers)
+
       set((state) => ({
         mcpEditorStates: nextMcpStates,
+        mcpEnabledServerIdsByEditor: nextEnabledIdsByEditor,
         editorStates: state.activeDomain === 'MCP' ? nextMcpStates : state.editorStates,
         mcpServers: updatedServers,
       }))
@@ -443,13 +489,18 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
       set({ selectedMcpServerId: serverId })
     },
     
-    toggleMcpServer: (serverId) => {
+    toggleMcpServerForEditor: (editorId, serverId) => {
       set((state) => {
-        const nextServers = state.mcpServers.map((server) =>
-          server.id === serverId ? { ...server, enabled: !server.enabled } : server
-        )
-        saveCustomServersToStorage(nextServers)
-        return { mcpServers: nextServers }
+        const enabledIds = state.mcpEnabledServerIdsByEditor[editorId] ?? []
+        const isEnabled = enabledIds.includes(serverId)
+        return {
+          mcpEnabledServerIdsByEditor: {
+            ...state.mcpEnabledServerIdsByEditor,
+            [editorId]: isEnabled
+              ? enabledIds.filter((id) => id !== serverId)
+              : [...enabledIds, serverId],
+          },
+        }
       })
     },
     
@@ -490,6 +541,11 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
       saveCustomServersToStorage(nextServers)
       set({
         mcpServers: nextServers,
+        mcpEnabledServerIdsByEditor: {
+          antigravity: get().mcpEnabledServerIdsByEditor.antigravity.filter((serverId) => serverId !== id),
+          codex: get().mcpEnabledServerIdsByEditor.codex.filter((serverId) => serverId !== id),
+          cursor: get().mcpEnabledServerIdsByEditor.cursor.filter((serverId) => serverId !== id),
+        },
         selectedMcpServerId: nextSelectedId,
       })
     },
@@ -512,6 +568,30 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
       const nextSkillsStates = {
         ...skillsEditorStates,
         [activeEditorId]: {
+          ...currentEditorState,
+          enabledSkills: nextEnabledSkills,
+        },
+      }
+
+      set({
+        skillsEditorStates: nextSkillsStates,
+        editorStates: nextSkillsStates,
+      })
+    },
+
+    toggleSkillForEditor: (editorId, skillId) => {
+      const { skillsEditorStates } = get()
+      const currentEditorState = skillsEditorStates[editorId]
+      if (!currentEditorState) return
+
+      const isEnabled = currentEditorState.enabledSkills.includes(skillId)
+      const nextEnabledSkills = isEnabled
+        ? currentEditorState.enabledSkills.filter((id) => id !== skillId)
+        : [...currentEditorState.enabledSkills, skillId]
+
+      const nextSkillsStates = {
+        ...skillsEditorStates,
+        [editorId]: {
           ...currentEditorState,
           enabledSkills: nextEnabledSkills,
         },

@@ -32,6 +32,7 @@ vi.mock('./editor-target-command', async () => {
 
 describe('Prompt Workbench', () => {
   beforeEach(() => {
+    usePromptWorkbenchStore.setState(usePromptWorkbenchStore.getInitialState())
     vi.clearAllMocks()
     vi.mocked(loadPhysicalSkills).mockResolvedValue([])
     vi.mocked(loadSkillsFromDir).mockResolvedValue([])
@@ -55,6 +56,19 @@ describe('Prompt Workbench', () => {
     expect(screen.getAllByText('代码审查').length).toBeGreaterThan(0)
     expect(screen.getAllByText('知识沉淀与协作').length).toBeGreaterThan(0)
     expect(screen.getByText('最终 Prompt 预览')).toBeInTheDocument()
+  })
+
+  test('keeps domain selection in the side navigation and moves editor controls into the active domain', () => {
+    render(<AiComposeApp />)
+
+    const navigation = screen.getByLabelText('工作台导航')
+    expect(within(navigation).queryByText('编辑器')).not.toBeInTheDocument()
+    expect(within(navigation).getByText('配置域')).toBeInTheDocument()
+
+    const editorPanel = screen.getByRole('heading', { name: '当前配置域编辑器' }).closest('section')!
+    expect(within(editorPanel).getByRole('button', { name: /Antigravity/ })).toBeInTheDocument()
+    expect(within(editorPanel).getByRole('button', { name: /Codex/ })).toBeInTheDocument()
+    expect(within(editorPanel).getByRole('button', { name: /Cursor/ })).toBeInTheDocument()
   })
 
   test('toggles fragment prompt status and updates button style and preview', async () => {
@@ -103,12 +117,24 @@ describe('Prompt Workbench', () => {
     expect(screen.getByText(/\[mcp_servers\.memory\]/)).toBeInTheDocument()
   })
 
-  test('hides editor enable switches in skills domain', async () => {
+  test('switches MCP preview format when selecting another editor inside the domain', async () => {
+    render(<AiComposeApp />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'MCP' }))
+
+    const editorPanel = screen.getByRole('heading', { name: '当前配置域编辑器' }).closest('section')!
+    await userEvent.click(within(editorPanel).getByRole('button', { name: /Cursor/ }))
+
+    expect(screen.getByText(/最终 JSON 配置/)).toBeInTheDocument()
+    expect(screen.getByText(/"mcpServers"/)).toBeInTheDocument()
+  })
+
+  test('hides editor enable switches in skills domain editor panel', async () => {
     const { container } = render(<AiComposeApp />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Skills' }))
 
-    const editorPanel = screen.getByRole('heading', { name: '编辑器' }).closest('section')!
+    const editorPanel = screen.getByRole('heading', { name: '当前配置域编辑器' }).closest('section')!
     expect(within(editorPanel).queryByText('已启用')).not.toBeInTheDocument()
     expect(within(editorPanel).queryByText('已关闭')).not.toBeInTheDocument()
     expect(container.querySelectorAll('.editor-toggle')).toHaveLength(0)
@@ -165,11 +191,13 @@ describe('Prompt Workbench', () => {
     const createBtn = screen.getByRole('button', { name: '创建服务' })
     await userEvent.click(createBtn)
 
+    expect(usePromptWorkbenchStore.getState().mcpServers.some((server) => server.name === 'figma_local')).toBe(true)
+
     // 断言 figma_local 已在左侧列表中展示
-    expect(screen.getAllByText('figma_local').length).toBeGreaterThan(0)
+    expect((await screen.findAllByText('figma_local')).length).toBeGreaterThan(0)
 
     // 默认展示的 TOML 预览中，应包含 type 和 url 的定义
-    expect(screen.getByText(/\[mcp_servers\.figma_local\]/)).toBeInTheDocument()
+    expect(await screen.findByText(/\[mcp_servers\.figma_local\]/)).toBeInTheDocument()
     expect(screen.getByText(/type = "streamable_http"/)).toBeInTheDocument()
     expect(screen.getByText(/url = "http:\/\/127.0.0.1:3845\/mcp"/)).toBeInTheDocument()
   })

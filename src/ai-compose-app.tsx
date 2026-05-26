@@ -185,6 +185,8 @@ function AiComposeApp() {
     selectDomain,
     activeEditorId,
     editorStates,
+    promptEditorStates,
+    mcpEditorStates,
     enabledFragmentIds,
     hydratePromptEditorStates,
     hydrateMcpEditorStates,
@@ -201,9 +203,10 @@ function AiComposeApp() {
     toggleFragment,
     // MCP
     mcpServers,
+    mcpEnabledServerIdsByEditor,
     selectedMcpServerId,
     selectMcpServer,
-    toggleMcpServer,
+    toggleMcpServerForEditor,
     addMcpServer,
     updateMcpServer,
     deleteMcpServer,
@@ -212,6 +215,7 @@ function AiComposeApp() {
     selectedSkillId,
     skillsEditorStates,
     selectSkill,
+    toggleSkillForEditor,
     replaceSkill,
     setSkillsList,
     skillSources,
@@ -240,9 +244,14 @@ function AiComposeApp() {
   const isExternalServer = selectedMcpServerId !== "__new__" && selectedMcpServer?.source === "external";
   const isPresetServer = selectedMcpServerId !== "__new__" && selectedMcpServer?.source === "preset";
 
+  const activeEnabledMcpIds = useMemo(
+    () => mcpEnabledServerIdsByEditor[activeEditorId] ?? [],
+    [mcpEnabledServerIdsByEditor, activeEditorId],
+  );
+
   const enabledMcp = useMemo(
-    () => mcpServers.filter((server) => server.enabled),
-    [mcpServers],
+    () => mcpServers.filter((server) => activeEnabledMcpIds.includes(server.id)),
+    [mcpServers, activeEnabledMcpIds],
   );
 
   const selectedSkill = useMemo(
@@ -262,6 +271,7 @@ function AiComposeApp() {
   const [skillsFilter, setSkillsFilter] = useState<SkillsFilter>("all");
   const [isSkillModalOpen, setIsSkillModalOpen] = useState(false);
   const [isSkillsListLoading, setIsSkillsListLoading] = useState(false);
+  const [pendingMcpToggleKey, setPendingMcpToggleKey] = useState<string | null>(null);
 
   // Skills Sources
   const [isAddSourceModalOpen, setIsAddSourceModalOpen] = useState(false);
@@ -271,77 +281,12 @@ function AiComposeApp() {
 
   const isSkillsLoading = isHydratingEditorStates || isSkillsListLoading || isAddingSkillsRepo || isRemovingSkill || isUpdatingSkill;
 
-  const generatedMcpJson = useMemo(() => {
-    const mcpServersObj: Record<
-      string,
-      {
-        type?: string;
-        url?: string;
-        command?: string;
-        args?: string[];
-        env?: Record<string, string>;
-      }
-    > = {};
-    enabledMcp.forEach((server) => {
-      if (server.transportType === 'http') {
-        mcpServersObj[server.name] = {
-          type: server.type || 'streamable_http',
-          url: server.url || '',
-        };
-      } else {
-        const entry: {
-          command: string;
-          args: string[];
-          env?: Record<string, string>;
-        } = {
-          command: server.command || '',
-          args: server.args || [],
-        };
-        if (server.env && Object.keys(server.env).length > 0) {
-          entry.env = server.env;
-        }
-        mcpServersObj[server.name] = entry;
-      }
-    });
-    return JSON.stringify({ mcpServers: mcpServersObj }, null, 2);
-  }, [enabledMcp]);
-
-  const generatedMcpToml = useMemo(() => {
-    let tomlStr = "";
-    if (enabledMcp.length > 0) {
-      tomlStr += "[mcp_servers]\n";
-      enabledMcp.forEach((server) => {
-        tomlStr += `\n[mcp_servers.${server.name}]\n`;
-        if (server.transportType === 'http') {
-          tomlStr += `type = "${server.type || 'streamable_http'}"\n`;
-          tomlStr += `url = "${server.url || ''}"\n`;
-        } else {
-          tomlStr += `command = "${server.command || ''}"\n`;
-          if (server.args && server.args.length > 0) {
-            tomlStr += `args = ${JSON.stringify(server.args)}\n`;
-          }
-          if (server.env && Object.keys(server.env).length > 0) {
-            tomlStr += "env = { ";
-            const envPairs = Object.entries(server.env)
-              .map(([k, v]) => `${k} = "${v}"`)
-              .join(", ");
-            tomlStr += envPairs;
-            tomlStr += " }\n";
-          }
-        }
-      });
-    } else {
-      tomlStr += "# 还没有启用任何 MCP 服务";
-    }
-    return tomlStr.trim();
-  }, [enabledMcp]);
-
   const activeSkillsTargetPath = skillsEditorStates[activeEditorId]?.targetPath ?? "";
   const activeEnabledSkillIds = useMemo(
     () => skillsEditorStates[activeEditorId]?.enabledSkills ?? [],
     [skillsEditorStates, activeEditorId],
   );
-  const showEditorToggle = activeDomain !== "Skills";
+  const canToggleEditorsInDomain = activeDomain === "Prompt";
 
   const selectedSource = useMemo(() => {
     return skillSources.find((s) => s.id === selectedSkillSourceId) || skillSources[0];
@@ -439,38 +384,235 @@ function AiComposeApp() {
     return combinedSkills;
   };
 
+  const editorIds = Object.keys(editorMeta) as EditorId[];
+
+  const getEnabledMcpIdsForEditor = (editorId: EditorId) =>
+    mcpEnabledServerIdsByEditor[editorId] ?? [];
+
+  const isMcpEnabledForEditor = (editorId: EditorId, serverId: string) =>
+    getEnabledMcpIdsForEditor(editorId).includes(serverId);
+
+  const buildMcpPayload = (enabledIds: string[]) => {
+    const enabledServers = mcpServers.filter((server) => enabledIds.includes(server.id));
+    const payloadMcpServers: Record<string, Record<string, unknown>> = {};
+
+    enabledServers.forEach((server) => {
+      if (server.transportType === "http") {
+        payloadMcpServers[server.name] = {
+          type: server.type || "streamable_http",
+          url: server.url || "",
+        };
+        return;
+      }
+
+      payloadMcpServers[server.name] = {
+        command: server.command || "",
+        args: server.args || [],
+      };
+
+      if (server.env && Object.keys(server.env).length > 0) {
+        payloadMcpServers[server.name].env = server.env;
+      }
+    });
+
+    return {
+      enabledServers,
+      payloadData: {
+        mcpServers: payloadMcpServers,
+        managedNames: mcpServers.map((server) => server.name),
+      },
+    };
+  };
+
+  const applyMcpSelectionToEditor = async (
+    editorId: EditorId,
+    enabledIds: string[],
+  ) => {
+    const { enabledServers, payloadData } = buildMcpPayload(enabledIds);
+
+    return applyMcpToEditorTarget({
+      editorId,
+      enabled: enabledServers.length > 0,
+      configJson: JSON.stringify(payloadData),
+    });
+  };
+
+  const handleMcpEditorToggle = async (
+    editorId: EditorId,
+    serverId: string,
+  ) => {
+    const currentEnabledIds = getEnabledMcpIdsForEditor(editorId);
+    const nextEnabledIds = currentEnabledIds.includes(serverId)
+      ? currentEnabledIds.filter((id) => id !== serverId)
+      : [...currentEnabledIds, serverId];
+
+    toggleMcpServerForEditor(editorId, serverId);
+
+    if (!isTauriRuntime()) {
+      return;
+    }
+
+    const toggleKey = `${editorId}:${serverId}`;
+    setPendingMcpToggleKey(toggleKey);
+
+    try {
+      await applyMcpSelectionToEditor(editorId, nextEnabledIds);
+      const nextMcpStates = await loadEditorMcpStates();
+      hydrateMcpEditorStates(nextMcpStates);
+      messageApi.success(`${editorMeta[editorId].title} 的 MCP 配置已更新。`);
+    } catch (error) {
+      toggleMcpServerForEditor(editorId, serverId);
+      const errMsg = error instanceof Error ? error.message : String(error);
+      messageApi.error(`更新 ${editorMeta[editorId].title} 的 MCP 配置失败: ${errMsg}`);
+    } finally {
+      setPendingMcpToggleKey(null);
+    }
+  };
+
+  const isSkillLinkedToEditor = (editorId: EditorId, skillId: string) =>
+    skillsEditorStates[editorId]?.enabledSkills.includes(skillId) ?? false;
+
+  const isSkillToggleReadOnly = (skill: SkillInfo) =>
+    skill.sourceKind === "fallbackDirectory";
+
+  const handleSkillEditorToggle = async (
+    skill: SkillInfo,
+    editorId: EditorId,
+  ) => {
+    if (isSkillToggleReadOnly(skill)) {
+      return;
+    }
+
+    const isLinked = isSkillLinkedToEditor(editorId, skill.id);
+
+    if (isLinked) {
+      setIsRemovingSkill(true);
+      try {
+        await unlinkSkillFromEditor({
+          editorId,
+          skillId: skill.id,
+        });
+        const nextSkillsStates = await loadEditorSkillsStates();
+        hydrateSkillsEditorStates(nextSkillsStates);
+        await refreshCurrentEditorSkills(activeEditorId);
+        messageApi.success(`已取消 ${skill.name} 在 ${editorMeta[editorId].title} 中的链接。`);
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        messageApi.error(`取消链接失败: ${errMsg}`);
+      } finally {
+        setIsRemovingSkill(false);
+      }
+      return;
+    }
+
+    setIsAddingSkillsRepo(true);
+    try {
+      let skillPath = skill.path;
+
+      if (skill.installed === false) {
+        if (!skill.repoSource) {
+          throw new Error("缺少可安装的技能来源。");
+        }
+
+        const installedSkills = await addSkillsRepository(skill.repoSource);
+        const installedSkill = installedSkills.find((item) =>
+          isPresetSkillMatch(item.id, skill.id),
+        );
+
+        if (!installedSkill) {
+          throw new Error(`安装完成后未找到技能 ${skill.name} 的物理路径。`);
+        }
+
+        skillPath = installedSkill.path;
+      }
+
+      if (!skillPath) {
+        throw new Error("缺少技能物理路径，无法创建链接。");
+      }
+
+      await linkSkillToEditor({
+        editorId,
+        skillId: skill.id,
+        skillPath,
+      });
+
+      const nextSkillsStates = await loadEditorSkillsStates();
+      hydrateSkillsEditorStates(nextSkillsStates);
+      await refreshCurrentEditorSkills(activeEditorId);
+      messageApi.success(`已将 ${skill.name} 链接到 ${editorMeta[editorId].title}。`);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      messageApi.error(`链接技能失败: ${errMsg}`);
+    } finally {
+      setIsAddingSkillsRepo(false);
+    }
+  };
+
   const renderSkillRow = (skill: typeof skills[number]) => {
     const isSelected = skill.id === selectedSkillId;
     const isLinkedToEditor = activeEnabledSkillIds.includes(skill.id);
     const badgeMeta = getSkillSourceBadgeMeta(skill, skillSources);
 
     return (
-      <button
+      <div
         key={skill.id}
         className={`skills-list-row${
           isSelected ? " skills-list-row--selected" : ""
         }`}
-        onClick={() => {
-          selectSkill(skill.id);
-          setIsSkillModalOpen(true);
-        }}
-        type="button"
       >
-        <div className="skill-card__icon-container">
-          {renderSkillIcon(skill.name, skill.id)}
-        </div>
-        <div className="skills-list-row__content">
-          <div className="skills-list-row__title-line">
-            <span className="skills-list-row__title" title={skill.name}>
-              {skill.name}
-            </span>
-            <span className={`skill-source-badge ${badgeMeta.className}`}>
-              {badgeMeta.text}
+        <button
+          className="skills-list-row__select"
+          onClick={() => {
+            selectSkill(skill.id);
+            setIsSkillModalOpen(true);
+          }}
+          type="button"
+        >
+          <div className="skill-card__icon-container">
+            {renderSkillIcon(skill.name, skill.id)}
+          </div>
+          <div className="skills-list-row__content">
+            <div className="skills-list-row__title-line">
+              <span className="skills-list-row__title" title={skill.name}>
+                {skill.name}
+              </span>
+              <span className={`skill-source-badge ${badgeMeta.className}`}>
+                {badgeMeta.text}
+              </span>
+            </div>
+            <span className="skills-list-row__description" title={skill.description || "无描述"}>
+              {skill.description || "无描述"}
             </span>
           </div>
-          <span className="skills-list-row__description" title={skill.description || "无描述"}>
-            {skill.description || "无描述"}
-          </span>
+        </button>
+        <div className="per-editor-switches" onClick={(event) => event.stopPropagation()}>
+          {editorIds.map((editorId) => {
+            const isLinked = isSkillLinkedToEditor(editorId, skill.id);
+            const isReadOnly = isSkillToggleReadOnly(skill);
+
+            return (
+              <button
+                key={`${skill.id}-${editorId}`}
+                type="button"
+                className={`per-editor-switch${
+                  isLinked ? " per-editor-switch--enabled" : ""
+                }${isReadOnly ? " per-editor-switch--readonly" : ""}`}
+                aria-pressed={isLinked}
+                disabled={isReadOnly || isAddingSkillsRepo || isRemovingSkill}
+                onClick={() => {
+                  void handleSkillEditorToggle(skill, editorId);
+                }}
+                title={`${editorMeta[editorId].title}${isLinked ? " 已链接" : " 未链接"}`}
+              >
+                <span className="per-editor-switch__label">
+                  {editorMeta[editorId].title}
+                </span>
+                <span className="per-editor-switch__track">
+                  <span className="per-editor-switch__thumb" />
+                </span>
+              </button>
+            );
+          })}
         </div>
         {isLinkedToEditor && (
           <span className="skill-card__status-check" aria-label="已安装">
@@ -479,7 +621,7 @@ function AiComposeApp() {
             </svg>
           </span>
         )}
-      </button>
+      </div>
     );
   };
 
@@ -582,7 +724,8 @@ function AiComposeApp() {
     deleteMcpServer(id);
     messageApi.loading({ content: "正在同步删除至编辑器配置...", key: "delete-mcp" });
     try {
-      await applyToEditor(activeEditorId, isCurrentEditorEnabled);
+      const nextEnabledCount = getEnabledMcpIdsForEditor(activeEditorId).filter((serverId) => serverId !== id).length;
+      await applyToEditor(activeEditorId, nextEnabledCount > 0);
       messageApi.success({ content: "删除 MCP 服务成功并已自动同步物理文件！", key: "delete-mcp" });
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
@@ -843,31 +986,9 @@ function AiComposeApp() {
       });
 
       try {
-        const latestMcpServers = usePromptWorkbenchStore.getState().mcpServers;
-        const enabledMcpLatest = latestMcpServers.filter((s) => s.enabled);
-        
-        const payloadMcpServers: Record<string, Record<string, unknown>> = {};
-        enabledMcpLatest.forEach((s) => {
-          if (s.transportType === 'http') {
-            payloadMcpServers[s.name] = {
-              type: s.type || 'streamable_http',
-              url: s.url || '',
-            };
-          } else {
-            payloadMcpServers[s.name] = {
-              command: s.command || '',
-              args: s.args || [],
-            };
-            if (s.env && Object.keys(s.env).length > 0) {
-              payloadMcpServers[s.name].env = s.env;
-            }
-          }
-        });
-
-        const payloadData = {
-          mcpServers: payloadMcpServers,
-          managedNames: latestMcpServers.map((s) => s.name),
-        };
+        const latestStore = usePromptWorkbenchStore.getState();
+        const enabledMcpIdsForEditor = latestStore.mcpEnabledServerIdsByEditor[editorId] ?? [];
+        const { enabledServers, payloadData } = buildMcpPayload(enabledMcpIdsForEditor);
 
         const result = await applyMcpToEditorTarget({
           editorId,
@@ -886,7 +1007,7 @@ function AiComposeApp() {
           status: "success",
           message:
             result.action === "updated"
-              ? `已成功写入 ${result.targetPath}，当前共更新 ${enabledMcpLatest.length} 个 MCP 服务。`
+              ? `已成功写入 ${result.targetPath}，当前共更新 ${enabledServers.length} 个 MCP 服务。`
               : result.action === "removed"
                 ? `已从 ${result.targetPath} 清除 AI-COMPOSE 受管 MCP 配置。`
                 : `${result.targetPath} 当前无改动。`,
@@ -912,14 +1033,17 @@ function AiComposeApp() {
     return null;
   };
 
-  const isCurrentEditorEnabled = editorStates[activeEditorId]?.enabled;
+  const isCurrentPromptEditorEnabled = promptEditorStates[activeEditorId]?.enabled ?? false;
 
   const handleApplyClick = async () => {
-    if (!isCurrentEditorEnabled) {
-      messageApi.warning(`请先在左侧侧边栏中启用 ${editorMeta[activeEditorId].title}`);
+    if (activeDomain === "Prompt" && !isCurrentPromptEditorEnabled) {
+      messageApi.warning(`请先在当前配置域中启用 ${editorMeta[activeEditorId].title}`);
       return;
     }
-    const result = await applyToEditor(activeEditorId, true);
+    const result = await applyToEditor(
+      activeEditorId,
+      activeDomain === "MCP" ? enabledMcp.length > 0 : true,
+    );
     if (result) {
       messageApi.success(`已将最新配置成功应用到 ${editorMeta[activeEditorId].title}！`);
     }
@@ -938,16 +1062,7 @@ function AiComposeApp() {
         });
         return;
       }
-    } else if (activeDomain === "MCP") {
-      if (nextEnabled && enabledMcp.length === 0) {
-        setApplyFeedback({
-          status: "error",
-          message: `请至少启用一个 MCP 服务后再启用 ${editorMeta[editorId].title} 配置。`,
-          lastAppliedAt: null,
-        });
-        return;
-      }
-    } else if (activeDomain === "Skills") {
+    } else if (activeDomain === "MCP" || activeDomain === "Skills") {
       return;
     }
 
@@ -968,6 +1083,34 @@ function AiComposeApp() {
     }
   };
 
+  const getDomainEditorCardMeta = (editorId: EditorId) => {
+    if (activeDomain === "Skills") {
+      const linkedSkillsCount = skillsEditorStates[editorId]?.enabledSkills.length ?? 0;
+      return {
+        detail:
+          skillsEditorStates[editorId]?.targetPath || "未检测到 Skills 目标目录",
+        status: linkedSkillsCount > 0 ? `已链接 ${linkedSkillsCount} 项` : "未链接技能",
+      };
+    }
+
+    if (activeDomain === "MCP") {
+      const enabledCount = getEnabledMcpIdsForEditor(editorId).length;
+      return {
+        detail:
+          mcpEditorStates[editorId]?.targetPath || "未检测到 MCP 配置文件",
+        status: enabledCount > 0 ? `已启用 ${enabledCount} 项` : "未启用服务",
+      };
+    }
+
+    return {
+      detail:
+        promptEditorStates[editorId]?.enabled
+          ? "受管 Prompt 已启用"
+          : "点击开关后写入受管 Prompt",
+      status: promptEditorStates[editorId]?.enabled ? "已启用" : "已关闭",
+    };
+  };
+
   return (
     <div className="app-shell">
       {messageContextHolder}
@@ -985,56 +1128,8 @@ function AiComposeApp() {
           </div>
         </header>
 
-        <div className={`workspace-grid${activeDomain === "Skills" ? " workspace-grid--skills" : ""}`}>
+        <div className={`workspace-grid${activeDomain === "Prompt" ? "" : " workspace-grid--skills"}`}>
           <aside className="panel side-nav" aria-label="工作台导航">
-            <section className="side-nav__section">
-              <h2 className="side-nav__label">编辑器</h2>
-              <div className="side-nav__items">
-                {(Object.keys(editorMeta) as EditorId[]).map((editorId) => (
-                  <div
-                    key={editorId}
-                    className={`side-nav__item side-nav__item--editor${
-                      activeEditorId === editorId
-                        ? " side-nav__item--active"
-                        : ""
-                    }`}
-                  >
-                    <button
-                      className="side-nav__item-select"
-                      onClick={() => selectEditor(editorId)}
-                      type="button"
-                    >
-                      <div className="side-nav__item-main">
-                        <span>{editorMeta[editorId].title}</span>
-                        {showEditorToggle ? (
-                          <span className="side-nav__item-state">
-                            {editorStates[editorId].enabled ? "已启用" : "已关闭"}
-                          </span>
-                        ) : null}
-                      </div>
-                    </button>
-                    {showEditorToggle ? (
-                      <button
-                        aria-pressed={editorStates[editorId].enabled}
-                        className={`editor-toggle${
-                          editorStates[editorId].enabled
-                            ? " editor-toggle--enabled"
-                            : ""
-                        }`}
-                        disabled={isHydratingEditorStates}
-                        onClick={() => {
-                          void handleToggleEditor(editorId);
-                        }}
-                        type="button"
-                      >
-                        <span className="editor-toggle__thumb" />
-                      </button>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            </section>
-
             <section className="side-nav__section">
               <h2 className="side-nav__label">配置域</h2>
               <div className="side-nav__items">
@@ -1062,7 +1157,86 @@ function AiComposeApp() {
             </section>
           </aside>
 
-          <main className={`workbench${activeDomain === "Skills" ? " workbench--skills" : ""}`}>
+          <main className={`workbench${activeDomain === "Prompt" ? " workbench--with-editor-panel" : " workbench--skills"}`}>
+            {activeDomain === "Prompt" ? (
+              <section
+                className="panel domain-editor-panel"
+                aria-labelledby="domain-editor-panel-title"
+              >
+                <div className="panel__header">
+                  <div>
+                    <h2 className="panel__title" id="domain-editor-panel-title">
+                      当前配置域编辑器
+                    </h2>
+                    <p className="panel__subtitle">
+                      先选择目标编辑器，再分别开关每个编辑器的 Prompt 受管配置。
+                    </p>
+                  </div>
+                  <span className="chip chip--accent">
+                    当前 {editorMeta[activeEditorId].title}
+                  </span>
+                </div>
+
+                <div className="domain-editor-panel__grid">
+                  {editorIds.map((editorId) => {
+                    const isSelected = activeEditorId === editorId;
+                    const { detail, status } = getDomainEditorCardMeta(editorId);
+
+                    return (
+                      <div
+                        key={editorId}
+                        className={`domain-editor-card${
+                          isSelected ? " domain-editor-card--active" : ""
+                        }`}
+                      >
+                        <button
+                          className="domain-editor-card__select"
+                          onClick={() => selectEditor(editorId)}
+                          type="button"
+                        >
+                          <div className="domain-editor-card__title-row">
+                            <span className="domain-editor-card__title">
+                              {editorMeta[editorId].title}
+                            </span>
+                            {isSelected ? (
+                              <span className="domain-editor-card__badge">
+                                当前查看
+                              </span>
+                            ) : null}
+                          </div>
+                          <span className="domain-editor-card__status">{status}</span>
+                          <span
+                            className="domain-editor-card__detail"
+                            title={detail}
+                          >
+                            {detail}
+                          </span>
+                        </button>
+
+                        {canToggleEditorsInDomain ? (
+                          <button
+                            aria-pressed={editorStates[editorId].enabled}
+                            className={`editor-toggle${
+                              editorStates[editorId].enabled
+                                ? " editor-toggle--enabled"
+                                : ""
+                            }`}
+                            disabled={isHydratingEditorStates}
+                            onClick={() => {
+                              void handleToggleEditor(editorId);
+                            }}
+                            type="button"
+                          >
+                            <span className="editor-toggle__thumb" />
+                          </button>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
+
             {activeDomain === "Prompt" ? (
               <>
                 <section
@@ -1196,51 +1370,48 @@ function AiComposeApp() {
                   <div className="fragment-list__items">
                     {mcpServers.map((server) => {
                       const isSelected = server.id === selectedMcpServerId;
-                      const isEnabled = server.enabled;
+                      const enabledCount = editorIds.filter((editorId) =>
+                        isMcpEnabledForEditor(editorId, server.id),
+                      ).length;
 
                       return (
-                        <button
+                        <div
                           key={server.id}
                           className={`fragment-list__item${
                             isSelected ? " fragment-list__item--selected" : ""
                           }`}
-                          onClick={() => selectMcpServer(server.id)}
-                          type="button"
                         >
-                          <div className="fragment-list__item-main">
-                            <div className="fragment-list__item-title-row" style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-                              <span className="fragment-list__item-title" style={{ margin: 0 }}>
-                                {server.name}
-                              </span>
-                              <span className={`mcp-source-badge mcp-source-badge--${server.source}`}>
-                                {server.source === "preset"
-                                  ? "官方"
-                                  : server.source === "external"
-                                  ? "本地配置"
-                                  : "自定义"}
-                              </span>
+                          <button
+                            className="fragment-list__item-select"
+                            onClick={() => selectMcpServer(server.id)}
+                            type="button"
+                          >
+                            <div className="fragment-list__item-main">
+                              <div className="fragment-list__item-title-row" style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                                <span className="fragment-list__item-title" style={{ margin: 0 }}>
+                                  {server.name}
+                                </span>
+                                <span className={`mcp-source-badge mcp-source-badge--${server.source}`}>
+                                  {server.source === "preset"
+                                    ? "官方"
+                                    : server.source === "external"
+                                    ? "本地配置"
+                                    : "自定义"}
+                                </span>
+                              </div>
+                              <div className="fragment-list__item-meta-row">
+                                <span className="fragment-list__item-meta">
+                                  {server.transportType === 'http'
+                                    ? server.url
+                                    : `${(server.args ?? []).length} 个参数`}
+                                </span>
+                              </div>
                             </div>
-                            <div className="fragment-list__item-meta-row">
-                              <span className="fragment-list__item-meta">
-                                {server.transportType === 'http'
-                                  ? server.url
-                                  : `${(server.args ?? []).length} 个参数`}
-                              </span>
-                            </div>
-                          </div>
-
+                          </button>
                           <span className="fragment-list__toggle">
-                            <span
-                              aria-hidden="true"
-                              className={`fragment-list__toggle-dot${
-                                isEnabled
-                                  ? " fragment-list__toggle-dot--enabled"
-                                  : ""
-                              }`}
-                            />
-                            {isEnabled ? "已启用" : "未启用"}
+                            {enabledCount} / {editorIds.length} 已启用
                           </span>
-                        </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -1268,19 +1439,39 @@ function AiComposeApp() {
                           外部手动配置 (只读)
                         </span>
                       ) : (
-                        <button
-                          className={`fragment-action-btn${
-                            selectedMcpServer.enabled
-                              ? " fragment-action-btn--active"
-                              : ""
-                          }`}
-                          onClick={() => toggleMcpServer(selectedMcpServer.id)}
-                          type="button"
-                        >
-                          {selectedMcpServer.enabled
-                            ? "从最终 MCP 移除"
-                            : "加入最终 MCP"}
-                        </button>
+                        <div className="mcp-detail-switches">
+                          <span className="mcp-detail-switches__hint">
+                            仅控制当前 MCP 在各编辑器中的启用状态
+                          </span>
+                          <div className="per-editor-switches per-editor-switches--detail">
+                            {editorIds.map((editorId) => {
+                              const isEnabled = isMcpEnabledForEditor(editorId, selectedMcpServer.id);
+
+                              return (
+                                <button
+                                  key={`detail-${selectedMcpServer.id}-${editorId}`}
+                                  type="button"
+                                  className={`per-editor-switch${
+                                    isEnabled ? " per-editor-switch--enabled" : ""
+                                  }`}
+                                  aria-pressed={isEnabled}
+                                  disabled={pendingMcpToggleKey === `${editorId}:${selectedMcpServer.id}`}
+                                  onClick={() => {
+                                    void handleMcpEditorToggle(editorId, selectedMcpServer.id);
+                                  }}
+                                  title={`${editorMeta[editorId].title}${isEnabled ? " 已启用" : " 未启用"}`}
+                                >
+                                  <span className="per-editor-switch__label">
+                                    {editorMeta[editorId].title}
+                                  </span>
+                                  <span className="per-editor-switch__track">
+                                    <span className="per-editor-switch__thumb" />
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
                       )
                     )}
                   </div>
@@ -2196,9 +2387,8 @@ function AiComposeApp() {
             )}
           </main>
 
-          {activeDomain !== "Skills" ? (
+          {activeDomain === "Prompt" ? (
           <aside className="preview-column">
-            {activeDomain === "Prompt" ? (
               <section
                 className="panel preview-card"
                 aria-labelledby="preview-title"
@@ -2213,10 +2403,10 @@ function AiComposeApp() {
                     </p>
                   </div>
                   <button
-                    className={`preview-apply-btn${isCurrentEditorEnabled && applyStatus !== "pending" ? "" : " preview-apply-btn--disabled"}`}
+                    className={`preview-apply-btn${isCurrentPromptEditorEnabled && applyStatus !== "pending" ? "" : " preview-apply-btn--disabled"}`}
                     onClick={handleApplyClick}
-                    disabled={!isCurrentEditorEnabled || applyStatus === "pending"}
-                    title={isCurrentEditorEnabled ? `应用 Prompt 配置到 ${editorMeta[activeEditorId].title}` : `请先启用左侧 ${editorMeta[activeEditorId].title}`}
+                    disabled={!isCurrentPromptEditorEnabled || applyStatus === "pending"}
+                    title={isCurrentPromptEditorEnabled ? `应用 Prompt 配置到 ${editorMeta[activeEditorId].title}` : `请先启用当前配置域中的 ${editorMeta[activeEditorId].title}`}
                   >
                     {applyStatus === "pending" ? "正在应用..." : "应用配置"}
                   </button>
@@ -2247,108 +2437,6 @@ function AiComposeApp() {
                   )}
                 </div>
               </section>
-            ) : activeDomain === "MCP" ? (
-              <section
-                className="panel preview-card"
-                aria-labelledby="preview-title"
-              >
-                <div className="panel__header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
-                  <div>
-                    <h2 className="panel__title" id="preview-title">
-                      最终 MCP 配置预览
-                    </h2>
-                    <p className="panel__subtitle">
-                      右侧始终展示当前启用 MCP 服务的最终 {activeEditorId === "codex" ? "TOML" : "JSON"} 配置。
-                    </p>
-                  </div>
-                  <button
-                    className={`preview-apply-btn${isCurrentEditorEnabled && applyStatus !== "pending" ? "" : " preview-apply-btn--disabled"}`}
-                    onClick={handleApplyClick}
-                    disabled={!isCurrentEditorEnabled || applyStatus === "pending"}
-                    title={isCurrentEditorEnabled ? `应用 MCP 配置到 ${editorMeta[activeEditorId].title}` : `请先启用左侧 ${editorMeta[activeEditorId].title}`}
-                  >
-                    {applyStatus === "pending" ? "正在应用..." : "应用配置"}
-                  </button>
-                </div>
-
-                <div className="preview-card__body" style={{ padding: "0 16px 16px 16px" }}>
-                  {enabledMcp.length === 0 ? (
-                    <p className="preview-card__empty">
-                      还没有启用任何 MCP 服务。请先从中间工作区选择要纳入的配置。
-                    </p>
-                  ) : (
-                    <pre
-                      style={{
-                        background: "rgba(0, 0, 0, 0.2)",
-                        padding: "12px",
-                        borderRadius: "8px",
-                        overflowX: "auto",
-                        maxWidth: "100%",
-                        fontFamily: "monospace",
-                        fontSize: "13px",
-                        color: "var(--text-bright)",
-                        lineHeight: 1.5,
-                      }}
-                    >
-                      <code>{activeEditorId === "codex" ? generatedMcpToml : generatedMcpJson}</code>
-                    </pre>
-                  )}
-                </div>
-              </section>
-            ) : (
-              <section
-                className="panel preview-card"
-                aria-labelledby="preview-title"
-              >
-                <div className="panel__header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
-                  <div>
-                    <h2 className="panel__title" id="preview-title">
-                      Skills 链接预览
-                    </h2>
-                    <p className="panel__subtitle">
-                      展示当前 {editorMeta[activeEditorId].title} 已链接的技能软链接。
-                    </p>
-                  </div>
-                </div>
-
-                <div className="preview-card__body" style={{ padding: "0 16px 16px 16px" }}>
-                  {activeEnabledSkillIds.length === 0 ? (
-                    <p className="preview-card__empty">
-                      当前未在此编辑器中链接任何技能。
-                    </p>
-                  ) : (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                      <p style={{ fontSize: "12px", color: "var(--text-faint)", margin: 0 }}>
-                        目标路径: <strong>{skillsEditorStates[activeEditorId]?.targetPath || "—"}</strong>
-                      </p>
-                      {activeEnabledSkillIds.map((skillId) => {
-                        const skill = skills.find((s) => s.id === skillId);
-                        return (
-                          <div
-                            key={skillId}
-                            style={{
-                              background: "rgba(0, 0, 0, 0.15)",
-                              padding: "10px 12px",
-                              borderRadius: "8px",
-                              fontSize: "13px",
-                              color: "var(--text-bright)",
-                              fontFamily: "monospace",
-                            }}
-                          >
-                            <div style={{ fontWeight: 600, marginBottom: "4px" }}>
-                              {skill?.name ?? skillId}
-                            </div>
-                            <div style={{ fontSize: "11px", color: "var(--text-faint)", wordBreak: "break-all" }}>
-                              {skill?.path ?? "未知路径"} → {skillsEditorStates[activeEditorId]?.targetPath}/{skillId}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </section>
-            )}
           </aside>
           ) : null}
         </div>
