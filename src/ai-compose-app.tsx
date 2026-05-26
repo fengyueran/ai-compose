@@ -22,7 +22,6 @@ import {
   normalizeRepoSource,
   type EditorId,
   type SkillInfo,
-  type SkillSource,
   isTauriRuntime,
 } from "./editor-target-command";
 import { composeManagedPromptBlock } from "./compose-prompt";
@@ -239,18 +238,12 @@ function AiComposeApp() {
     [skills, selectedSkillId],
   );
 
-  const builtinSkills = useMemo(
-    () => skills.filter((skill) => skill.isBuiltin),
-    [skills],
-  );
   const installedSkills = useMemo(
     () => skills.filter((skill) => skill.installed !== false),
     [skills],
   );
 
-  const [skillsRepoInput, setSkillsRepoInput] = useState("");
   const [isAddingSkillsRepo, setIsAddingSkillsRepo] = useState(false);
-  const [installHint, setInstallHint] = useState("");
   const [isUpdatingSkill, setIsUpdatingSkill] = useState(false);
   const [isRemovingSkill, setIsRemovingSkill] = useState(false);
   const [skillsQuery, setSkillsQuery] = useState("");
@@ -1892,8 +1885,7 @@ function AiComposeApp() {
                         </div>
                         <div className="skills-detail-pane__actions">
                           {canInstallSelectedSkill ? (
-                            <>
-                             <Button
+                            <Button
                               type="button"
                               className={`fragment-action-btn${isAddingSkillsRepo ? " fragment-action-btn--loading" : ""}`}
                               disabled={isAddingSkillsRepo}
@@ -1904,7 +1896,6 @@ function AiComposeApp() {
                                 const skillName = selectedSkill.name;
                                 const needsInstall = selectedSkill.installed === false;
                                 setIsAddingSkillsRepo(true);
-                                setInstallHint("");
                                 const INSTALL_TIMEOUT_MS = 90_000;
                                 try {
                                   let skillPath = selectedSkill.path;
@@ -1912,7 +1903,6 @@ function AiComposeApp() {
                                     if (!selectedSkill.repoSource) {
                                       throw new Error("缺少可安装的技能来源。");
                                     }
-                                    setInstallHint("正在下载安装，通常需要 30～60 秒…");
                                     const timeoutPromise = new Promise<never>((_, reject) =>
                                       setTimeout(() => reject(new Error("安装超时（超过 90 秒），请检查网络或稍后重试。")), INSTALL_TIMEOUT_MS)
                                     );
@@ -1920,7 +1910,6 @@ function AiComposeApp() {
                                       addSkillsRepository(selectedSkill.repoSource),
                                       timeoutPromise,
                                     ]);
-                                    setInstallHint("安装完成，正在链接到当前编辑器…");
                                     const installedSkill = installedSkills.find((skill) =>
                                       isPresetSkillMatch(skill.id, skillId),
                                     );
@@ -1953,12 +1942,7 @@ function AiComposeApp() {
                             >
                               安装
                             </Button>
-                            {isAddingSkillsRepo && installHint && (
-                              <span style={{ fontSize: "12px", color: "var(--text-faint)", alignSelf: "center", whiteSpace: "nowrap" }}>
-                                {installHint}
-                              </span>
-                            )}
-                          </>) : (
+                          ) : (
                             <>
                               <Button
                                 type="button"
