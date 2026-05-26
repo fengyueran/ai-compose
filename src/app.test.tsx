@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, test, vi } from 'vitest'
 
 import AiComposeApp from './ai-compose-app'
-import { addSkillsRepository, applySkillsToEditorTarget, linkSkillToEditor, loadEditorInstalledSkills, loadEditorMcpStates, loadEditorSkillsStates, loadEditorTargetStates, loadPhysicalSkills, loadSingleSkill, openExternalUrl, openLocalPath, revealLocalPath, removeSkill, unlinkSkillFromEditor, updateSkill } from './editor-target-command'
+import { addSkillsRepository, applySkillsToEditorTarget, linkSkillToEditor, loadEditorInstalledSkills, loadEditorMcpStates, loadEditorSkillsStates, loadEditorTargetStates, loadSingleSkill, openExternalUrl, openLocalPath, revealLocalPath, removeSkill, unlinkSkillFromEditor, updateSkill } from './editor-target-command'
 import { usePromptWorkbenchStore } from './prompt-workbench-store'
 
 vi.mock('./editor-target-command', async () => {
@@ -16,7 +16,6 @@ vi.mock('./editor-target-command', async () => {
     loadEditorMcpStates: vi.fn(),
     loadEditorSkillsStates: vi.fn(),
     loadEditorTargetStates: vi.fn(),
-    loadPhysicalSkills: vi.fn(),
     loadSingleSkill: vi.fn(),
     openExternalUrl: vi.fn(),
     openLocalPath: vi.fn(),
@@ -198,7 +197,7 @@ describe('Prompt Workbench', () => {
 
     expect(screen.getByText(/官方 Skills 0 项 · 当前编辑器已安装 2 项/)).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '本地 Skills' })).toBeInTheDocument()
-    expect(screen.getAllByText('本地已安装').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('本地').length).toBeGreaterThan(0)
     expect(screen.queryByText('skills.sh')).not.toBeInTheDocument()
     expect(screen.getByText(/Scanned from an editor target directory/)).toBeInTheDocument()
 
@@ -218,7 +217,7 @@ describe('Prompt Workbench', () => {
     const filterSelect = screen.getByRole('combobox')
     await userEvent.click(filterSelect)
 
-    // Check filter by '本地已安装'
+    // Check filter by '本地目录'
     await userEvent.click(screen.getByRole('option', { name: '本地目录' }))
     expect(screen.getByRole('button', { name: /Local Scan Skill/ })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /CLI Skill/ })).not.toBeInTheDocument()
@@ -347,17 +346,6 @@ describe('Prompt Workbench', () => {
       codex: { enabled: false, targetPath: '', enabledSkills: [] },
       cursor: { enabled: true, targetPath: '/Users/test/.cursor/skills', enabledSkills: ['react-development'] },
     })
-    vi.mocked(loadPhysicalSkills).mockResolvedValue([
-      {
-        id: 'react-development',
-        name: 'react-development',
-        description: 'Installed from a custom repo',
-        content: '# react-development',
-        path: '/Users/test/.agents/skills/react-development',
-        sourceKind: 'cli',
-        repoSource: 'fengyueran/skills',
-      },
-    ])
     vi.mocked(loadEditorInstalledSkills).mockResolvedValue([
       {
         id: 'react-development',
@@ -428,17 +416,6 @@ describe('Prompt Workbench', () => {
       codex: { enabled: false, targetPath: '', enabledSkills: [] },
       cursor: { enabled: true, targetPath: '/Users/test/.cursor/skills', enabledSkills: ['react-development'] },
     })
-    vi.mocked(loadPhysicalSkills).mockResolvedValue([
-      {
-        id: 'react-development',
-        name: 'react-development',
-        description: 'Installed from a custom repo',
-        content: '# react-development',
-        path: '/Users/test/.agents/skills/react-development',
-        sourceKind: 'cli',
-        repoSource: 'fengyueran/skills',
-      },
-    ])
     vi.mocked(loadEditorInstalledSkills).mockResolvedValue([
       {
         id: 'react-development',
@@ -573,24 +550,6 @@ describe('Prompt Workbench', () => {
       codex: { enabled: false, targetPath: '', enabledSkills: [] },
       cursor: { enabled: true, targetPath: '/Users/test/.cursor/skills', enabledSkills: ['keep-skill'] },
     })
-    vi.mocked(loadPhysicalSkills).mockResolvedValue([
-      {
-        id: 'linked-skill',
-        name: 'Linked Skill',
-        description: 'Managed by skills.sh',
-        content: '# Linked Skill',
-        path: '/Users/test/.agents/skills/linked-skill',
-        sourceKind: 'cli',
-      },
-      {
-        id: 'keep-skill',
-        name: 'Keep Skill',
-        description: 'Managed by skills.sh',
-        content: '# Keep Skill',
-        path: '/Users/test/.agents/skills/keep-skill',
-        sourceKind: 'cli',
-      },
-    ])
     vi.mocked(loadEditorInstalledSkills).mockResolvedValue([
       {
         id: 'keep-skill',
@@ -650,12 +609,12 @@ describe('Prompt Workbench', () => {
       skillId: 'linked-skill',
     })
     expect(usePromptWorkbenchStore.getState().skillsEditorStates.cursor.enabledSkills).toEqual(['keep-skill'])
-    expect(usePromptWorkbenchStore.getState().skills.find((skill) => skill.id === 'linked-skill')).toBeDefined()
     expect(usePromptWorkbenchStore.getState().skills.find((skill) => skill.id === 'keep-skill')).toBeDefined()
+    expect(usePromptWorkbenchStore.getState().skills.find((skill) => skill.id === 'linked-skill')).toBeUndefined()
     expect(usePromptWorkbenchStore.getState().skills.find((skill) => skill.id === 'ui-ux-pro-max')?.installed).toBe(false)
   })
 
-  test('keeps globally installed third-party skills visible while current editor install count follows editor directory state', async () => {
+  test('shows only skills linked to the current editor even when other third-party skills exist globally', async () => {
     ;(window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {}
     vi.mocked(loadEditorTargetStates).mockResolvedValue({
       antigravity: { enabled: false, targetPath: '' },
@@ -672,25 +631,6 @@ describe('Prompt Workbench', () => {
       codex: { enabled: false, targetPath: '', enabledSkills: [] },
       cursor: { enabled: true, targetPath: '/Users/test/.cursor/skills', enabledSkills: ['linked-skill'] },
     })
-    vi.mocked(loadPhysicalSkills).mockResolvedValue([
-      {
-        id: 'linked-skill',
-        name: 'Linked Skill',
-        description: 'Managed by skills.sh',
-        content: '# Linked Skill',
-        path: '/Users/test/.agents/skills/linked-skill',
-        sourceKind: 'cli',
-      },
-      {
-        id: 'global-third-party-skill',
-        name: 'Global Third Party Skill',
-        description: 'Installed globally but not linked to current editor',
-        content: '# Global Third Party Skill',
-        path: '/Users/test/.agents/skills/global-third-party-skill',
-        sourceKind: 'cli',
-        repoSource: 'fengyueran/skills',
-      },
-    ])
     vi.mocked(loadEditorInstalledSkills).mockResolvedValue([
       {
         id: 'linked-skill',
@@ -723,6 +663,15 @@ describe('Prompt Workbench', () => {
           path: '/Users/test/.agents/skills/linked-skill',
           sourceKind: 'cli',
         },
+        {
+          id: 'global-third-party-skill',
+          name: 'Global Third Party Skill',
+          description: 'Installed globally but not linked to current editor',
+          content: '# Global Third Party Skill',
+          path: '/Users/test/.agents/skills/global-third-party-skill',
+          sourceKind: 'cli',
+          repoSource: 'fengyueran/skills',
+        },
       ],
       selectedSkillId: 'linked-skill',
       isHydratingEditorStates: false,
@@ -732,8 +681,9 @@ describe('Prompt Workbench', () => {
 
     expect(addSkillsRepository).not.toHaveBeenCalled()
     expect(applySkillsToEditorTarget).not.toHaveBeenCalled()
-    expect(await screen.findByText(/官方 Skills 0 项 · 当前编辑器已安装 1 项/)).toBeInTheDocument()
-    expect(await screen.findByRole('button', { name: /Global Third Party Skill/ })).toBeInTheDocument()
+    expect(await screen.findByText(/当前编辑器已安装 1 项/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Linked Skill/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Global Third Party Skill/ })).not.toBeInTheDocument()
     expect(usePromptWorkbenchStore.getState().skillsEditorStates.cursor.enabledSkills).toEqual(['linked-skill'])
 
     delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
@@ -761,16 +711,6 @@ describe('Prompt Workbench', () => {
       codex: { enabled: false, targetPath: '', enabledSkills: [] },
       cursor: { enabled: true, targetPath: '/Users/test/.cursor/skills', enabledSkills: ['find-skills'] },
     })
-    vi.mocked(loadPhysicalSkills).mockResolvedValue([
-      {
-        id: 'find-skills',
-        name: 'find-skills',
-        description: 'builtin preset installed',
-        content: '# find-skills latest',
-        path: '/Users/test/.agents/skills/find-skills',
-        sourceKind: 'cli',
-      },
-    ])
     vi.mocked(loadEditorInstalledSkills).mockResolvedValue([
       {
         id: 'find-skills',
@@ -810,7 +750,6 @@ describe('Prompt Workbench', () => {
 
     expect(addSkillsRepository).toHaveBeenCalledWith('vercel-labs/skills')
     expect(applySkillsToEditorTarget).not.toHaveBeenCalled()
-    expect(loadPhysicalSkills).toHaveBeenCalled()
     expect(linkSkillToEditor).toHaveBeenCalledWith({
       editorId: 'cursor',
       skillId: 'find-skills',
@@ -852,24 +791,6 @@ describe('Prompt Workbench', () => {
       codex: { enabled: false, targetPath: '', enabledSkills: [] },
       cursor: { enabled: true, targetPath: '/Users/test/.cursor/skills', enabledSkills: ['find-skills', 'frontend-design'] },
     })
-    vi.mocked(loadPhysicalSkills).mockResolvedValue([
-      {
-        id: 'find-skills',
-        name: 'find-skills',
-        description: 'builtin preset installed',
-        content: '# find-skills latest',
-        path: '/Users/test/.agents/skills/find-skills',
-        sourceKind: 'cli',
-      },
-      {
-        id: 'frontend-design',
-        name: 'frontend-design',
-        description: 'frontend design',
-        content: '# frontend-design latest',
-        path: '/Users/test/.agents/skills/frontend-design',
-        sourceKind: 'cli',
-      },
-    ])
     vi.mocked(loadEditorInstalledSkills).mockResolvedValue([
       {
         id: 'find-skills',
@@ -916,7 +837,6 @@ describe('Prompt Workbench', () => {
     await userEvent.click(screen.getByRole('button', { name: '安装' }))
 
     expect(addSkillsRepository).toHaveBeenCalledWith('vercel-labs/skills')
-    expect(loadPhysicalSkills).toHaveBeenCalled()
     expect(linkSkillToEditor).toHaveBeenCalledTimes(2)
     expect(usePromptWorkbenchStore.getState().skills.find((skill) => skill.id === 'find-skills')?.installed).toBe(true)
     expect(usePromptWorkbenchStore.getState().skills.find((skill) => skill.id === 'frontend-design')?.installed).toBe(true)
@@ -924,7 +844,27 @@ describe('Prompt Workbench', () => {
   })
 
   test('updates only the selected skill metadata without reloading the full skills list', async () => {
+    vi.mocked(loadEditorTargetStates).mockResolvedValue({
+      antigravity: { enabled: false, targetPath: '' },
+      codex: { enabled: false, targetPath: '' },
+      cursor: { enabled: true, targetPath: '/Users/test/.cursor/AGENTS.md' },
+    } as never)
+    vi.mocked(loadEditorMcpStates).mockResolvedValue({
+      antigravity: { enabled: false, targetPath: '' },
+      codex: { enabled: false, targetPath: '' },
+      cursor: { enabled: false, targetPath: '' },
+    } as never)
     vi.mocked(updateSkill).mockResolvedValue('ok')
+    vi.mocked(loadEditorInstalledSkills).mockResolvedValue([
+      {
+        id: 'linked-skill',
+        name: 'Linked Skill',
+        description: 'Managed by skills.sh',
+        content: '# Linked Skill',
+        path: '/Users/test/.agents/skills/linked-skill',
+        sourceKind: 'cli',
+      },
+    ])
     vi.mocked(loadSingleSkill).mockResolvedValue({
       id: 'linked-skill',
       name: 'Linked Skill',
@@ -963,7 +903,7 @@ describe('Prompt Workbench', () => {
 
     render(<AiComposeApp />)
 
-    await userEvent.click(screen.getByRole('button', { name: /Linked Skill/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /Linked Skill/ }))
     const dialog = screen.getByRole('dialog')
     await userEvent.click(within(dialog).getByRole('button', { name: '更新' }))
 
@@ -973,7 +913,6 @@ describe('Prompt Workbench', () => {
       path: '/Users/test/.agents/skills/linked-skill',
       sourceKind: 'cli',
     })
-    expect(loadPhysicalSkills).not.toHaveBeenCalled()
     expect(usePromptWorkbenchStore.getState().skills.find((skill) => skill.id === 'linked-skill')?.description).toBe('Updated description')
   })
 })

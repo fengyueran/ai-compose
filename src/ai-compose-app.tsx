@@ -6,7 +6,6 @@ import {
   loadEditorTargetStates,
   applyMcpToEditorTarget,
   loadEditorMcpStates,
-  loadPhysicalSkills,
   loadEditorSkillsStates,
   loadEditorInstalledSkills,
   addSkillsRepository,
@@ -62,7 +61,7 @@ function getSkillSourceBadgeMeta(skill: SkillInfo): { text: string; className: s
   if (source === "repository") {
     return { text: "第三方", className: "skill-source-badge--repository" };
   }
-  return { text: "本地已安装", className: "skill-source-badge--readonly" };
+  return { text: "本地", className: "skill-source-badge--readonly" };
 }
 
 function getSkillRepoUrl(repoSource: string): string {
@@ -96,23 +95,6 @@ async function revealSkillLocalPath(path: string): Promise<void> {
     ? normalizedPath.slice(0, normalizedPath.lastIndexOf("/")) || "/"
     : normalizedPath;
   window.open(`file://${parentPath}`, "_blank", "noopener,noreferrer");
-}
-
-async function loadVisibleSkillsForEditor(editorId: EditorId): Promise<SkillInfo[]> {
-  const [globalSkills, editorInstalledSkills] = await Promise.all([
-    loadPhysicalSkills(),
-    loadEditorInstalledSkills({ editorId }),
-  ]);
-  const mergedSkills = new Map<string, SkillInfo>();
-
-  for (const skill of globalSkills) {
-    mergedSkills.set(skill.id, skill);
-  }
-  for (const skill of editorInstalledSkills) {
-    mergedSkills.set(skill.id, skill);
-  }
-
-  return Array.from(mergedSkills.values());
 }
 
 const editorMeta: Record<
@@ -380,7 +362,6 @@ function AiComposeApp() {
 
   const activeSkillsTargetPath = skillsEditorStates[activeEditorId]?.targetPath ?? "";
   const activeEnabledSkillIds = skillsEditorStates[activeEditorId]?.enabledSkills ?? [];
-  const currentEditorInstalledCount = activeEnabledSkillIds.length;
   const selectedSkillTargetLink = selectedSkill && activeSkillsTargetPath
     ? `${activeSkillsTargetPath}/${selectedSkill.id}`
     : "";
@@ -402,9 +383,9 @@ function AiComposeApp() {
   const shouldShowSelectedSkillSourceBadge = Boolean(selectedSkill);
 
   const refreshCurrentEditorSkills = async (editorId: EditorId) => {
-    const visibleSkills = await loadVisibleSkillsForEditor(editorId);
-    setSkillsList(visibleSkills);
-    return visibleSkills;
+    const installedSkills = await loadEditorInstalledSkills({ editorId });
+    setSkillsList(installedSkills);
+    return installedSkills;
   };
 
   const renderSkillRow = (skill: typeof skills[number]) => {
@@ -639,7 +620,7 @@ function AiComposeApp() {
 
       setIsSkillsListLoading(true);
       try {
-        const installedSkills = await loadVisibleSkillsForEditor(activeEditorId);
+        const installedSkills = await loadEditorInstalledSkills({ editorId: activeEditorId });
         if (!isSubscribed) {
           return;
         }
@@ -1560,7 +1541,7 @@ function AiComposeApp() {
                 <div className="skills-manager__body">
                   <div className="skills-list-pane">
                     <div className="skills-list-pane__summary">
-                      <span>官方 Skills {builtinSkills.length} 项 · 当前编辑器已安装 {currentEditorInstalledCount} 项</span>
+                      <span>官方 Skills {builtinSkills.length} 项 · 当前编辑器已安装 {installedSkills.length} 项</span>
                       <span>目标：{activeSkillsTargetPath || "未检测到目标路径"}</span>
                     </div>
 
