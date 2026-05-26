@@ -198,7 +198,7 @@ export async function removeSkill(skillId: string): Promise<string> {
 
 export interface SkillSource {
   id: string
-  type: 'preset' | 'repo' | 'local'
+  type: 'all' | 'preset' | 'repo' | 'local'
   name: string
   value: string
 }

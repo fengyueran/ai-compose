@@ -352,6 +352,47 @@ describe('Prompt Workbench', () => {
     delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
   })
 
+  test('renders third-party badge for skills installed from custom repositories', () => {
+    usePromptWorkbenchStore.setState({
+      activeDomain: 'Skills',
+      activeEditorId: 'cursor',
+      editorStates: {
+        antigravity: { enabled: false, targetPath: '', enabledSkills: [] },
+        codex: { enabled: false, targetPath: '', enabledSkills: [] },
+        cursor: { enabled: true, targetPath: '/Users/test/.cursor/skills', enabledSkills: ['react-development'] },
+      },
+      skillsEditorStates: {
+        antigravity: { enabled: false, targetPath: '', enabledSkills: [] },
+        codex: { enabled: false, targetPath: '', enabledSkills: [] },
+        cursor: { enabled: true, targetPath: '/Users/test/.cursor/skills', enabledSkills: ['react-development'] },
+      },
+      skillSources: [
+        { id: 'preset', type: 'preset', name: '官方预设', value: '' },
+        { id: 'repo:fengyueran/skills', type: 'repo', name: 'fengyueran/skills', value: 'fengyueran/skills' }
+      ],
+      selectedSkillSourceId: 'repo:fengyueran/skills',
+      skills: [
+        {
+          id: 'react-development',
+          name: 'react-development',
+          description: 'Installed from a custom repo',
+          content: '# react-development',
+          path: '/Users/test/.agents/skills/react-development',
+          sourceKind: 'cli',
+          repoSource: 'fengyueran/skills',
+        },
+      ],
+      selectedSkillId: 'react-development',
+      isHydratingEditorStates: false,
+    })
+
+    render(<AiComposeApp />)
+
+    const skillRow = screen.getByRole('button', { name: /react-development/ })
+    expect(within(skillRow).getByText('第三方')).toBeInTheDocument()
+    expect(within(skillRow).queryByText('fengyueran/skills')).not.toBeInTheDocument()
+  })
+
   test('renders physical source path and target link path as clickable local paths in skill details', async () => {
     ;(window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {}
     vi.mocked(loadEditorTargetStates).mockResolvedValue({
@@ -878,4 +919,3 @@ describe('Prompt Workbench', () => {
     expect(addedSource?.value).toBe('/Users/test/.cursor/skills')
   })
 })
-

@@ -38,32 +38,44 @@ const configurationDomains = [
 
 type SkillsFilter = "all" | "linked" | "unlinked";
 
-type SkillDisplaySource = "official" | "repository" | "local";
-
 const skillsFilterOptions: SelectOption[] = [
   { label: "全部", value: "all" },
   { label: "已链接", value: "linked" },
   { label: "未链接", value: "unlinked" },
 ];
 
-function getSkillDisplaySource(skill: SkillInfo): SkillDisplaySource {
+function getSkillSourceBadgeMeta(
+  skill: SkillInfo,
+  skillSources: import("./editor-target-command").SkillSource[],
+): { text: string; className: string } {
+  // 官方预设
   if (skill.isBuiltin) {
-    return "official";
-  }
-  if (skill.sourceKind === "cli") {
-    return "repository";
-  }
-  return "local";
-}
-
-function getSkillSourceBadgeMeta(skill: SkillInfo): { text: string; className: string } {
-  const source = getSkillDisplaySource(skill);
-  if (source === "official") {
     return { text: "官方", className: "skill-source-badge--builtin" };
   }
-  if (source === "repository") {
+
+  // 匹配用户自定义 repo 源
+  const matchedRepo = skillSources.find(
+    (src) =>
+      src.type === "repo" &&
+      skill.repoSource &&
+      normalizeRepoSource(skill.repoSource) === normalizeRepoSource(src.value),
+  );
+  if (matchedRepo) {
     return { text: "第三方", className: "skill-source-badge--repository" };
   }
+
+  // 匹配用户自定义本地源
+  const matchedLocal = skillSources.find(
+    (src) =>
+      src.type === "local" &&
+      skill.path &&
+      skill.path.toLowerCase().startsWith(src.value.toLowerCase()),
+  );
+  if (matchedLocal) {
+    return { text: matchedLocal.name || "本地", className: "skill-source-badge--readonly" };
+  }
+
+  // 其他（全局 CLI 安装等）——不打带子，使用空白并起到占位
   return { text: "本地", className: "skill-source-badge--readonly" };
 }
 
@@ -335,8 +347,14 @@ function AiComposeApp() {
     const normalizedQuery = skillsQuery.trim().toLowerCase();
 
     return skills.filter((skill) => {
+      // 0. 基础范围：只显示官方预设 或 已链接到当前编辑器的技能
+      const isLinked = activeEnabledSkillIds.includes(skill.id);
+      if (!skill.isBuiltin && !isLinked) return false;
+
       // 1. Filter by selected source
-      if (selectedSource.type === "preset") {
+      if (selectedSource.type === "all") {
+        // 全部，不过滤来源
+      } else if (selectedSource.type === "preset") {
         if (!skill.isBuiltin) return false;
       } else if (selectedSource.type === "repo") {
         if (normalizeRepoSource(skill.repoSource || "") !== normalizeRepoSource(selectedSource.value)) return false;
@@ -347,7 +365,6 @@ function AiComposeApp() {
       }
 
       // 2. Filter by link status
-      const isLinked = activeEnabledSkillIds.includes(skill.id);
       if (skillsFilter === "linked" && !isLinked) {
         return false;
       }
@@ -417,7 +434,7 @@ function AiComposeApp() {
   const renderSkillRow = (skill: typeof skills[number]) => {
     const isSelected = skill.id === selectedSkillId;
     const isLinkedToEditor = activeEnabledSkillIds.includes(skill.id);
-    const badgeMeta = getSkillSourceBadgeMeta(skill);
+    const badgeMeta = getSkillSourceBadgeMeta(skill, skillSources);
 
     return (
       <button
@@ -1552,7 +1569,14 @@ function AiComposeApp() {
                             }}
                           >
                             <div className="skills-source-item__icon">
-                              {source.type === "preset" ? (
+                              {source.type === "all" ? (
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <rect x="3" y="3" width="7" height="7" />
+                                  <rect x="14" y="3" width="7" height="7" />
+                                  <rect x="3" y="14" width="7" height="7" />
+                                  <rect x="14" y="14" width="7" height="7" />
+                                </svg>
+                              ) : source.type === "preset" ? (
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                   <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2" />
                                   <line x1="12" y1="22" x2="12" y2="15.5" />
@@ -1578,7 +1602,7 @@ function AiComposeApp() {
                                 </span>
                               )}
                             </div>
-                            {source.type !== "preset" && (
+                            {source.type !== "preset" && source.type !== "all" && (
                               <button
                                 type="button"
                                 className="skills-source-item__delete"
@@ -1639,7 +1663,15 @@ function AiComposeApp() {
                     </div>
 
                     <div className="skills-list-pane__summary" style={{ padding: "10px 18px", background: "var(--panel-muted)" }}>
-                      <span>已加载 {filteredSkills.length} 项技能</span>
+                      <span>
+                        共 {filteredSkills.length} 项
+                        <span style={{ marginLeft: "10px", color: "var(--accent-primary)" }}>
+                          已链接 {filteredSkills.filter(s => activeEnabledSkillIds.includes(s.id)).length}
+                        </span>
+                        <span style={{ marginLeft: "10px", color: "var(--text-faint)" }}>
+                          未链接 {filteredSkills.filter(s => !activeEnabledSkillIds.includes(s.id)).length}
+                        </span>
+                      </span>
                       <span>目标：{activeSkillsTargetPath || "未检测到目标路径"}</span>
                     </div>
 
@@ -1679,7 +1711,74 @@ function AiComposeApp() {
                           当前源下没有匹配的技能。
                           {selectedSource.type === "repo" && "如果刚添加了仓库，请点击右上角“同步仓库技能”按钮。"}
                         </p>
-                      ) : (
+                      ) : selectedSource.type === "all" ? (() => {
+                        // 按来源分组：官方预设 / repo 源 / 本地源
+                        const groups: Array<{ label: string; skills: typeof filteredSkills }> = [];
+
+                        // 1. 官方预设
+                        const presetSkills = filteredSkills.filter((s) => s.isBuiltin);
+                        if (presetSkills.length > 0) {
+                          groups.push({ label: "官方预设", skills: presetSkills });
+                        }
+
+                        // 2. 各 repo 源（按 repoSource 分组，排除内置）
+                        const repoSources = skillSources.filter((src) => src.type === "repo");
+                        repoSources.forEach((src) => {
+                          const repoSkills = filteredSkills.filter(
+                            (s) => !s.isBuiltin && normalizeRepoSource(s.repoSource || "") === normalizeRepoSource(src.value)
+                          );
+                          if (repoSkills.length > 0) {
+                            groups.push({ label: src.name || src.value, skills: repoSkills });
+                          }
+                        });
+
+                        // 3. 各本地源（按 path 前缀分组，排除内置和已归到 repo 的）
+                        const localSources = skillSources.filter((src) => src.type === "local");
+                        localSources.forEach((src) => {
+                          const localSkills = filteredSkills.filter(
+                            (s) =>
+                              !s.isBuiltin &&
+                              !repoSources.some(
+                                (r) => normalizeRepoSource(s.repoSource || "") === normalizeRepoSource(r.value)
+                              ) &&
+                              s.path?.toLowerCase().startsWith(src.value.toLowerCase())
+                          );
+                          if (localSkills.length > 0) {
+                            groups.push({ label: src.name || src.value, skills: localSkills });
+                          }
+                        });
+
+                        // 4. 其他（不属于任何已知分组的技能）
+                        const assignedIds = new Set(groups.flatMap((g) => g.skills.map((s) => s.id)));
+                        const otherSkills = filteredSkills.filter((s) => !assignedIds.has(s.id));
+                        if (otherSkills.length > 0) {
+                          groups.push({ label: "其他", skills: otherSkills });
+                        }
+
+                        if (groups.length === 0) {
+                          return (
+                            <p className="skills-list-empty" style={{ padding: 0 }}>
+                              当前源下没有匹配的技能。
+                            </p>
+                          );
+                        }
+
+                        return (
+                          <div className="skills-list-groups">
+                            {groups.map((group) => (
+                              <div key={group.label} className="skills-list-group">
+                                <div className="skills-list-group__header">
+                                  <span className="skills-list-group__title">{group.label}</span>
+                                  <span className="skills-list-group__count">{group.skills.length} 项</span>
+                                </div>
+                                <div className="skills-list-group__rows">
+                                  {group.skills.map((skill) => renderSkillRow(skill))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })() : (
                         <div className="skills-list-group__rows">
                           {filteredSkills.map((skill) => renderSkillRow(skill))}
                         </div>
@@ -1875,8 +1974,8 @@ function AiComposeApp() {
                       <div className="skills-detail-pane__header" style={{ borderBottom: "none", padding: "0 0 16px 0" }}>
                         <div>
                           {shouldShowSelectedSkillSourceBadge && (
-                            <span className={`skill-source-badge ${getSkillSourceBadgeMeta(selectedSkill).className}`}>
-                              {getSkillSourceBadgeMeta(selectedSkill).text}
+                            <span className={`skill-source-badge ${getSkillSourceBadgeMeta(selectedSkill, skillSources).className}`}>
+                              {getSkillSourceBadgeMeta(selectedSkill, skillSources).text}
                             </span>
                           )}
                           <p className="skills-detail-pane__description" style={{ marginTop: "12px" }}>

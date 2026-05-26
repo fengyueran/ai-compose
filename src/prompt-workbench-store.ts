@@ -34,7 +34,7 @@ const loadCustomSkillSourcesFromStorage = (): SkillSource[] => {
 const saveCustomSkillSourcesToStorage = (sources: SkillSource[]) => {
   try {
     if (typeof window !== 'undefined') {
-      const customSources = sources.filter(s => s.type !== 'preset')
+      const customSources = sources.filter(s => s.type !== 'preset' && s.type !== 'all')
       localStorage.setItem('ai-compose:custom-skill-sources', JSON.stringify(customSources))
     }
   } catch (e) {
@@ -266,10 +266,11 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
     skills: [],
     selectedSkillId: '',
     skillSources: [
+      { id: 'all', type: 'all', name: '全部', value: '' },
       { id: 'preset', type: 'preset', name: '官方预设', value: '' },
       ...loadCustomSkillSourcesFromStorage(),
     ],
-    selectedSkillSourceId: 'preset',
+    selectedSkillSourceId: 'all',
     
     selectDomain: (domain) => {
       const { promptEditorStates, mcpEditorStates, skillsEditorStates, activeEditorId, mcpServers } = get()
@@ -593,10 +594,12 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
 
     deleteSkillSource: (id) => {
       const { skillSources, selectedSkillSourceId } = get()
+      // 不允许删除内置的 all / preset 源
+      if (id === 'all' || id === 'preset') return
       const nextSources = skillSources.filter((s) => s.id !== id)
       let nextSelectedId = selectedSkillSourceId
       if (selectedSkillSourceId === id) {
-        nextSelectedId = nextSources[0]?.id ?? 'preset'
+        nextSelectedId = nextSources[0]?.id ?? 'all'
       }
       saveCustomSkillSourcesToStorage(nextSources)
       set({
