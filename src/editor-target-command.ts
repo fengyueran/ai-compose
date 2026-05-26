@@ -211,4 +211,31 @@ export async function selectDirectory(): Promise<string> {
   return invoke<string>('select_directory')
 }
 
+export function normalizeRepoSource(repo: string): string {
+  let trimmed = repo.trim();
+  // 去除尾部斜杠
+  trimmed = trimmed.replace(/\/+$/, "");
+
+  // 去除 http/https
+  let withoutScheme = trimmed.replace(/^https?:\/\//, "");
+  // 去除 www.
+  let withoutWww = withoutScheme.replace(/^www\./, "");
+  // 去除 github.com/
+  let githubPath = withoutWww.replace(/^github\.com\//, "");
+
+  // 去除 query 和 hash
+  githubPath = githubPath.split(/[?#]/)[0];
+
+  // 去除 .git 后缀和尾部斜杠
+  let pathWithoutSuffix = githubPath.replace(/\.git$/, "").replace(/\/+$/, "");
+
+  // 如果是 owner/repo 格式，只保留前两段
+  const parts = pathWithoutSuffix.split("/");
+  if (parts.length >= 2) {
+    return `${parts[0]}/${parts[1]}`;
+  }
+  return pathWithoutSuffix;
+}
+
+
 

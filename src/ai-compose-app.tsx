@@ -19,6 +19,7 @@ import {
   openLocalPath,
   revealLocalPath,
   selectDirectory,
+  normalizeRepoSource,
   type EditorId,
   type SkillInfo,
   type SkillSource,
@@ -345,7 +346,7 @@ function AiComposeApp() {
       if (selectedSource.type === "preset") {
         if (!skill.isBuiltin) return false;
       } else if (selectedSource.type === "repo") {
-        if (skill.repoSource !== selectedSource.value) return false;
+        if (normalizeRepoSource(skill.repoSource || "") !== normalizeRepoSource(selectedSource.value)) return false;
       } else if (selectedSource.type === "local") {
         if (!skill.path || !skill.path.toLowerCase().startsWith(selectedSource.value.toLowerCase())) {
           return false;
@@ -1849,10 +1850,11 @@ function AiComposeApp() {
                             }
                           }
                           
+                          const finalVal = newSourceType === "repo" ? normalizeRepoSource(val) : val;
                           addSkillSource({
                             type: newSourceType,
                             name,
-                            value: val,
+                            value: finalVal,
                           });
                           setIsAddSourceModalOpen(false);
                           await refreshCurrentEditorSkills(activeEditorId);
