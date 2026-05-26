@@ -241,9 +241,6 @@ function AiComposeApp() {
     mcpServers.find((server) => server.id === selectedMcpServerId) ??
     mcpServers[0];
 
-  const isExternalServer = selectedMcpServerId !== "__new__" && selectedMcpServer?.source === "external";
-  const isPresetServer = selectedMcpServerId !== "__new__" && selectedMcpServer?.source === "preset";
-
   const activeEnabledMcpIds = useMemo(
     () => mcpEnabledServerIdsByEditor[activeEditorId] ?? [],
     [mcpEnabledServerIdsByEditor, activeEditorId],
@@ -1405,7 +1402,7 @@ function AiComposeApp() {
                   <div className="panel__header">
                     <div>
                       <h2 className="panel__title" id="mcp-list-title">
-                        官方预设 MCP 服务
+                        MCP 服务列表
                       </h2>
                       <p className="panel__subtitle">
                         当前首版为直接映射为 mcpServers 配置的官方项与自定义项。
@@ -1446,11 +1443,7 @@ function AiComposeApp() {
                                   {server.name}
                                 </span>
                                 <span className={`mcp-source-badge mcp-source-badge--${server.source}`}>
-                                  {server.source === "preset"
-                                    ? "官方"
-                                    : server.source === "external"
-                                    ? "本地配置"
-                                    : "自定义"}
+                                  {server.source === "preset" ? "官方" : "自定义"}
                                 </span>
                               </div>
                               <div className="fragment-list__item-meta-row">
@@ -1488,45 +1481,39 @@ function AiComposeApp() {
                       </p>
                     </div>
                     {selectedMcpServerId !== "__new__" && selectedMcpServer && (
-                      isExternalServer ? (
-                        <span className="mcp-badge-readonly" style={{ fontSize: "12px", color: "var(--text-faint)", background: "var(--surface-container-high)", padding: "6px 10px", borderRadius: "6px", fontWeight: 500 }}>
-                          外部手动配置 (只读)
+                      <div className="mcp-detail-switches">
+                        <span className="mcp-detail-switches__hint">
+                          仅控制当前 MCP 在各编辑器中的启用状态
                         </span>
-                      ) : (
-                        <div className="mcp-detail-switches">
-                          <span className="mcp-detail-switches__hint">
-                            仅控制当前 MCP 在各编辑器中的启用状态
-                          </span>
-                          <div className="per-editor-switches per-editor-switches--detail">
-                            {editorIds.map((editorId) => {
-                              const isEnabled = isMcpEnabledForEditor(editorId, selectedMcpServer.id);
+                        <div className="per-editor-switches per-editor-switches--detail">
+                          {editorIds.map((editorId) => {
+                            const isEnabled = isMcpEnabledForEditor(editorId, selectedMcpServer.id);
 
-                              return (
-                                <button
-                                  key={`detail-${selectedMcpServer.id}-${editorId}`}
-                                  type="button"
-                                  className={`per-editor-switch${
-                                    isEnabled ? " per-editor-switch--enabled" : ""
-                                  }`}
-                                  aria-pressed={isEnabled}
-                                  disabled={pendingMcpToggleKey === `${editorId}:${selectedMcpServer.id}`}
-                                  onClick={() => {
-                                    void handleMcpEditorToggle(editorId, selectedMcpServer.id);
-                                  }}
-                                  title={`${editorMeta[editorId].title}${isEnabled ? " 已启用" : " 未启用"}`}
-                                >
-                                  <span className="per-editor-switch__label">
-                                    {editorMeta[editorId].title}
-                                  </span>
-                                  <span className="per-editor-switch__track">
-                                    <span className="per-editor-switch__thumb" />
-                                  </span>
-                                </button>
-                              );
-                            })}
-                          </div>
+                            return (
+                              <button
+                                key={`detail-${selectedMcpServer.id}-${editorId}`}
+                                type="button"
+                                className={`per-editor-switch${
+                                  isEnabled ? " per-editor-switch--enabled" : ""
+                                }`}
+                                aria-pressed={isEnabled}
+                                disabled={pendingMcpToggleKey === `${editorId}:${selectedMcpServer.id}`}
+                                onClick={() => {
+                                  void handleMcpEditorToggle(editorId, selectedMcpServer.id);
+                                }}
+                                title={`${editorMeta[editorId].title}${isEnabled ? " 已启用" : " 未启用"}`}
+                              >
+                                <span className="per-editor-switch__label">
+                                  {editorMeta[editorId].title}
+                                </span>
+                                <span className="per-editor-switch__track">
+                                  <span className="per-editor-switch__thumb" />
+                                </span>
+                              </button>
+                            );
+                          })}
                         </div>
-                      )
+                      </div>
                     )}
                   </div>
 
@@ -1552,7 +1539,6 @@ function AiComposeApp() {
                           className="form-input"
                           placeholder="例如: weather"
                           value={formName}
-                          disabled={isPresetServer || isExternalServer}
                           onChange={(e) => setFormName(e.target.value)}
                         />
                       </div>
@@ -1565,7 +1551,6 @@ function AiComposeApp() {
                         <div style={{ display: "flex", gap: "12px", marginTop: "4px" }}>
                           <button
                             type="button"
-                            disabled={isPresetServer || isExternalServer}
                             style={{
                               flex: 1,
                               padding: "8px 12px",
@@ -1574,7 +1559,7 @@ function AiComposeApp() {
                               background: formTransportType === "stdio" ? "var(--accent-soft)" : "rgba(255,255,255,0.4)",
                               color: formTransportType === "stdio" ? "var(--accent-strong)" : "var(--text-main)",
                               fontWeight: formTransportType === "stdio" ? 600 : 400,
-                              cursor: (isPresetServer || isExternalServer) ? "not-allowed" : "pointer",
+                              cursor: "pointer",
                               fontSize: "13px",
                             }}
                             onClick={() => setFormTransportType("stdio")}
@@ -1583,7 +1568,6 @@ function AiComposeApp() {
                           </button>
                           <button
                             type="button"
-                            disabled={isPresetServer || isExternalServer}
                             style={{
                               flex: 1,
                               padding: "8px 12px",
@@ -1592,7 +1576,7 @@ function AiComposeApp() {
                               background: formTransportType === "http" ? "var(--accent-soft)" : "rgba(255,255,255,0.4)",
                               color: formTransportType === "http" ? "var(--accent-strong)" : "var(--text-main)",
                               fontWeight: formTransportType === "http" ? 600 : 400,
-                              cursor: (isPresetServer || isExternalServer) ? "not-allowed" : "pointer",
+                              cursor: "pointer",
                               fontSize: "13px",
                             }}
                             onClick={() => setFormTransportType("http")}
@@ -1612,7 +1596,6 @@ function AiComposeApp() {
                               className="form-input"
                               placeholder="例如: npx, python, uv"
                               value={formCommand}
-                              disabled={isPresetServer || isExternalServer}
                               onChange={(e) => setFormCommand(e.target.value)}
                             />
                           </div>
@@ -1628,7 +1611,6 @@ function AiComposeApp() {
 -y
 @modelcontextprotocol/server-sqlite"
                               value={formArgs}
-                              disabled={isPresetServer || isExternalServer}
                               onChange={(e) => setFormArgs(e.target.value)}
                             />
                           </div>
@@ -1644,7 +1626,6 @@ function AiComposeApp() {
                                     className="form-input env-input"
                                     placeholder="KEY"
                                     value={pair.key}
-                                    disabled={isExternalServer}
                                     onChange={(e) => {
                                       const next = [...formEnv];
                                       next[index].key = e.target.value;
@@ -1655,50 +1636,45 @@ function AiComposeApp() {
                                     className="form-input env-input"
                                     placeholder="VALUE"
                                     value={pair.value}
-                                    disabled={isExternalServer}
                                     onChange={(e) => {
                                       const next = [...formEnv];
                                       next[index].value = e.target.value;
                                       setFormEnv(next);
                                     }}
                                   />
-                                  {!isExternalServer && (
-                                    <button
-                                      type="button"
-                                      className="env-editor__delete-btn"
-                                      style={{
-                                        background: "none",
-                                        border: "none",
-                                        color: "#ff4d4f",
-                                        cursor: "pointer",
-                                        fontSize: "12px",
-                                      }}
-                                      onClick={() => setFormEnv(formEnv.filter((_, i) => i !== index))}
-                                    >
-                                      删除
-                                    </button>
-                                  )}
+                                  <button
+                                    type="button"
+                                    className="env-editor__delete-btn"
+                                    style={{
+                                      background: "none",
+                                      border: "none",
+                                      color: "#ff4d4f",
+                                      cursor: "pointer",
+                                      fontSize: "12px",
+                                    }}
+                                    onClick={() => setFormEnv(formEnv.filter((_, i) => i !== index))}
+                                  >
+                                    删除
+                                  </button>
                                 </div>
                               ))}
-                              {!isExternalServer && (
-                                <button
-                                  type="button"
-                                  className="env-editor__add-btn"
-                                  style={{
-                                    alignSelf: "flex-start",
-                                    background: "rgba(255, 140, 0, 0.1)",
-                                    border: "1px dashed var(--accent)",
-                                    color: "var(--accent)",
-                                    padding: "4px 8px",
-                                    borderRadius: "4px",
-                                    fontSize: "12px",
-                                    cursor: "pointer",
-                                  }}
-                                  onClick={() => setFormEnv([...formEnv, { key: "", value: "" }])}
-                                >
-                                  + 添加环境变量
-                                </button>
-                              )}
+                              <button
+                                type="button"
+                                className="env-editor__add-btn"
+                                style={{
+                                  alignSelf: "flex-start",
+                                  background: "rgba(255, 140, 0, 0.1)",
+                                  border: "1px dashed var(--accent)",
+                                  color: "var(--accent)",
+                                  padding: "4px 8px",
+                                  borderRadius: "4px",
+                                  fontSize: "12px",
+                                  cursor: "pointer",
+                                }}
+                                onClick={() => setFormEnv([...formEnv, { key: "", value: "" }])}
+                              >
+                                + 添加环境变量
+                              </button>
                             </div>
                           </div>
                         </>
@@ -1712,7 +1688,6 @@ function AiComposeApp() {
                               className="form-input"
                               placeholder="例如: streamable_http, sse"
                               value={formType}
-                              disabled={isPresetServer || isExternalServer}
                               onChange={(e) => setFormType(e.target.value)}
                             />
                           </div>
@@ -1725,7 +1700,6 @@ function AiComposeApp() {
                               className="form-input"
                               placeholder="例如: http://127.0.0.1:3845/mcp"
                               value={formUrl}
-                              disabled={isPresetServer || isExternalServer}
                               onChange={(e) => setFormUrl(e.target.value)}
                             />
                           </div>
@@ -1753,17 +1727,14 @@ function AiComposeApp() {
                         <button
                           type="button"
                           className="mcp-form__btn mcp-form__btn--primary"
-                          disabled={isExternalServer}
                           style={{
-                            background: isExternalServer 
-                              ? "var(--surface-container-high)" 
-                              : "linear-gradient(135deg, var(--accent) 0%, #ff8c00 100%)",
+                            background: "linear-gradient(135deg, var(--accent) 0%, #ff8c00 100%)",
                             border: "none",
-                            color: isExternalServer ? "var(--text-faint)" : "#fff",
+                            color: "#fff",
                             padding: "6px 12px",
                             borderRadius: "6px",
                             fontWeight: 500,
-                            cursor: isExternalServer ? "not-allowed" : "pointer",
+                            cursor: "pointer",
                           }}
                           onClick={handleSaveMcp}
                         >
