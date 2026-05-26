@@ -8,10 +8,11 @@ import {
   loadEditorMcpStates,
   loadPhysicalSkills,
   loadEditorSkillsStates,
-  applySkillsToEditorTarget,
   addSkillsRepository,
+  linkSkillToEditor,
+  loadSingleSkill,
   updateSkill,
-  removeSkill,
+  unlinkSkillFromEditor,
   type EditorId,
   isTauriRuntime,
 } from "./editor-target-command";
@@ -129,6 +130,8 @@ function AiComposeApp() {
     selectedSkillId,
     skillsEditorStates,
     selectSkill,
+    replaceSkill,
+    toggleSkill,
     setSkillsList,
   } = usePromptWorkbenchStore();
 
@@ -275,10 +278,19 @@ function AiComposeApp() {
 
 
   const activeSkillsTargetPath = skillsEditorStates[activeEditorId]?.targetPath ?? "";
+  const activeEnabledSkillIds = skillsEditorStates[activeEditorId]?.enabledSkills ?? [];
   const selectedSkillTargetLink = selectedSkill && activeSkillsTargetPath
     ? `${activeSkillsTargetPath}/${selectedSkill.id}`
     : "";
   const isSelectedSkillCliManaged = selectedSkill?.sourceKind === "cli";
+  const isSelectedSkillLinked = selectedSkill
+    ? activeEnabledSkillIds.includes(selectedSkill.id)
+    : false;
+  const canInstallSelectedSkill = Boolean(
+    selectedSkill &&
+    !isSelectedSkillLinked &&
+    (isSelectedSkillCliManaged || selectedSkill.isBuiltin)
+  );
 
   // 表单状态，用于编辑/创建 MCP，基于 selectedMcpServerId 进行状态初始化
   const [formName, setFormName] = useState(() =>
@@ -642,70 +654,6 @@ function AiComposeApp() {
 
         return null;
       }
-    } else if (activeDomain === "Skills") {
-      if (!isTauriRuntime()) {
-        setApplyFeedback({
-          status: "error",
-          message:
-            "当前不在 Tauri 桌面宿主中运行。请使用 `pnpm dev:desktop` 启动后再执行应用。",
-          lastAppliedAt: null,
-        });
-        return null;
-      }
-
-      setApplyFeedback({
-        status: "pending",
-        message: targetEnabled
-          ? `正在同步 Skills 软链接到 ${editorMeta[editorId].title} 的 skills 目录。`
-          : `正在清除 ${editorMeta[editorId].title} 中由 AI-COMPOSE 受管的 Skills 软链接。`,
-        lastAppliedAt: null,
-      });
-
-      try {
-        const latestSkills = usePromptWorkbenchStore.getState().skills;
-        const latestEnabledSkills = latestSkills
-          .filter((skill) => skill.sourceKind === "cli" && skill.installed !== false)
-          .map((skill) => skill.id);
-
-        const result = await applySkillsToEditorTarget({
-          editorId,
-          enabled: targetEnabled,
-          enabledSkills: latestEnabledSkills,
-        });
-
-        const lastAppliedTime = new Intl.DateTimeFormat("zh-CN", {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-          hour12: false,
-        }).format(new Date());
-
-        setApplyFeedback({
-          status: "success",
-          message:
-            result.action === "updated"
-              ? `已成功在 ${result.targetPath} 创建 ${latestEnabledSkills.length} 个技能软链接。`
-              : result.action === "removed"
-                ? `已从 ${result.targetPath} 清除 AI-COMPOSE 受管的技能软链接。`
-                : `${result.targetPath} 当前无改动。`,
-          lastAppliedAt: lastAppliedTime,
-        });
-
-        return result;
-      } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : "写入编辑器 Skills 配置时发生未知错误。";
-
-        setApplyFeedback({
-          status: "error",
-          message,
-          lastAppliedAt: null,
-        });
-
-        return null;
-      }
     }
     return null;
   };
@@ -745,6 +693,8 @@ function AiComposeApp() {
         });
         return;
       }
+    } else if (activeDomain === "Skills") {
+      return;
     }
 
     setEditorEnabled(editorId, nextEnabled);
@@ -814,7 +764,7 @@ function AiComposeApp() {
                           ? " editor-toggle--enabled"
                           : ""
                       }`}
-                      disabled={isHydratingEditorStates}
+                      disabled={isHydratingEditorStates || activeDomain === "Skills"}
                       onClick={() => {
                         void handleToggleEditor(editorId);
                       }}
@@ -1382,9 +1332,6 @@ function AiComposeApp() {
                             setSkillsList(refreshed);
                             const nextSkillsStates = await loadEditorSkillsStates();
                             hydrateSkillsEditorStates(nextSkillsStates);
-                            if (isCurrentEditorEnabled) {
-                              await applyToEditor(activeEditorId, true);
-                            }
                           } catch (err) {
                             const errMsg = err instanceof Error ? err.message : String(err);
                             messageApi.error(`安装失败: ${errMsg}`);
@@ -1424,14 +1371,15 @@ function AiComposeApp() {
                         filteredSkills.map((skill) => {
                           const isSelected = skill.id === selectedSkillId;
                           const isCliManaged = skill.sourceKind === "cli";
-                          const isInstalled = skill.installed !== false;
+                          const isInstalled = skill.sourceKind === "cli" && skill.installed !== false;
+                          const isLinkedToEditor = activeEnabledSkillIds.includes(skill.id);
 
                           const badgeText = skill.isBuiltin
-                            ? (isInstalled ? "官方" : "官方 (未安装)")
+                            ? "官方"
                             : (isCliManaged ? "skills.sh" : "本地已安装");
 
                           const badgeClass = skill.isBuiltin
-                            ? (isInstalled ? "skill-source-badge--builtin" : "skill-source-badge--builtin-uninstalled")
+                            ? "skill-source-badge--builtin"
                             : (isCliManaged ? "skill-source-badge--cli" : "skill-source-badge--readonly");
 
                           return (
@@ -1462,7 +1410,7 @@ function AiComposeApp() {
                                   {skill.description || "无描述"}
                                 </span>
                               </div>
-                              {isInstalled && (
+                              {isLinkedToEditor && (
                                 <span className="skill-card__status-check" aria-label="已安装">
                                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                     <polyline points="20 6 9 17 4 12" />
@@ -1495,11 +1443,11 @@ function AiComposeApp() {
                         <div>
                           <span className={`skill-source-badge ${
                             selectedSkill.isBuiltin
-                              ? (selectedSkill.installed ? "skill-source-badge--builtin" : "skill-source-badge--builtin-uninstalled")
+                              ? "skill-source-badge--builtin"
                               : (isSelectedSkillCliManaged ? "skill-source-badge--cli" : "skill-source-badge--readonly")
                           }`}>
                             {selectedSkill.isBuiltin
-                              ? (selectedSkill.installed ? "官方" : "官方 (未安装)")
+                              ? "官方"
                               : (isSelectedSkillCliManaged ? "skills.sh" : "本地已安装")}
                           </span>
                           <p className="skills-detail-pane__description" style={{ marginTop: "12px" }}>
@@ -1507,28 +1455,51 @@ function AiComposeApp() {
                           </p>
                         </div>
                         <div className="skills-detail-pane__actions">
-                          {selectedSkill.installed === false ? (
+                          {canInstallSelectedSkill ? (
                             <Button
                               type="button"
                               className={`fragment-action-btn${isAddingSkillsRepo ? " fragment-action-btn--loading" : ""}`}
                               disabled={isAddingSkillsRepo}
                               loading={isAddingSkillsRepo}
                               onClick={async () => {
-                                if (!selectedSkill.repoSource) return;
+                                if (!selectedSkill) return;
+                                const skillId = selectedSkill.id;
+                                const skillName = selectedSkill.name;
+                                const needsInstall = selectedSkill.installed === false;
+                                const nextEnabledSkills = activeEnabledSkillIds.includes(skillId)
+                                  ? activeEnabledSkillIds
+                                  : [...activeEnabledSkillIds, skillId];
                                 setIsAddingSkillsRepo(true);
                                 try {
-                                  await addSkillsRepository(selectedSkill.repoSource);
-                                  messageApi.success(`技能 ${selectedSkill.name} 安装成功！`);
-                                  const refreshed = await loadPhysicalSkills();
-                                  setSkillsList(refreshed);
-                                  const nextSkillsStates = await loadEditorSkillsStates();
-                                  hydrateSkillsEditorStates(nextSkillsStates);
-                                  if (isCurrentEditorEnabled) {
-                                    await applyToEditor(activeEditorId, true);
+                                  let skillPath = selectedSkill.path;
+                                  if (needsInstall) {
+                                    if (!selectedSkill.repoSource) {
+                                      throw new Error("缺少可安装的技能来源。");
+                                    }
+                                    await addSkillsRepository(selectedSkill.repoSource);
+                                    const refreshed = await loadPhysicalSkills();
+                                    setSkillsList(refreshed);
+                                    const installedSkill = refreshed.find((skill) => skill.id === skillId);
+                                    if (!installedSkill) {
+                                      throw new Error(`安装完成后未找到技能 ${skillName} 的物理路径。`);
+                                    }
+                                    skillPath = installedSkill.path;
                                   }
+                                  await linkSkillToEditor({
+                                    editorId: activeEditorId,
+                                    skillId,
+                                    skillPath,
+                                  });
+                                  toggleSkill(skillId);
+                                  setIsSkillModalOpen(false);
+                                  messageApi.success(
+                                    needsInstall
+                                      ? `已安装并链接技能 ${skillName} 到 ${editorMeta[activeEditorId].title}。`
+                                      : `已将技能 ${skillName} 链接到 ${editorMeta[activeEditorId].title}。`,
+                                  );
                                 } catch (err) {
                                   const errMsg = err instanceof Error ? err.message : String(err);
-                                  messageApi.error(`安装失败: ${errMsg}`);
+                                  messageApi.error(`安装技能 ${skillName} 失败: ${errMsg}`);
                                 } finally {
                                   setIsAddingSkillsRepo(false);
                                 }
@@ -1541,32 +1512,35 @@ function AiComposeApp() {
                               <Button
                                 type="button"
                                 className={`fragment-action-btn${isRemovingSkill ? " fragment-action-btn--loading" : ""}`}
-                                disabled={isUpdatingSkill || isAddingSkillsRepo || !isSelectedSkillCliManaged}
+                                disabled={isUpdatingSkill || isAddingSkillsRepo || !isSelectedSkillCliManaged || !isSelectedSkillLinked}
                                 loading={isRemovingSkill}
-                                title={!isSelectedSkillCliManaged ? "本地已安装的 Skill 不受 skills.sh 管理，不能卸载。" : "从 skills.sh 中卸载此 Skill。"}
+                                title={!isSelectedSkillCliManaged
+                                  ? "本地已安装的 Skill 不受 skills.sh 管理，不能取消链接。"
+                                  : !isSelectedSkillLinked
+                                    ? `当前 ${editorMeta[activeEditorId].title} 未链接此 Skill。`
+                                    : `取消 ${editorMeta[activeEditorId].title} 中此 Skill 的软链接。`}
                                 onClick={async () => {
                                   if (!selectedSkill) return;
+                                  const skillId = selectedSkill.id;
+                                  const skillName = selectedSkill.name;
                                   setIsRemovingSkill(true);
                                   try {
-                                    await removeSkill(selectedSkill.id);
-                                    messageApi.success(`已成功卸载技能 ${selectedSkill.name}。`);
-                                    const refreshed = await loadPhysicalSkills();
-                                    setSkillsList(refreshed);
-                                    const nextSkillsStates = await loadEditorSkillsStates();
-                                    hydrateSkillsEditorStates(nextSkillsStates);
-                                    if (isCurrentEditorEnabled) {
-                                      await applyToEditor(activeEditorId, true);
-                                    }
+                                    await unlinkSkillFromEditor({
+                                      editorId: activeEditorId,
+                                      skillId,
+                                    });
+                                    toggleSkill(skillId);
                                     setIsSkillModalOpen(false);
+                                    messageApi.success(`已取消技能 ${skillName} 在 ${editorMeta[activeEditorId].title} 中的链接。`);
                                   } catch (err) {
                                     const errMsg = err instanceof Error ? err.message : String(err);
-                                    messageApi.error(`卸载失败: ${errMsg}`);
+                                    messageApi.error(`取消技能 ${skillName} 链接失败: ${errMsg}`);
                                   } finally {
                                     setIsRemovingSkill(false);
                                   }
                                 }}
                               >
-                                卸载
+                                取消链接
                               </Button>
                               <Button
                                 type="button"
@@ -1576,15 +1550,19 @@ function AiComposeApp() {
                                 title={!isSelectedSkillCliManaged ? "本地已安装的 Skill 不受 skills.sh 管理，不能在这里更新。" : undefined}
                                 onClick={async () => {
                                   if (!selectedSkill) return;
+                                  const skillId = selectedSkill.id;
+                                  const skillPath = selectedSkill.path;
+                                  const skillSourceKind = selectedSkill.sourceKind;
                                   setIsUpdatingSkill(true);
                                   try {
-                                    await updateSkill(selectedSkill.id);
+                                    await updateSkill(skillId);
+                                    const refreshedSkill = await loadSingleSkill({
+                                      id: skillId,
+                                      path: skillPath,
+                                      sourceKind: skillSourceKind,
+                                    });
+                                    replaceSkill(refreshedSkill);
                                     messageApi.success(`技能 ${selectedSkill.name} 更新成功！`);
-                                    const refreshed = await loadPhysicalSkills();
-                                    setSkillsList(refreshed);
-                                    if (isCurrentEditorEnabled) {
-                                      await applyToEditor(activeEditorId, true);
-                                    }
                                   } catch (err) {
                                     const errMsg = err instanceof Error ? err.message : String(err);
                                     messageApi.error(`更新失败: ${errMsg}`);
@@ -1744,33 +1722,25 @@ function AiComposeApp() {
                 <div className="panel__header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
                   <div>
                     <h2 className="panel__title" id="preview-title">
-                      Skills 映射预览
+                      Skills 链接预览
                     </h2>
                     <p className="panel__subtitle">
-                      展示当前 {editorMeta[activeEditorId].title} 即将同步的技能软链接。
+                      展示当前 {editorMeta[activeEditorId].title} 已链接的技能软链接。
                     </p>
                   </div>
-                  <button
-                    className={`preview-apply-btn${isCurrentEditorEnabled && applyStatus !== "pending" ? "" : " preview-apply-btn--disabled"}`}
-                    onClick={handleApplyClick}
-                    disabled={!isCurrentEditorEnabled || applyStatus === "pending"}
-                    title={isCurrentEditorEnabled ? `应用 Skills 到 ${editorMeta[activeEditorId].title}` : `请先启用左侧 ${editorMeta[activeEditorId].title}`}
-                  >
-                    {applyStatus === "pending" ? "正在应用..." : "应用配置"}
-                  </button>
                 </div>
 
                 <div className="preview-card__body" style={{ padding: "0 16px 16px 16px" }}>
-                  {installedCliSkillIds.length === 0 ? (
+                  {activeEnabledSkillIds.length === 0 ? (
                     <p className="preview-card__empty">
-                      没有可同步的技能。请先通过 skills.sh 安装。
+                      当前未在此编辑器中链接任何技能。
                     </p>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                       <p style={{ fontSize: "12px", color: "var(--text-faint)", margin: 0 }}>
                         目标路径: <strong>{skillsEditorStates[activeEditorId]?.targetPath || "—"}</strong>
                       </p>
-                      {installedCliSkillIds.map((skillId) => {
+                      {activeEnabledSkillIds.map((skillId) => {
                         const skill = skills.find((s) => s.id === skillId);
                         return (
                           <div

@@ -608,12 +608,14 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-faint);
-  opacity: 0.8;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
   margin-left: auto;
   flex-shrink: 0;
-  width: 20px;
-  height: 20px;
+  box-shadow: 0 2px 6px rgba(197, 93, 51, 0.35);
 }
 
 .skills-list-row__content {

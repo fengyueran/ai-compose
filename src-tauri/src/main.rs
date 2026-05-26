@@ -616,6 +616,29 @@ struct ApplySkillsPayload {
     enabled_skills: Vec<String>,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UnlinkSkillPayload {
+    editor_id: EditorId,
+    skill_id: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LinkSkillPayload {
+    editor_id: EditorId,
+    skill_id: String,
+    skill_path: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LoadSingleSkillPayload {
+    id: String,
+    path: String,
+    source_kind: SkillSourceKind,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ApplySkillsResult {
@@ -1008,6 +1031,91 @@ async fn apply_skills_to_editor_target(payload: ApplySkillsPayload) -> Result<Ap
 }
 
 #[tauri::command]
+async fn unlink_skill_from_editor(payload: UnlinkSkillPayload) -> Result<ApplySkillsResult, String> {
+    let skill_id_trimmed = payload.skill_id.trim().to_string();
+    if !is_safe_skill_id(&skill_id_trimmed) {
+        return Err("技能 ID 只能包含字母、数字、点、下划线和短横线。".to_string());
+    }
+
+    let target_path = resolve_editor_skills_path(payload.editor_id)?;
+    let link_path = target_path.join(&skill_id_trimmed);
+    let action = match fs::symlink_metadata(&link_path) {
+        Ok(metadata) => {
+            if !metadata.file_type().is_symlink() {
+                return Err(format!(
+                    "目标路径 {} 已存在且不是技能软链接，为避免误删已停止操作。",
+                    link_path.display()
+                ));
+            }
+            remove_link_or_dir(&link_path).map_err(|e| format!("删除技能软链接失败：{e}"))?;
+            ApplyAction::Removed
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => ApplyAction::Unchanged,
+        Err(error) => return Err(format!("读取技能软链接状态失败：{error}")),
+    };
+
+    Ok(ApplySkillsResult {
+        action,
+        editor_id: payload.editor_id,
+        target_path: target_path.display().to_string(),
+        updated_at: current_timestamp(),
+    })
+}
+
+#[tauri::command]
+async fn link_skill_to_editor(payload: LinkSkillPayload) -> Result<ApplySkillsResult, String> {
+    let skill_id_trimmed = payload.skill_id.trim().to_string();
+    if !is_safe_skill_id(&skill_id_trimmed) {
+        return Err("技能 ID 只能包含字母、数字、点、下划线和短横线。".to_string());
+    }
+
+    let skill_path_trimmed = payload.skill_path.trim().to_string();
+    if skill_path_trimmed.is_empty() {
+        return Err("技能物理路径不能为空。".to_string());
+    }
+
+    let physical_skill_path = PathBuf::from(&skill_path_trimmed);
+    let target_path = resolve_editor_skills_path(payload.editor_id)?;
+    fs::create_dir_all(&target_path).map_err(|e| format!("创建编辑器 skills 目录失败：{e}"))?;
+
+    let link_path = target_path.join(&skill_id_trimmed);
+    if is_skill_enabled(&target_path, &skill_id_trimmed, &physical_skill_path) {
+        return Ok(ApplySkillsResult {
+            action: ApplyAction::Unchanged,
+            editor_id: payload.editor_id,
+            target_path: target_path.display().to_string(),
+            updated_at: current_timestamp(),
+        });
+    }
+
+    if let Ok(metadata) = fs::symlink_metadata(&link_path) {
+        if !metadata.file_type().is_symlink() {
+            return Err(format!(
+                "目标路径 {} 已存在且不是技能软链接，为避免覆盖用户文件已停止写入。",
+                link_path.display()
+            ));
+        }
+        remove_link_or_dir(&link_path).map_err(|e| format!("移除已有技能软链接失败：{e}"))?;
+    }
+
+    create_symlink(&physical_skill_path, &link_path)
+        .map_err(|e| format!("创建技能软链接失败：{e}"))?;
+
+    Ok(ApplySkillsResult {
+        action: ApplyAction::Updated,
+        editor_id: payload.editor_id,
+        target_path: target_path.display().to_string(),
+        updated_at: current_timestamp(),
+    })
+}
+
+#[tauri::command]
+async fn load_single_skill_command(payload: LoadSingleSkillPayload) -> Result<SkillInfo, String> {
+    load_single_skill(Path::new(&payload.path), &payload.id, payload.source_kind)
+        .ok_or_else(|| format!("无法读取技能 {} 的最新内容。", payload.id))
+}
+
+#[tauri::command]
 async fn add_skills_repository(repo: String) -> Result<String, String> {
     let repo_trimmed = repo.trim().to_string();
     if !is_safe_repo_source(&repo_trimmed) {
@@ -1119,6 +1227,9 @@ fn main() {
             load_physical_skills,
             load_editor_skills_states,
             apply_skills_to_editor_target,
+            unlink_skill_from_editor,
+            link_skill_to_editor,
+            load_single_skill_command,
             add_skills_repository,
             update_skill,
             remove_skill

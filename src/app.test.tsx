@@ -1,10 +1,32 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { beforeEach, expect, test, vi } from 'vitest'
 
 import AiComposeApp from './ai-compose-app'
+import { addSkillsRepository, applySkillsToEditorTarget, linkSkillToEditor, loadEditorSkillsStates, loadPhysicalSkills, loadSingleSkill, removeSkill, unlinkSkillFromEditor, updateSkill } from './editor-target-command'
 import { usePromptWorkbenchStore } from './prompt-workbench-store'
 
+vi.mock('./editor-target-command', async () => {
+  const actual = await vi.importActual<typeof import('./editor-target-command')>('./editor-target-command')
+  return {
+    ...actual,
+    addSkillsRepository: vi.fn(),
+    applySkillsToEditorTarget: vi.fn(),
+    loadEditorSkillsStates: vi.fn(),
+    loadPhysicalSkills: vi.fn(),
+    loadSingleSkill: vi.fn(),
+    linkSkillToEditor: vi.fn(),
+    removeSkill: vi.fn(),
+    unlinkSkillFromEditor: vi.fn(),
+    updateSkill: vi.fn(),
+  }
+})
+
 describe('Prompt Workbench', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   test('renders the codex prompt workbench skeleton', () => {
     render(<AiComposeApp />)
 
@@ -185,8 +207,8 @@ describe('Prompt Workbench', () => {
     const cliSkillRow = screen.getByRole('button', { name: /CLI Skill/ })
     await userEvent.click(cliSkillRow)
 
-    // Now the buttons inside the modal should be visible
-    expect(screen.getByRole('button', { name: '卸载' })).toBeInTheDocument()
+    // Now the button inside the modal should allow linking this cli skill
+    expect(within(screen.getByRole('dialog')).getByRole('button', { name: '安装' })).toBeInTheDocument()
 
     const filterSelect = screen.getByRole('combobox')
     await userEvent.click(filterSelect)
@@ -259,5 +281,236 @@ describe('Prompt Workbench', () => {
     expect(findSkillsAfterUninstall).toBeDefined()
     expect(findSkillsAfterUninstall?.installed).toBe(false)
     expect(findSkillsAfterUninstall?.isBuiltin).toBe(true)
+  })
+
+  test('unlinks the selected cli skill from the current editor without uninstalling it globally', async () => {
+    vi.mocked(unlinkSkillFromEditor).mockResolvedValue({
+      action: 'removed',
+      editorId: 'cursor',
+      targetPath: '/Users/test/.cursor/skills',
+      updatedAt: '2026-05-21 18:00:00',
+    })
+
+    usePromptWorkbenchStore.setState({
+      activeDomain: 'Skills',
+      activeEditorId: 'cursor',
+      editorStates: {
+        antigravity: { enabled: false, targetPath: '', enabledSkills: [] },
+        codex: { enabled: false, targetPath: '', enabledSkills: [] },
+        cursor: { enabled: true, targetPath: '/Users/test/.cursor/skills', enabledSkills: ['linked-skill', 'keep-skill'] },
+      },
+      skillsEditorStates: {
+        antigravity: { enabled: false, targetPath: '', enabledSkills: [] },
+        codex: { enabled: false, targetPath: '', enabledSkills: [] },
+        cursor: { enabled: true, targetPath: '/Users/test/.cursor/skills', enabledSkills: ['linked-skill', 'keep-skill'] },
+      },
+      skills: [
+        {
+          id: 'linked-skill',
+          name: 'Linked Skill',
+          description: 'Managed by skills.sh',
+          content: '# Linked Skill',
+          path: '/Users/test/.agents/skills/linked-skill',
+          sourceKind: 'cli',
+        },
+        {
+          id: 'keep-skill',
+          name: 'Keep Skill',
+          description: 'Managed by skills.sh',
+          content: '# Keep Skill',
+          path: '/Users/test/.agents/skills/keep-skill',
+          sourceKind: 'cli',
+        },
+      ],
+      selectedSkillId: 'linked-skill',
+      isHydratingEditorStates: false,
+    })
+
+    render(<AiComposeApp />)
+
+    await userEvent.click(screen.getByRole('button', { name: /Linked Skill/ }))
+    await userEvent.click(screen.getByRole('button', { name: '取消链接' }))
+
+    expect(removeSkill).not.toHaveBeenCalled()
+    expect(applySkillsToEditorTarget).not.toHaveBeenCalled()
+    expect(loadEditorSkillsStates).not.toHaveBeenCalled()
+    expect(unlinkSkillFromEditor).toHaveBeenCalledWith({
+      editorId: 'cursor',
+      skillId: 'linked-skill',
+    })
+    expect(usePromptWorkbenchStore.getState().skillsEditorStates.cursor.enabledSkills).toEqual(['keep-skill'])
+  })
+
+  test('links an already installed skill to the current editor without calling npx install', async () => {
+    vi.mocked(linkSkillToEditor).mockResolvedValue({
+      action: 'updated',
+      editorId: 'cursor',
+      targetPath: '/Users/test/.cursor/skills',
+      updatedAt: '2026-05-21 18:10:00',
+    })
+
+    usePromptWorkbenchStore.setState({
+      activeDomain: 'Skills',
+      activeEditorId: 'cursor',
+      editorStates: {
+        antigravity: { enabled: false, targetPath: '', enabledSkills: [] },
+        codex: { enabled: false, targetPath: '', enabledSkills: [] },
+        cursor: { enabled: false, targetPath: '/Users/test/.cursor/skills', enabledSkills: [] },
+      },
+      skillsEditorStates: {
+        antigravity: { enabled: false, targetPath: '', enabledSkills: [] },
+        codex: { enabled: false, targetPath: '', enabledSkills: [] },
+        cursor: { enabled: false, targetPath: '/Users/test/.cursor/skills', enabledSkills: [] },
+      },
+      skills: [
+        {
+          id: 'linked-skill',
+          name: 'Linked Skill',
+          description: 'Managed by skills.sh',
+          content: '# Linked Skill',
+          path: '/Users/test/.agents/skills/linked-skill',
+          sourceKind: 'cli',
+        },
+      ],
+      selectedSkillId: 'linked-skill',
+      isHydratingEditorStates: false,
+    })
+
+    render(<AiComposeApp />)
+
+    await userEvent.click(screen.getByRole('button', { name: /Linked Skill/ }))
+    const dialog = screen.getByRole('dialog')
+    await userEvent.click(within(dialog).getByRole('button', { name: '安装' }))
+
+    expect(addSkillsRepository).not.toHaveBeenCalled()
+    expect(applySkillsToEditorTarget).not.toHaveBeenCalled()
+    expect(loadEditorSkillsStates).not.toHaveBeenCalled()
+    expect(loadPhysicalSkills).not.toHaveBeenCalled()
+    expect(linkSkillToEditor).toHaveBeenCalledWith({
+      editorId: 'cursor',
+      skillId: 'linked-skill',
+      skillPath: '/Users/test/.agents/skills/linked-skill',
+    })
+    expect(usePromptWorkbenchStore.getState().skillsEditorStates.cursor.enabledSkills).toEqual(['linked-skill'])
+  })
+
+  test('installs a missing builtin skill and only links that skill to the current editor', async () => {
+    vi.mocked(addSkillsRepository).mockResolvedValue('ok')
+    vi.mocked(loadPhysicalSkills).mockResolvedValue([
+      {
+        id: 'find-skills',
+        name: 'find-skills',
+        description: 'builtin preset installed',
+        content: '# find-skills latest',
+        path: '/Users/test/.agents/skills/find-skills',
+        sourceKind: 'cli',
+      },
+    ])
+    vi.mocked(linkSkillToEditor).mockResolvedValue({
+      action: 'updated',
+      editorId: 'cursor',
+      targetPath: '/Users/test/.cursor/skills',
+      updatedAt: '2026-05-21 18:12:00',
+    })
+
+    usePromptWorkbenchStore.setState({
+      activeDomain: 'Skills',
+      activeEditorId: 'cursor',
+      editorStates: {
+        antigravity: { enabled: false, targetPath: '', enabledSkills: [] },
+        codex: { enabled: false, targetPath: '', enabledSkills: [] },
+        cursor: { enabled: false, targetPath: '/Users/test/.cursor/skills', enabledSkills: [] },
+      },
+      skillsEditorStates: {
+        antigravity: { enabled: false, targetPath: '', enabledSkills: [] },
+        codex: { enabled: false, targetPath: '', enabledSkills: [] },
+        cursor: { enabled: false, targetPath: '/Users/test/.cursor/skills', enabledSkills: [] },
+      },
+      skills: [
+        {
+          id: 'find-skills',
+          name: 'find-skills',
+          description: 'builtin preset',
+          content: '# find-skills',
+          path: '',
+          sourceKind: 'cli',
+          isBuiltin: true,
+          installed: false,
+          repoSource: 'vercel-labs/skills',
+        },
+      ],
+      selectedSkillId: 'find-skills',
+      isHydratingEditorStates: false,
+    })
+
+    render(<AiComposeApp />)
+
+    await userEvent.click(screen.getByRole('button', { name: /find-skills/ }))
+    const dialog = screen.getByRole('dialog')
+    await userEvent.click(within(dialog).getByRole('button', { name: '安装' }))
+
+    expect(addSkillsRepository).toHaveBeenCalledWith('vercel-labs/skills')
+    expect(applySkillsToEditorTarget).not.toHaveBeenCalled()
+    expect(loadEditorSkillsStates).not.toHaveBeenCalled()
+    expect(linkSkillToEditor).toHaveBeenCalledWith({
+      editorId: 'cursor',
+      skillId: 'find-skills',
+      skillPath: '/Users/test/.agents/skills/find-skills',
+    })
+    expect(usePromptWorkbenchStore.getState().skillsEditorStates.cursor.enabledSkills).toEqual(['find-skills'])
+  })
+
+  test('updates only the selected skill metadata without reloading the full skills list', async () => {
+    vi.mocked(updateSkill).mockResolvedValue('ok')
+    vi.mocked(loadSingleSkill).mockResolvedValue({
+      id: 'linked-skill',
+      name: 'Linked Skill',
+      description: 'Updated description',
+      content: '# Updated Skill',
+      path: '/Users/test/.agents/skills/linked-skill',
+      sourceKind: 'cli',
+    })
+
+    usePromptWorkbenchStore.setState({
+      activeDomain: 'Skills',
+      activeEditorId: 'cursor',
+      editorStates: {
+        antigravity: { enabled: false, targetPath: '', enabledSkills: [] },
+        codex: { enabled: false, targetPath: '', enabledSkills: [] },
+        cursor: { enabled: false, targetPath: '/Users/test/.cursor/skills', enabledSkills: ['linked-skill'] },
+      },
+      skillsEditorStates: {
+        antigravity: { enabled: false, targetPath: '', enabledSkills: [] },
+        codex: { enabled: false, targetPath: '', enabledSkills: [] },
+        cursor: { enabled: false, targetPath: '/Users/test/.cursor/skills', enabledSkills: ['linked-skill'] },
+      },
+      skills: [
+        {
+          id: 'linked-skill',
+          name: 'Linked Skill',
+          description: 'Managed by skills.sh',
+          content: '# Linked Skill',
+          path: '/Users/test/.agents/skills/linked-skill',
+          sourceKind: 'cli',
+        },
+      ],
+      selectedSkillId: 'linked-skill',
+      isHydratingEditorStates: false,
+    })
+
+    render(<AiComposeApp />)
+
+    await userEvent.click(screen.getByRole('button', { name: /Linked Skill/ }))
+    const dialog = screen.getByRole('dialog')
+    await userEvent.click(within(dialog).getByRole('button', { name: '更新' }))
+
+    expect(updateSkill).toHaveBeenCalledWith('linked-skill')
+    expect(loadSingleSkill).toHaveBeenCalledWith({
+      id: 'linked-skill',
+      path: '/Users/test/.agents/skills/linked-skill',
+      sourceKind: 'cli',
+    })
+    expect(loadPhysicalSkills).not.toHaveBeenCalled()
+    expect(usePromptWorkbenchStore.getState().skills.find((skill) => skill.id === 'linked-skill')?.description).toBe('Updated description')
   })
 })

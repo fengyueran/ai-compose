@@ -104,6 +104,7 @@ type PromptWorkbenchState = {
   selectSkill: (skillId: string) => void
   toggleSkill: (skillId: string) => void
   setSkillsList: (skills: SkillInfo[]) => void
+  replaceSkill: (skill: SkillInfo) => void
 }
 
 const defaultSelectedFragmentId = presetPromptFragments[0]?.id ?? ''
@@ -540,6 +541,25 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
         skills: mergedSkills,
         selectedSkillId: nextSelectedId,
       });
+    },
+
+    replaceSkill: (skill) => {
+      const currentPhysicalSkills = get().skills
+        .filter((item) => item.installed !== false)
+        .map((item) => ({
+          id: item.id,
+          name: item.name,
+          description: item.description,
+          content: item.content,
+          path: item.path,
+          sourceKind: item.sourceKind,
+        }))
+
+      const nextPhysicalSkills = currentPhysicalSkills.some((item) => item.id === skill.id)
+        ? currentPhysicalSkills.map((item) => (item.id === skill.id ? skill : item))
+        : [...currentPhysicalSkills, skill]
+
+      get().setSkillsList(nextPhysicalSkills)
     },
   }),
 )
