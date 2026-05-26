@@ -744,5 +744,12 @@ const BUILTIN_SKILLS_PRESET = [
     description: "React and Next.js performance optimization guidelines from Vercel Engineering. This skill should be used when writing, reviewing, or refactoring React/Next.js code to ensure optimal performance patterns.",
     repoSource: "vercel-labs/agent-skills",
     content: "<!--内置技能-->\n\n# Vercel React Best Practices\n\nReact and Next.js performance optimization guidelines from Vercel Engineering. This skill should be used when writing, reviewing, or refactoring React/Next.js code to ensure optimal performance patterns.\n\n### 官方仓库\nhttps://github.com/vercel-labs/agent-skills",
+  },
+  {
+    id: "figma-implement-design",
+    name: "figma-implement-design",
+    description: "This skill provides a structured workflow for translating Figma designs into production-ready code with pixel-perfect accuracy. It ensures consistent integration with the Figma MCP server, proper use of design tokens, and 1:1 visual parity with designs.",
+    repoSource: "openai/skills",
+    content: "<!--内置技能-->\n\n# figma-implement-design\n\nThis skill provides a structured workflow for translating Figma designs into production-ready code with pixel-perfect accuracy. It ensures consistent integration with the Figma MCP server, proper use of design tokens, and 1:1 visual parity with designs.\n\n### 官方仓库\nhttps://github.com/openai/skills",
   }
 ]
