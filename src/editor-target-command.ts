@@ -195,3 +195,20 @@ export async function updateSkill(skillId: string): Promise<string> {
 export async function removeSkill(skillId: string): Promise<string> {
   return invoke<string>('remove_skill', { skillId })
 }
+
+export interface SkillSource {
+  id: string
+  type: 'preset' | 'repo' | 'local'
+  name: string
+  value: string
+}
+
+export async function loadSkillsFromDir(path: string): Promise<SkillInfo[]> {
+  return invoke<SkillInfo[]>('load_skills_from_dir', { path })
+}
+
+export async function selectDirectory(): Promise<string> {
+  return invoke<string>('select_directory')
+}
+
+

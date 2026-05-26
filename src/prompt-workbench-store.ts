@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-import type { EditorId, EditorTargetState, SkillInfo, EditorSkillsState, EditorSkillsStates } from './editor-target-command'
+import type { EditorId, EditorTargetState, SkillInfo, EditorSkillsState, EditorSkillsStates, SkillSource } from './editor-target-command'
 import {
   type PromptFragment,
   presetPromptFragments,
@@ -18,6 +18,30 @@ interface LocalMcpConfig {
   type?: string
   url?: string
 }
+
+// 从 localStorage 加载自定义技能源
+const loadCustomSkillSourcesFromStorage = (): SkillSource[] => {
+  try {
+    const data = typeof window !== 'undefined' ? localStorage.getItem('ai-compose:custom-skill-sources') : null
+    return data ? JSON.parse(data) : []
+  } catch (e) {
+    console.error('Failed to load custom skill sources from storage', e)
+    return []
+  }
+}
+
+// 保存自定义技能源到 localStorage
+const saveCustomSkillSourcesToStorage = (sources: SkillSource[]) => {
+  try {
+    if (typeof window !== 'undefined') {
+      const customSources = sources.filter(s => s.type !== 'preset')
+      localStorage.setItem('ai-compose:custom-skill-sources', JSON.stringify(customSources))
+    }
+  } catch (e) {
+    console.error('Failed to save custom skill sources to storage', e)
+  }
+}
+
 
 // 从 localStorage 加载自定义服务
 const loadCustomServersFromStorage = (): McpServer[] => {
@@ -78,6 +102,8 @@ type PromptWorkbenchState = {
   // Skills 状态
   skills: SkillInfo[]
   selectedSkillId: string
+  skillSources: SkillSource[]
+  selectedSkillSourceId: string
   
   selectDomain: (domain: 'Prompt' | 'MCP' | 'Skills') => void
   hydratePromptEditorStates: (editorStates: Record<EditorId, EditorTargetState>) => void
@@ -106,6 +132,9 @@ type PromptWorkbenchState = {
   toggleSkill: (skillId: string) => void
   setSkillsList: (skills: SkillInfo[]) => void
   replaceSkill: (skill: SkillInfo) => void
+  addSkillSource: (source: Omit<SkillSource, 'id'>) => void
+  deleteSkillSource: (id: string) => void
+  selectSkillSource: (id: string) => void
 }
 
 const defaultSelectedFragmentId = presetPromptFragments[0]?.id ?? ''
@@ -236,6 +265,11 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
     selectedMcpServerId: defaultSelectedMcpServerId,
     skills: [],
     selectedSkillId: '',
+    skillSources: [
+      { id: 'preset', type: 'preset', name: '官方预设', value: '' },
+      ...loadCustomSkillSourcesFromStorage(),
+    ],
+    selectedSkillSourceId: 'preset',
     
     selectDomain: (domain) => {
       const { promptEditorStates, mcpEditorStates, skillsEditorStates, activeEditorId, mcpServers } = get()
@@ -539,6 +573,40 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
         ? currentSkills.map((item) => (item.id === skill.id ? skill : item))
         : [...currentSkills, skill]
       get().setSkillsList(nextSkills)
+    },
+
+    addSkillSource: (source) => {
+      const newId = `${source.type}:${source.value.toLowerCase().replace(/\s+/g, '-')}`
+      const newSource: SkillSource = {
+        ...source,
+        id: newId
+      }
+      set((state) => {
+        const nextSources = [...state.skillSources, newSource]
+        saveCustomSkillSourcesToStorage(nextSources)
+        return {
+          skillSources: nextSources,
+          selectedSkillSourceId: newId
+        }
+      })
+    },
+
+    deleteSkillSource: (id) => {
+      const { skillSources, selectedSkillSourceId } = get()
+      const nextSources = skillSources.filter((s) => s.id !== id)
+      let nextSelectedId = selectedSkillSourceId
+      if (selectedSkillSourceId === id) {
+        nextSelectedId = nextSources[0]?.id ?? 'preset'
+      }
+      saveCustomSkillSourcesToStorage(nextSources)
+      set({
+        skillSources: nextSources,
+        selectedSkillSourceId: nextSelectedId
+      })
+    },
+
+    selectSkillSource: (id) => {
+      set({ selectedSkillSourceId: id })
     },
   }),
 )

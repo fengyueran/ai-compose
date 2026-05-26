@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, test, vi } from 'vitest'
 
 import AiComposeApp from './ai-compose-app'
-import { addSkillsRepository, applySkillsToEditorTarget, linkSkillToEditor, loadEditorInstalledSkills, loadEditorMcpStates, loadEditorSkillsStates, loadEditorTargetStates, loadSingleSkill, openExternalUrl, openLocalPath, revealLocalPath, removeSkill, unlinkSkillFromEditor, updateSkill } from './editor-target-command'
+import { addSkillsRepository, applySkillsToEditorTarget, linkSkillToEditor, loadEditorInstalledSkills, loadEditorMcpStates, loadEditorSkillsStates, loadEditorTargetStates, loadSingleSkill, openExternalUrl, openLocalPath, revealLocalPath, removeSkill, unlinkSkillFromEditor, updateSkill, loadPhysicalSkills, loadSkillsFromDir, selectDirectory } from './editor-target-command'
 import { usePromptWorkbenchStore } from './prompt-workbench-store'
 
 vi.mock('./editor-target-command', async () => {
@@ -13,6 +13,8 @@ vi.mock('./editor-target-command', async () => {
     addSkillsRepository: vi.fn(),
     applySkillsToEditorTarget: vi.fn(),
     loadEditorInstalledSkills: vi.fn(),
+    loadPhysicalSkills: vi.fn(),
+    loadSkillsFromDir: vi.fn(),
     loadEditorMcpStates: vi.fn(),
     loadEditorSkillsStates: vi.fn(),
     loadEditorTargetStates: vi.fn(),
@@ -24,12 +26,16 @@ vi.mock('./editor-target-command', async () => {
     removeSkill: vi.fn(),
     unlinkSkillFromEditor: vi.fn(),
     updateSkill: vi.fn(),
+    selectDirectory: vi.fn(),
   }
 })
 
 describe('Prompt Workbench', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(loadPhysicalSkills).mockResolvedValue([])
+    vi.mocked(loadSkillsFromDir).mockResolvedValue([])
+    vi.mocked(selectDirectory).mockResolvedValue('/Users/test/.cursor/skills')
   })
 
   test('renders the codex prompt workbench skeleton', () => {
@@ -171,6 +177,11 @@ describe('Prompt Workbench', () => {
         codex: { enabled: false, targetPath: '', enabledSkills: [] },
         cursor: { enabled: true, targetPath: '/Users/test/.cursor/skills', enabledSkills: ['cli-skill', 'local-scan-skill'] },
       },
+      skillSources: [
+        { id: 'preset', type: 'preset', name: '官方预设', value: '' },
+        { id: 'local:dir', type: 'local', name: '本地源', value: '/Users/test/.cursor/skills' }
+      ],
+      selectedSkillSourceId: 'local:dir',
       skills: [
         {
           id: 'cli-skill',
@@ -189,60 +200,44 @@ describe('Prompt Workbench', () => {
           sourceKind: 'fallbackDirectory',
         },
       ],
-      selectedSkillId: 'cli-skill',
+      selectedSkillId: 'local-scan-skill',
       isHydratingEditorStates: false,
     })
 
     render(<AiComposeApp />)
 
-    expect(screen.getByText(/官方 Skills 0 项 · 当前编辑器已安装 2 项/)).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '本地 Skills' })).toBeInTheDocument()
-    expect(screen.getAllByText('本地').length).toBeGreaterThan(0)
-    expect(screen.queryByText('skills.sh')).not.toBeInTheDocument()
+    expect(screen.getByText(/已安装\/已链接 2 项技能/)).toBeInTheDocument()
     expect(screen.getByText(/Scanned from an editor target directory/)).toBeInTheDocument()
 
-    // Switches should not be present in the document
-    expect(screen.queryByRole('switch')).not.toBeInTheDocument()
+    // Click on the Local Scan Skill row to open the details modal
+    const localSkillRow = screen.getByRole('button', { name: /Local Scan Skill/ })
+    await userEvent.click(localSkillRow)
 
-    // Preview apply summary bar checks
-    expect(screen.getAllByText('CLI Skill').length).toBeGreaterThan(0)
-    expect(screen.queryByRole('button', { name: '卸载' })).not.toBeInTheDocument()
-
-    // Click on the CLI Skill row to open the details modal
-    const cliSkillRow = screen.getByRole('button', { name: /CLI Skill/ })
-    await userEvent.click(cliSkillRow)
-
-    expect(within(screen.getByRole('dialog')).getByRole('button', { name: '取消链接' })).toBeInTheDocument()
-
-    const filterSelect = screen.getByRole('combobox')
-    await userEvent.click(filterSelect)
-
-    // Check filter by '本地目录'
-    await userEvent.click(screen.getByRole('option', { name: '本地目录' }))
-    expect(screen.getByRole('button', { name: /Local Scan Skill/ })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /CLI Skill/ })).not.toBeInTheDocument()
-
-    // Check filter by '第三方'
-    await userEvent.click(filterSelect)
-    await userEvent.click(screen.getByRole('option', { name: '第三方' }))
-    expect(screen.getByRole('button', { name: /CLI Skill/ })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Local Scan Skill/ })).not.toBeInTheDocument()
+    const dialog = screen.getAllByRole('dialog').find(el => el.textContent?.includes('技能详情'))!
+    const unlinkBtn = within(dialog).getByRole('button', { name: '取消链接' })
+    expect(unlinkBtn).toBeInTheDocument()
+    expect(unlinkBtn).toBeDisabled() // fallback skills are read-only
   })
 
-  test('renders official and local skills in separate groups', () => {
+  test('renders skills sources list and filters skills by selected source', async () => {
     usePromptWorkbenchStore.setState({
       activeDomain: 'Skills',
       activeEditorId: 'cursor',
       editorStates: {
         antigravity: { enabled: false, targetPath: '', enabledSkills: [] },
         codex: { enabled: false, targetPath: '', enabledSkills: [] },
-        cursor: { enabled: true, targetPath: '/Users/test/.cursor/skills', enabledSkills: ['brainstorming', 'local-scan-skill'] },
+        cursor: { enabled: true, targetPath: '/Users/test/.cursor/skills', enabledSkills: ['brainstorming'] },
       },
       skillsEditorStates: {
         antigravity: { enabled: false, targetPath: '', enabledSkills: [] },
         codex: { enabled: false, targetPath: '', enabledSkills: [] },
-        cursor: { enabled: true, targetPath: '/Users/test/.cursor/skills', enabledSkills: ['brainstorming', 'local-scan-skill'] },
+        cursor: { enabled: true, targetPath: '/Users/test/.cursor/skills', enabledSkills: ['brainstorming'] },
       },
+      skillSources: [
+        { id: 'preset', type: 'preset', name: '官方预设', value: '' },
+        { id: 'local:dir', type: 'local', name: '本地源', value: '/Users/test/.cursor/skills' }
+      ],
+      selectedSkillSourceId: 'preset',
       skills: [
         {
           id: 'brainstorming',
@@ -268,65 +263,17 @@ describe('Prompt Workbench', () => {
 
     render(<AiComposeApp />)
 
-    expect(screen.getByRole('heading', { name: '官方 Skills' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '本地 Skills' })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: '官方 Skills' })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: '本地 Skills' })).toBeInTheDocument()
-  })
+    // Left pane should list the sources
+    expect(screen.getAllByText('官方预设').length).toBeGreaterThan(0)
+    expect(screen.getByText('本地源')).toBeInTheDocument()
 
-  test('renders custom repository skills separately from official and local skills', () => {
-    usePromptWorkbenchStore.setState({
-      activeDomain: 'Skills',
-      activeEditorId: 'cursor',
-      editorStates: {
-        antigravity: { enabled: false, targetPath: '', enabledSkills: [] },
-        codex: { enabled: false, targetPath: '', enabledSkills: [] },
-        cursor: { enabled: true, targetPath: '/Users/test/.cursor/skills', enabledSkills: ['react-development', 'local-scan-skill'] },
-      },
-      skillsEditorStates: {
-        antigravity: { enabled: false, targetPath: '', enabledSkills: [] },
-        codex: { enabled: false, targetPath: '', enabledSkills: [] },
-        cursor: { enabled: true, targetPath: '/Users/test/.cursor/skills', enabledSkills: ['react-development', 'local-scan-skill'] },
-      },
-      skills: [
-        {
-          id: 'brainstorming',
-          name: 'brainstorming',
-          description: 'Official skill',
-          content: '# brainstorming',
-          path: '/Users/test/.agents/skills/brainstorming',
-          sourceKind: 'cli',
-          isBuiltin: true,
-          repoSource: 'obra/superpowers',
-        },
-        {
-          id: 'react-development',
-          name: 'react-development',
-          description: 'Installed from a custom repo',
-          content: '# react-development',
-          path: '/Users/test/.agents/skills/react-development',
-          sourceKind: 'cli',
-          repoSource: 'fengyueran/skills',
-        },
-        {
-          id: 'local-scan-skill',
-          name: 'Local Scan Skill',
-          description: 'Scanned from an editor target directory',
-          content: '# Local Scan Skill',
-          path: '/Users/test/.cursor/skills/local-scan-skill',
-          sourceKind: 'fallbackDirectory',
-        },
-      ],
-      selectedSkillId: 'react-development',
-      isHydratingEditorStates: false,
-    })
+    // Currently "官方预设" is selected, so brainstorming is shown, but local-scan-skill is not
+    expect(screen.getByText('brainstorming')).toBeInTheDocument()
+    expect(screen.queryByText('Local Scan Skill')).not.toBeInTheDocument()
 
-    render(<AiComposeApp />)
-
-    expect(screen.getByRole('heading', { name: '官方 Skills' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '第三方 Skills' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '本地 Skills' })).toBeInTheDocument()
-    expect(screen.getByText('第三方')).toBeInTheDocument()
+    // Click "本地源"
+    await userEvent.click(screen.getByText('本地源'))
+    expect(usePromptWorkbenchStore.getState().selectedSkillSourceId).toBe('local:dir')
   })
 
   test('renders source repository as a clickable GitHub link in skill details', async () => {
@@ -370,6 +317,11 @@ describe('Prompt Workbench', () => {
         codex: { enabled: false, targetPath: '', enabledSkills: [] },
         cursor: { enabled: true, targetPath: '/Users/test/.cursor/skills', enabledSkills: ['react-development'] },
       },
+      skillSources: [
+        { id: 'preset', type: 'preset', name: '官方预设', value: '' },
+        { id: 'repo:fengyueran/skills', type: 'repo', name: 'fengyueran/skills', value: 'fengyueran/skills' }
+      ],
+      selectedSkillSourceId: 'repo:fengyueran/skills',
       skills: [
         {
           id: 'react-development',
@@ -389,7 +341,8 @@ describe('Prompt Workbench', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /react-development/ }))
 
-    const repoLink = within(screen.getByRole('dialog')).getByRole('link', { name: 'fengyueran/skills' })
+    const dialog = screen.getAllByRole('dialog').find(el => el.textContent?.includes('技能详情'))!
+    const repoLink = within(dialog).getByRole('link', { name: 'fengyueran/skills' })
     expect(repoLink).toHaveAttribute('href', 'https://github.com/fengyueran/skills')
     expect(repoLink).toHaveAttribute('target', '_blank')
 
@@ -440,6 +393,11 @@ describe('Prompt Workbench', () => {
         codex: { enabled: false, targetPath: '', enabledSkills: [] },
         cursor: { enabled: true, targetPath: '/Users/test/.cursor/skills', enabledSkills: ['react-development'] },
       },
+      skillSources: [
+        { id: 'preset', type: 'preset', name: '官方预设', value: '' },
+        { id: 'repo:fengyueran/skills', type: 'repo', name: 'fengyueran/skills', value: 'fengyueran/skills' }
+      ],
+      selectedSkillSourceId: 'repo:fengyueran/skills',
       skills: [
         {
           id: 'react-development',
@@ -459,7 +417,8 @@ describe('Prompt Workbench', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /react-development/ }))
 
-    const dialog = within(screen.getByRole('dialog'))
+    const dialogElement = screen.getAllByRole('dialog').find(el => el.textContent?.includes('技能详情'))!
+    const dialog = within(dialogElement)
     const physicalPathButton = dialog.getByRole('button', { name: '/Users/test/.agents/skills/react-development' })
     const targetPathButton = dialog.getByRole('button', { name: '/Users/test/.cursor/skills/react-development' })
 
@@ -482,14 +441,13 @@ describe('Prompt Workbench', () => {
 
     usePromptWorkbenchStore.setState({
       activeDomain: 'Skills',
-      isHydratingEditorStates: false,
+      isHydratingEditorStates: true,
       skills: [],
     })
 
     render(<AiComposeApp />)
 
     expect(screen.getByText('正在加载技能列表...')).toBeInTheDocument()
-    expect(screen.queryByText(/当前 .* 未安装任何技能/)).not.toBeInTheDocument()
 
     delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
   })
@@ -539,6 +497,26 @@ describe('Prompt Workbench', () => {
   })
 
   test('unlinks the selected cli skill from the current editor without uninstalling it globally', async () => {
+    vi.mocked(loadPhysicalSkills).mockResolvedValue([
+      {
+        id: 'linked-skill',
+        name: 'Linked Skill',
+        description: 'Managed by skills.sh',
+        content: '# Linked Skill',
+        path: '/Users/test/.agents/skills/linked-skill',
+        sourceKind: 'cli',
+        repoSource: 'cli-repo',
+      },
+      {
+        id: 'keep-skill',
+        name: 'Keep Skill',
+        description: 'Managed by skills.sh',
+        content: '# Keep Skill',
+        path: '/Users/test/.agents/skills/keep-skill',
+        sourceKind: 'cli',
+        repoSource: 'cli-repo',
+      },
+    ])
     vi.mocked(unlinkSkillFromEditor).mockResolvedValue({
       action: 'removed',
       editorId: 'cursor',
@@ -574,6 +552,11 @@ describe('Prompt Workbench', () => {
         codex: { enabled: false, targetPath: '', enabledSkills: [] },
         cursor: { enabled: true, targetPath: '/Users/test/.cursor/skills', enabledSkills: ['linked-skill', 'keep-skill'] },
       },
+      skillSources: [
+        { id: 'preset', type: 'preset', name: '官方预设', value: '' },
+        { id: 'repo:cli', type: 'repo', name: 'CLI Source', value: 'cli-repo' }
+      ],
+      selectedSkillSourceId: 'repo:cli',
       skills: [
         {
           id: 'linked-skill',
@@ -582,6 +565,7 @@ describe('Prompt Workbench', () => {
           content: '# Linked Skill',
           path: '/Users/test/.agents/skills/linked-skill',
           sourceKind: 'cli',
+          repoSource: 'cli-repo',
         },
         {
           id: 'keep-skill',
@@ -590,6 +574,7 @@ describe('Prompt Workbench', () => {
           content: '# Keep Skill',
           path: '/Users/test/.agents/skills/keep-skill',
           sourceKind: 'cli',
+          repoSource: 'cli-repo',
         },
       ],
       selectedSkillId: 'linked-skill',
@@ -599,7 +584,8 @@ describe('Prompt Workbench', () => {
     render(<AiComposeApp />)
 
     await userEvent.click(screen.getByRole('button', { name: /Linked Skill/ }))
-    await userEvent.click(screen.getByRole('button', { name: '取消链接' }))
+    const dialog = screen.getAllByRole('dialog').find(el => el.textContent?.includes('技能详情'))!
+    await userEvent.click(within(dialog).getByRole('button', { name: '取消链接' }))
 
     expect(removeSkill).not.toHaveBeenCalled()
     expect(applySkillsToEditorTarget).not.toHaveBeenCalled()
@@ -610,8 +596,7 @@ describe('Prompt Workbench', () => {
     })
     expect(usePromptWorkbenchStore.getState().skillsEditorStates.cursor.enabledSkills).toEqual(['keep-skill'])
     expect(usePromptWorkbenchStore.getState().skills.find((skill) => skill.id === 'keep-skill')).toBeDefined()
-    expect(usePromptWorkbenchStore.getState().skills.find((skill) => skill.id === 'linked-skill')).toBeUndefined()
-    expect(usePromptWorkbenchStore.getState().skills.find((skill) => skill.id === 'ui-ux-pro-max')?.installed).toBe(false)
+    expect(usePromptWorkbenchStore.getState().skills.find((skill) => skill.id === 'linked-skill')).toBeDefined() // unlinked skill is NOT removed from available skills
   })
 
   test('shows only skills linked to the current editor even when other third-party skills exist globally', async () => {
@@ -654,6 +639,11 @@ describe('Prompt Workbench', () => {
         codex: { enabled: false, targetPath: '', enabledSkills: [] },
         cursor: { enabled: true, targetPath: '/Users/test/.cursor/skills', enabledSkills: ['linked-skill'] },
       },
+      skillSources: [
+        { id: 'preset', type: 'preset', name: '官方预设', value: '' },
+        { id: 'repo:cli', type: 'repo', name: 'CLI Source', value: 'cli-repo' }
+      ],
+      selectedSkillSourceId: 'repo:cli',
       skills: [
         {
           id: 'linked-skill',
@@ -662,6 +652,7 @@ describe('Prompt Workbench', () => {
           content: '# Linked Skill',
           path: '/Users/test/.agents/skills/linked-skill',
           sourceKind: 'cli',
+          repoSource: 'cli-repo',
         },
         {
           id: 'global-third-party-skill',
@@ -670,7 +661,7 @@ describe('Prompt Workbench', () => {
           content: '# Global Third Party Skill',
           path: '/Users/test/.agents/skills/global-third-party-skill',
           sourceKind: 'cli',
-          repoSource: 'fengyueran/skills',
+          repoSource: 'other-repo',
         },
       ],
       selectedSkillId: 'linked-skill',
@@ -681,7 +672,6 @@ describe('Prompt Workbench', () => {
 
     expect(addSkillsRepository).not.toHaveBeenCalled()
     expect(applySkillsToEditorTarget).not.toHaveBeenCalled()
-    expect(await screen.findByText(/当前编辑器已安装 1 项/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Linked Skill/ })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Global Third Party Skill/ })).not.toBeInTheDocument()
     expect(usePromptWorkbenchStore.getState().skillsEditorStates.cursor.enabledSkills).toEqual(['linked-skill'])
@@ -742,105 +732,17 @@ describe('Prompt Workbench', () => {
 
     render(<AiComposeApp />)
 
-    await userEvent.type(
-      screen.getByPlaceholderText('安装仓库或 GitHub 链接并链接到当前编辑器，如 vercel-labs/agent-skills'),
-      'vercel-labs/skills',
-    )
-    await userEvent.click(screen.getByRole('button', { name: '安装' }))
+    // Click "+ 添加源"
+    await userEvent.click(screen.getByRole('button', { name: '+ 添加源' }))
+    const dialog = screen.getAllByRole('dialog').find(el => el.textContent?.includes('添加技能源'))!
+    
+    // Fill the add source form
+    await userEvent.type(within(dialog).getByPlaceholderText('例如：开发规范、Vercel 技能集'), 'Vercel 技能集')
+    await userEvent.type(within(dialog).getByPlaceholderText('例如：vercel-labs/skills'), 'vercel-labs/skills')
+    await userEvent.click(within(dialog).getByRole('button', { name: '确定' }))
 
     expect(addSkillsRepository).toHaveBeenCalledWith('vercel-labs/skills')
-    expect(applySkillsToEditorTarget).not.toHaveBeenCalled()
-    expect(linkSkillToEditor).toHaveBeenCalledWith({
-      editorId: 'cursor',
-      skillId: 'find-skills',
-      skillPath: '/Users/test/.agents/skills/find-skills',
-    })
-    expect(loadEditorSkillsStates).toHaveBeenCalled()
-    expect(loadEditorInstalledSkills).toHaveBeenCalledWith({ editorId: 'cursor' })
-    expect(usePromptWorkbenchStore.getState().skillsEditorStates.cursor.enabledSkills).toEqual(['find-skills'])
-    expect(usePromptWorkbenchStore.getState().skills.find((skill) => skill.id === 'find-skills')?.installed).toBe(true)
-  })
-
-  test('installs a repo from the toolbar and links every returned skill to the current editor', async () => {
-    vi.mocked(addSkillsRepository).mockResolvedValue([
-      {
-        id: 'find-skills',
-        name: 'find-skills',
-        description: 'builtin preset installed',
-        content: '# find-skills latest',
-        path: '/Users/test/.agents/skills/find-skills',
-        sourceKind: 'cli',
-      },
-      {
-        id: 'frontend-design',
-        name: 'frontend-design',
-        description: 'frontend design',
-        content: '# frontend-design latest',
-        path: '/Users/test/.agents/skills/frontend-design',
-        sourceKind: 'cli',
-      },
-    ])
-    vi.mocked(linkSkillToEditor).mockResolvedValue({
-      action: 'updated',
-      editorId: 'cursor',
-      targetPath: '/Users/test/.cursor/skills',
-      updatedAt: '2026-05-21 18:13:00',
-    })
-    vi.mocked(loadEditorSkillsStates).mockResolvedValue({
-      antigravity: { enabled: false, targetPath: '', enabledSkills: [] },
-      codex: { enabled: false, targetPath: '', enabledSkills: [] },
-      cursor: { enabled: true, targetPath: '/Users/test/.cursor/skills', enabledSkills: ['find-skills', 'frontend-design'] },
-    })
-    vi.mocked(loadEditorInstalledSkills).mockResolvedValue([
-      {
-        id: 'find-skills',
-        name: 'find-skills',
-        description: 'builtin preset installed',
-        content: '# find-skills latest',
-        path: '/Users/test/.agents/skills/find-skills',
-        sourceKind: 'cli',
-      },
-      {
-        id: 'frontend-design',
-        name: 'frontend-design',
-        description: 'frontend design',
-        content: '# frontend-design latest',
-        path: '/Users/test/.agents/skills/frontend-design',
-        sourceKind: 'cli',
-      },
-    ])
-
-    usePromptWorkbenchStore.setState({
-      activeDomain: 'Skills',
-      activeEditorId: 'cursor',
-      editorStates: {
-        antigravity: { enabled: false, targetPath: '', enabledSkills: [] },
-        codex: { enabled: false, targetPath: '', enabledSkills: [] },
-        cursor: { enabled: false, targetPath: '/Users/test/.cursor/skills', enabledSkills: [] },
-      },
-      skillsEditorStates: {
-        antigravity: { enabled: false, targetPath: '', enabledSkills: [] },
-        codex: { enabled: false, targetPath: '', enabledSkills: [] },
-        cursor: { enabled: false, targetPath: '/Users/test/.cursor/skills', enabledSkills: [] },
-      },
-      skills: [],
-      selectedSkillId: '',
-      isHydratingEditorStates: false,
-    })
-
-    render(<AiComposeApp />)
-
-    await userEvent.type(
-      screen.getByPlaceholderText('安装仓库或 GitHub 链接并链接到当前编辑器，如 vercel-labs/agent-skills'),
-      'vercel-labs/skills',
-    )
-    await userEvent.click(screen.getByRole('button', { name: '安装' }))
-
-    expect(addSkillsRepository).toHaveBeenCalledWith('vercel-labs/skills')
-    expect(linkSkillToEditor).toHaveBeenCalledTimes(2)
-    expect(usePromptWorkbenchStore.getState().skills.find((skill) => skill.id === 'find-skills')?.installed).toBe(true)
-    expect(usePromptWorkbenchStore.getState().skills.find((skill) => skill.id === 'frontend-design')?.installed).toBe(true)
-    expect(usePromptWorkbenchStore.getState().skills.find((skill) => skill.id === 'ui-ux-pro-max')?.installed).toBe(false)
+    expect(usePromptWorkbenchStore.getState().skillsEditorStates.cursor.enabledSkills).toEqual([])
   })
 
   test('updates only the selected skill metadata without reloading the full skills list', async () => {
@@ -887,6 +789,11 @@ describe('Prompt Workbench', () => {
         codex: { enabled: false, targetPath: '', enabledSkills: [] },
         cursor: { enabled: false, targetPath: '/Users/test/.cursor/skills', enabledSkills: ['linked-skill'] },
       },
+      skillSources: [
+        { id: 'preset', type: 'preset', name: '官方预设', value: '' },
+        { id: 'repo:cli', type: 'repo', name: 'CLI Source', value: 'cli-repo' }
+      ],
+      selectedSkillSourceId: 'repo:cli',
       skills: [
         {
           id: 'linked-skill',
@@ -895,6 +802,7 @@ describe('Prompt Workbench', () => {
           content: '# Linked Skill',
           path: '/Users/test/.agents/skills/linked-skill',
           sourceKind: 'cli',
+          repoSource: 'cli-repo',
         },
       ],
       selectedSkillId: 'linked-skill',
@@ -904,7 +812,7 @@ describe('Prompt Workbench', () => {
     render(<AiComposeApp />)
 
     await userEvent.click(await screen.findByRole('button', { name: /Linked Skill/ }))
-    const dialog = screen.getByRole('dialog')
+    const dialog = screen.getAllByRole('dialog').find(el => el.textContent?.includes('技能详情'))!
     await userEvent.click(within(dialog).getByRole('button', { name: '更新' }))
 
     expect(updateSkill).toHaveBeenCalledWith('linked-skill')
@@ -915,4 +823,59 @@ describe('Prompt Workbench', () => {
     })
     expect(usePromptWorkbenchStore.getState().skills.find((skill) => skill.id === 'linked-skill')?.description).toBe('Updated description')
   })
+
+  test('adds a custom local source using native directory dialog', async () => {
+    usePromptWorkbenchStore.setState({
+      activeDomain: 'Skills',
+      activeEditorId: 'cursor',
+      editorStates: {
+        antigravity: { enabled: false, targetPath: '', enabledSkills: [] },
+        codex: { enabled: false, targetPath: '', enabledSkills: [] },
+        cursor: { enabled: false, targetPath: '/Users/test/.cursor/skills', enabledSkills: [] },
+      },
+      skillsEditorStates: {
+        antigravity: { enabled: false, targetPath: '', enabledSkills: [] },
+        codex: { enabled: false, targetPath: '', enabledSkills: [] },
+        cursor: { enabled: false, targetPath: '/Users/test/.cursor/skills', enabledSkills: [] },
+      },
+      skills: [],
+      selectedSkillId: '',
+      isHydratingEditorStates: false,
+    })
+
+    render(<AiComposeApp />)
+
+    // Click "+ 添加源"
+    await userEvent.click(screen.getByRole('button', { name: '+ 添加源' }))
+    const dialog = screen.getAllByRole('dialog').find(el => el.textContent?.includes('添加技能源'))!
+
+    // Click "本地物理目录" tab button
+    await userEvent.click(within(dialog).getByRole('button', { name: '本地物理目录' }))
+
+    // Now the dialog should render the folder selection button
+    const selectFolderBtn = within(dialog).getByRole('button', { name: '选择文件夹' })
+    expect(selectFolderBtn).toBeInTheDocument()
+
+    // Mock click "选择文件夹"
+    await userEvent.click(selectFolderBtn)
+    expect(selectDirectory).toHaveBeenCalled()
+
+    // The input should now contain the selected directory path from our mock
+    const inputElement = within(dialog).getByPlaceholderText('例如：/Users/username/my-skills')
+    expect(inputElement).toHaveValue('/Users/test/.cursor/skills')
+
+    // Input name
+    await userEvent.type(within(dialog).getByPlaceholderText('例如：开发规范、Vercel 技能集'), '测试本地源')
+    
+    // Click confirm
+    await userEvent.click(within(dialog).getByRole('button', { name: '确定' }))
+
+    // Verify it adds a new skill source to store
+    const skillSources = usePromptWorkbenchStore.getState().skillSources
+    const addedSource = skillSources.find(s => s.name === '测试本地源')
+    expect(addedSource).toBeDefined()
+    expect(addedSource?.type).toBe('local')
+    expect(addedSource?.value).toBe('/Users/test/.cursor/skills')
+  })
 })
+

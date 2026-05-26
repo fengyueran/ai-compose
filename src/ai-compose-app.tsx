@@ -8,6 +8,8 @@ import {
   loadEditorMcpStates,
   loadEditorSkillsStates,
   loadEditorInstalledSkills,
+  loadPhysicalSkills,
+  loadSkillsFromDir,
   addSkillsRepository,
   linkSkillToEditor,
   loadSingleSkill,
@@ -16,8 +18,10 @@ import {
   openExternalUrl,
   openLocalPath,
   revealLocalPath,
+  selectDirectory,
   type EditorId,
   type SkillInfo,
+  type SkillSource,
   isTauriRuntime,
 } from "./editor-target-command";
 import { composeManagedPromptBlock } from "./compose-prompt";
@@ -32,15 +36,14 @@ const configurationDomains = [
   { name: "Profiles", isAvailable: false },
 ] as const;
 
-type SkillsFilter = "all" | "official" | "repository" | "local";
+type SkillsFilter = "all" | "linked" | "unlinked";
 
 type SkillDisplaySource = "official" | "repository" | "local";
 
 const skillsFilterOptions: SelectOption[] = [
   { label: "全部", value: "all" },
-  { label: "官方", value: "official" },
-  { label: "第三方", value: "repository" },
-  { label: "本地目录", value: "local" },
+  { label: "已链接", value: "linked" },
+  { label: "未链接", value: "unlinked" },
 ];
 
 function getSkillDisplaySource(skill: SkillInfo): SkillDisplaySource {
@@ -199,6 +202,11 @@ function AiComposeApp() {
     selectSkill,
     replaceSkill,
     setSkillsList,
+    skillSources,
+    selectedSkillSourceId,
+    addSkillSource,
+    deleteSkillSource,
+    selectSkillSource,
   } = usePromptWorkbenchStore();
 
   const selectedFragment =
@@ -248,6 +256,12 @@ function AiComposeApp() {
   const [skillsFilter, setSkillsFilter] = useState<SkillsFilter>("all");
   const [isSkillModalOpen, setIsSkillModalOpen] = useState(false);
   const [isSkillsListLoading, setIsSkillsListLoading] = useState(false);
+
+  // Skills Sources
+  const [isAddSourceModalOpen, setIsAddSourceModalOpen] = useState(false);
+  const [newSourceName, setNewSourceName] = useState("");
+  const [newSourceType, setNewSourceType] = useState<"repo" | "local">("repo");
+  const [newSourceValue, setNewSourceValue] = useState("");
 
   const isSkillsLoading = isHydratingEditorStates || isSkillsListLoading || isAddingSkillsRepo || isRemovingSkill || isUpdatingSkill;
 
@@ -316,20 +330,38 @@ function AiComposeApp() {
     return tomlStr.trim();
   }, [enabledMcp]);
 
+  const activeSkillsTargetPath = skillsEditorStates[activeEditorId]?.targetPath ?? "";
+  const activeEnabledSkillIds = skillsEditorStates[activeEditorId]?.enabledSkills ?? [];
+
+  const selectedSource = useMemo(() => {
+    return skillSources.find((s) => s.id === selectedSkillSourceId) || skillSources[0];
+  }, [skillSources, selectedSkillSourceId]);
+
   const filteredSkills = useMemo(() => {
     const normalizedQuery = skillsQuery.trim().toLowerCase();
 
     return skills.filter((skill) => {
-      const source = getSkillDisplaySource(skill);
-      if (skillsFilter === "official" && source !== "official") {
+      // 1. Filter by selected source
+      if (selectedSource.type === "preset") {
+        if (!skill.isBuiltin) return false;
+      } else if (selectedSource.type === "repo") {
+        if (skill.repoSource !== selectedSource.value) return false;
+      } else if (selectedSource.type === "local") {
+        if (!skill.path || !skill.path.toLowerCase().startsWith(selectedSource.value.toLowerCase())) {
+          return false;
+        }
+      }
+
+      // 2. Filter by link status
+      const isLinked = activeEnabledSkillIds.includes(skill.id);
+      if (skillsFilter === "linked" && !isLinked) {
         return false;
       }
-      if (skillsFilter === "repository" && source !== "repository") {
+      if (skillsFilter === "unlinked" && isLinked) {
         return false;
       }
-      if (skillsFilter === "local" && source !== "local") {
-        return false;
-      }
+
+      // 3. Filter by search query
       if (!normalizedQuery) {
         return true;
       }
@@ -339,29 +371,7 @@ function AiComposeApp() {
         .toLowerCase()
         .includes(normalizedQuery);
     });
-  }, [skills, skillsFilter, skillsQuery]);
-
-  const groupedFilteredSkills = useMemo(() => {
-    const builtin = filteredSkills.filter(
-      (skill) => getSkillDisplaySource(skill) === "official",
-    );
-    const repository = filteredSkills.filter(
-      (skill) => getSkillDisplaySource(skill) === "repository",
-    );
-    const local = filteredSkills.filter(
-      (skill) => getSkillDisplaySource(skill) === "local",
-    );
-
-    return [
-      { key: "builtin", title: "官方 Skills", skills: builtin },
-      { key: "repository", title: "第三方 Skills", skills: repository },
-      { key: "local", title: "本地 Skills", skills: local },
-    ].filter((group) => group.skills.length > 0);
-  }, [filteredSkills]);
-
-
-  const activeSkillsTargetPath = skillsEditorStates[activeEditorId]?.targetPath ?? "";
-  const activeEnabledSkillIds = skillsEditorStates[activeEditorId]?.enabledSkills ?? [];
+  }, [skills, selectedSource, skillsFilter, skillsQuery, activeEnabledSkillIds]);
   const selectedSkillTargetLink = selectedSkill && activeSkillsTargetPath
     ? `${activeSkillsTargetPath}/${selectedSkill.id}`
     : "";
@@ -383,9 +393,31 @@ function AiComposeApp() {
   const shouldShowSelectedSkillSourceBadge = Boolean(selectedSkill);
 
   const refreshCurrentEditorSkills = async (editorId: EditorId) => {
-    const installedSkills = await loadEditorInstalledSkills({ editorId });
-    setSkillsList(installedSkills);
-    return installedSkills;
+    const [editorSkills, globalSkills] = await Promise.all([
+      loadEditorInstalledSkills({ editorId }),
+      loadPhysicalSkills(),
+    ]);
+
+    const localSources = skillSources.filter((s) => s.type === "local");
+    const localSkillsPromises = localSources.map(async (src) => {
+      try {
+        return await loadSkillsFromDir(src.value);
+      } catch (e) {
+        console.error(`Failed to load skills from local source ${src.value}`, e);
+        return [];
+      }
+    });
+    const localSkillsLists = await Promise.all(localSkillsPromises);
+    const allLocalSkills = localSkillsLists.flat();
+
+    const mergedMap = new Map<string, SkillInfo>();
+    globalSkills.forEach((s) => mergedMap.set(s.id, s));
+    allLocalSkills.forEach((s) => mergedMap.set(s.id, s));
+    editorSkills.forEach((s) => mergedMap.set(s.id, s));
+
+    const combinedSkills = Array.from(mergedMap.values());
+    setSkillsList(combinedSkills);
+    return combinedSkills;
   };
 
   const renderSkillRow = (skill: typeof skills[number]) => {
@@ -620,11 +652,32 @@ function AiComposeApp() {
 
       setIsSkillsListLoading(true);
       try {
-        const installedSkills = await loadEditorInstalledSkills({ editorId: activeEditorId });
+        const [editorSkills, globalSkills] = await Promise.all([
+          loadEditorInstalledSkills({ editorId: activeEditorId }),
+          loadPhysicalSkills(),
+        ]);
+
+        const localSources = skillSources.filter((s) => s.type === "local");
+        const localSkillsPromises = localSources.map(async (src) => {
+          try {
+            return await loadSkillsFromDir(src.value);
+          } catch (e) {
+            console.error(`Failed to load skills from local source ${src.value}`, e);
+            return [];
+          }
+        });
+        const localSkillsLists = await Promise.all(localSkillsPromises);
+        const allLocalSkills = localSkillsLists.flat();
+
+        const mergedMap = new Map<string, SkillInfo>();
+        globalSkills.forEach((s) => mergedMap.set(s.id, s));
+        allLocalSkills.forEach((s) => mergedMap.set(s.id, s));
+        editorSkills.forEach((s) => mergedMap.set(s.id, s));
+
         if (!isSubscribed) {
           return;
         }
-        setSkillsList(installedSkills);
+        setSkillsList(Array.from(mergedMap.values()));
       } catch (error) {
         if (!isSubscribed) {
           return;
@@ -647,7 +700,7 @@ function AiComposeApp() {
     return () => {
       isSubscribed = false;
     };
-  }, [activeDomain, activeEditorId, setSkillsList]);
+  }, [activeDomain, activeEditorId, setSkillsList, skillSources]);
 
   const applyToEditor = async (
     editorId: EditorId,
@@ -1462,122 +1515,354 @@ function AiComposeApp() {
                         当前编辑器 Skills
                       </h2>
                       <p className="panel__subtitle">
-                        展示官方 Skills、第三方 Skills，以及当前 {editorMeta[activeEditorId].title} 本地目录中的 Skills；可从仓库安装并直接链接到当前编辑器。
+                        管理已链接的技能，添加第三方仓库或本地物理目录作为技能源。
                       </p>
                     </div>
-                    <span className="chip">官方 {builtinSkills.length} 项 · 已安装 {installedSkills.length} 项</span>
-                  </div>
-
-                  <div className="skills-manager__controls">
-                    <input
-                      className="form-input skills-manager__search"
-                      placeholder="搜索技能名称、描述或来源路径"
-                      value={skillsQuery}
-                      onChange={(event) => setSkillsQuery(event.target.value)}
-                    />
-                    <Select
-                      className="skills-manager__filter-select"
-                      classNames={{
-                        trigger: "skills-manager__filter-trigger",
-                        dropdown: "skills-manager__filter-dropdown",
-                        option: "skills-manager__filter-option",
-                      }}
-                      value={skillsFilter}
-                      options={skillsFilterOptions}
-                      onChange={(value) => {
-                        if (typeof value === "string") {
-                          setSkillsFilter(value as SkillsFilter);
-                        }
-                      }}
-                    />
-                    <div className="skills-manager__install">
-                      <input
-                        className="form-input"
-                        placeholder="安装仓库或 GitHub 链接并链接到当前编辑器，如 vercel-labs/agent-skills"
-                        value={skillsRepoInput}
-                        onChange={(event) => setSkillsRepoInput(event.target.value)}
-                      />
-                      <Button
-                        type="button"
-                        className={`fragment-action-btn${isAddingSkillsRepo ? " fragment-action-btn--loading" : ""}`}
-                        disabled={isRemovingSkill || isUpdatingSkill || !skillsRepoInput.trim()}
-                        loading={isAddingSkillsRepo}
-                        style={{ opacity: isAddingSkillsRepo || isRemovingSkill || isUpdatingSkill || !skillsRepoInput.trim() ? 0.6 : 1 }}
-                        onClick={async () => {
-                          if (!skillsRepoInput.trim()) return;
-                          setIsAddingSkillsRepo(true);
-                          try {
-                            const installedSkills = await addSkillsRepository(skillsRepoInput.trim());
-                            for (const skill of installedSkills) {
-                              await linkSkillToEditor({
-                                editorId: activeEditorId,
-                                skillId: skill.id,
-                                skillPath: skill.path,
-                              });
-                            }
-                            const nextSkillsStates = await loadEditorSkillsStates();
-                            hydrateSkillsEditorStates(nextSkillsStates);
-                            await refreshCurrentEditorSkills(activeEditorId);
-                            messageApi.success(
-                              installedSkills.length > 0
-                                ? `已安装并链接 ${installedSkills.length} 个技能到 ${editorMeta[activeEditorId].title}。`
-                                : "第三方 Skills 安装完成，但未检测到可链接的技能。",
-                            );
-                            setSkillsRepoInput("");
-                          } catch (err) {
-                            const errMsg = err instanceof Error ? err.message : String(err);
-                            messageApi.error(`安装失败: ${errMsg}`);
-                          } finally {
-                            setIsAddingSkillsRepo(false);
-                          }
-                        }}
-                      >
-                        安装
-                      </Button>
-                    </div>
+                    <span className="chip">已安装/已链接 {installedSkills.length} 项技能</span>
                   </div>
                 </div>
 
                 <div className="skills-manager__body">
+                  <div className="skills-source-pane">
+                    <div className="skills-source-pane__header">
+                      <span className="skills-source-pane__title">技能源</span>
+                      <button
+                        type="button"
+                        className="fragment-action-btn"
+                        style={{ minHeight: "28px", padding: "0 8px", fontSize: "11px" }}
+                        onClick={() => {
+                          setNewSourceName("");
+                          setNewSourceType("repo");
+                          setNewSourceValue("");
+                          setIsAddSourceModalOpen(true);
+                        }}
+                      >
+                        + 添加源
+                      </button>
+                    </div>
+                    <div className="skills-source-items">
+                      {skillSources.map((source) => {
+                        const isSelected = source.id === selectedSkillSourceId;
+                        return (
+                          <div
+                            key={source.id}
+                            className={`skills-source-item${isSelected ? " skills-source-item--selected" : ""}`}
+                            onClick={() => selectSkillSource(source.id)}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                selectSkillSource(source.id);
+                              }
+                            }}
+                          >
+                            <div className="skills-source-item__icon">
+                              {source.type === "preset" ? (
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2" />
+                                  <line x1="12" y1="22" x2="12" y2="15.5" />
+                                  <polyline points="22 8.5 12 15.5 2 8.5" />
+                                  <polyline points="2 15.5 12 8.5 22 15.5" />
+                                  <line x1="12" y1="2" x2="12" y2="8.5" />
+                                </svg>
+                              ) : source.type === "repo" ? (
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
+                                </svg>
+                              ) : (
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                                </svg>
+                              )}
+                            </div>
+                            <div className="skills-source-item__info">
+                              <span className="skills-source-item__name">{source.name}</span>
+                              {source.value && (
+                                <span className="skills-source-item__value" title={source.value}>
+                                  {source.value}
+                                </span>
+                              )}
+                            </div>
+                            {source.type !== "preset" && (
+                              <button
+                                type="button"
+                                className="skills-source-item__delete"
+                                title="删除此源"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteSkillSource(source.id);
+                                }}
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <polyline points="3 6 5 6 21 6" />
+                                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
                   <div className="skills-list-pane">
-                    <div className="skills-list-pane__summary">
-                      <span>官方 Skills {builtinSkills.length} 项 · 当前编辑器已安装 {installedSkills.length} 项</span>
+                    <div className="skills-list-pane__header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: "1px solid var(--panel-border)" }}>
+                      <div className="skills-list-pane__header-info" style={{ display: "flex", flexDirection: "column", gap: "2px", minWidth: 0 }}>
+                        <span className="skills-list-pane__header-title" style={{ fontSize: "1.05rem", fontWeight: 700 }}>
+                          {selectedSource.name}
+                        </span>
+                        {selectedSource.type !== "preset" && (
+                          <span className="skills-list-pane__header-subtitle" style={{ fontSize: "0.8rem", color: "var(--text-faint)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={selectedSource.value}>
+                            路径/仓库：{selectedSource.value}
+                          </span>
+                        )}
+                      </div>
+                      {selectedSource.type === "repo" && (
+                        <Button
+                          type="button"
+                          className="fragment-action-btn"
+                          style={{ minHeight: "32px", padding: "0 12px", fontSize: "12px" }}
+                          disabled={isAddingSkillsRepo}
+                          loading={isAddingSkillsRepo}
+                          onClick={async () => {
+                            setIsAddingSkillsRepo(true);
+                            try {
+                              await addSkillsRepository(selectedSource.value);
+                              await refreshCurrentEditorSkills(activeEditorId);
+                              messageApi.success(`同步 Git 仓库 ${selectedSource.value} 成功！`);
+                            } catch (err) {
+                              const errMsg = err instanceof Error ? err.message : String(err);
+                              messageApi.error(`同步失败: ${errMsg}`);
+                            } finally {
+                              setIsAddingSkillsRepo(false);
+                            }
+                          }}
+                        >
+                          同步仓库技能
+                        </Button>
+                      )}
+                    </div>
+
+                    <div className="skills-list-pane__summary" style={{ padding: "10px 18px", background: "var(--panel-muted)" }}>
+                      <span>已加载 {filteredSkills.length} 项技能</span>
                       <span>目标：{activeSkillsTargetPath || "未检测到目标路径"}</span>
                     </div>
 
-                    <div className={`skills-list-rows${isSkillsLoading ? " skills-list-rows--loading" : ""}`}>
+                    <div className="skills-manager__controls" style={{ padding: "10px 18px", borderBottom: "1px solid var(--panel-border)", gap: "10px" }}>
+                      <input
+                        className="form-input skills-manager__search"
+                        style={{ margin: 0, height: "40px" }}
+                        placeholder="搜索技能名称、描述"
+                        value={skillsQuery}
+                        onChange={(event) => setSkillsQuery(event.target.value)}
+                      />
+                      <Select
+                        className="skills-manager__filter-select"
+                        classNames={{
+                          trigger: "skills-manager__filter-trigger",
+                          dropdown: "skills-manager__filter-dropdown",
+                          option: "skills-manager__filter-option",
+                        }}
+                        value={skillsFilter}
+                        options={skillsFilterOptions}
+                        onChange={(value) => {
+                          if (typeof value === "string") {
+                            setSkillsFilter(value as SkillsFilter);
+                          }
+                        }}
+                      />
+                    </div>
+
+                    <div className={`skills-list-rows${isSkillsLoading ? " skills-list-rows--loading" : ""}`} style={{ padding: "18px" }}>
                       {isSkillsLoading && skills.length === 0 ? (
                         <div className="skills-list-loading">
                           <div className="skills-spinner" />
                           <span>正在加载技能列表...</span>
                         </div>
-                      ) : skills.length === 0 ? (
-                        <p className="skills-list-empty">
-                          当前 {editorMeta[activeEditorId].title} 未安装任何技能。可在上方输入仓库名进行安装并链接。
-                        </p>
                       ) : filteredSkills.length === 0 ? (
-                        <p className="skills-list-empty">
-                          没有匹配的技能。
+                        <p className="skills-list-empty" style={{ padding: 0 }}>
+                          当前源下没有匹配的技能。
+                          {selectedSource.type === "repo" && "如果刚添加了仓库，请点击右上角“同步仓库技能”按钮。"}
                         </p>
                       ) : (
-                        <div className="skills-list-groups">
-                          {groupedFilteredSkills.map((group) => (
-                            <section key={group.key} className="skills-list-group" aria-label={group.title}>
-                              <div className="skills-list-group__header">
-                                <h3 className="skills-list-group__title">{group.title}</h3>
-                                <span className="skills-list-group__count">{group.skills.length} 项</span>
-                              </div>
-                              <div className="skills-list-group__rows">
-                                {group.skills.map((skill) => renderSkillRow(skill))}
-                              </div>
-                            </section>
-                          ))}
+                        <div className="skills-list-group__rows">
+                          {filteredSkills.map((skill) => renderSkillRow(skill))}
                         </div>
                       )}
                     </div>
                   </div>
-
                 </div>
+
+                <Modal
+                  isOpen={isAddSourceModalOpen}
+                  onCancel={() => setIsAddSourceModalOpen(false)}
+                  title="添加技能源"
+                  footer={null}
+                  width={480}
+                >
+                  <div className="skills-add-source-form" style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <label style={{ fontSize: "12px", color: "var(--text-soft)", fontWeight: 600 }}>
+                        技能源类型
+                      </label>
+                      <div style={{ display: "flex", gap: "8px", width: "100%" }}>
+                        <Button
+                          type="button"
+                          className={newSourceType === "repo" ? "fragment-action-btn fragment-action-btn--active" : "mcp-form__btn"}
+                          style={{
+                            flex: 1,
+                            minHeight: "32px",
+                            padding: "0 16px",
+                            fontSize: "12px",
+                            background: newSourceType === "repo" ? "var(--accent)" : "var(--surface-container-high)",
+                            color: newSourceType === "repo" ? "#fff" : "var(--text-soft)",
+                            border: "none",
+                            borderRadius: "6px",
+                            cursor: "pointer",
+                          }}
+                          onClick={() => {
+                            setNewSourceType("repo");
+                            setNewSourceValue("");
+                          }}
+                        >
+                          Git 仓库 (GitHub)
+                        </Button>
+                        <Button
+                          type="button"
+                          className={newSourceType === "local" ? "fragment-action-btn fragment-action-btn--active" : "mcp-form__btn"}
+                          style={{
+                            flex: 1,
+                            minHeight: "32px",
+                            padding: "0 16px",
+                            fontSize: "12px",
+                            background: newSourceType === "local" ? "var(--accent)" : "var(--surface-container-high)",
+                            color: newSourceType === "local" ? "#fff" : "var(--text-soft)",
+                            border: "none",
+                            borderRadius: "6px",
+                            cursor: "pointer",
+                          }}
+                          onClick={() => {
+                            setNewSourceType("local");
+                            setNewSourceValue("");
+                          }}
+                        >
+                          本地物理目录
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <label style={{ fontSize: "12px", color: "var(--text-soft)", fontWeight: 600 }}>
+                        技能源名称
+                      </label>
+                      <input
+                        className="form-input"
+                        placeholder="例如：开发规范、Vercel 技能集"
+                        value={newSourceName}
+                        onChange={(e) => setNewSourceName(e.target.value)}
+                      />
+                    </div>
+
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <label style={{ fontSize: "12px", color: "var(--text-soft)", fontWeight: 600 }}>
+                        {newSourceType === "repo" ? "仓库源 (owner/repo)" : "本地文件夹绝对路径"}
+                      </label>
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        <input
+                          className="form-input"
+                          style={{ flex: 1, margin: 0 }}
+                          placeholder={newSourceType === "repo" ? "例如：vercel-labs/skills" : "例如：/Users/username/my-skills"}
+                          value={newSourceValue}
+                          onChange={(e) => setNewSourceValue(e.target.value)}
+                        />
+                        {newSourceType === "local" && (
+                          <Button
+                            type="button"
+                            className="mcp-form__btn"
+                            style={{
+                              background: "var(--surface-container-high)",
+                              border: "none",
+                              color: "var(--text-soft)",
+                              padding: "0 12px",
+                              borderRadius: "6px",
+                              cursor: "pointer",
+                              fontSize: "12px",
+                              whiteSpace: "nowrap",
+                            }}
+                            onClick={async () => {
+                              try {
+                                const selectedPath = await selectDirectory();
+                                if (selectedPath) {
+                                  setNewSourceValue(selectedPath);
+                                }
+                              } catch (err) {
+                                if (err !== "canceled") {
+                                  messageApi.error(`选择目录失败: ${err}`);
+                                }
+                              }
+                            }}
+                          >
+                            选择文件夹
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: "12px", marginTop: "10px", justifyContent: "flex-end" }}>
+                      <Button
+                        type="button"
+                        className="mcp-form__btn"
+                        style={{
+                          background: "var(--surface-container-high)",
+                          border: "none",
+                          color: "var(--text-soft)",
+                          padding: "6px 12px",
+                          borderRadius: "6px",
+                          cursor: "pointer",
+                        }}
+                        onClick={() => setIsAddSourceModalOpen(false)}
+                      >
+                        取消
+                      </Button>
+                      <Button
+                        type="button"
+                        className="fragment-action-btn"
+                        style={{ minHeight: "32px", padding: "0 16px", fontSize: "12px" }}
+                        disabled={!newSourceName.trim() || !newSourceValue.trim() || isAddingSkillsRepo}
+                        loading={isAddingSkillsRepo}
+                        onClick={async () => {
+                          const name = newSourceName.trim();
+                          const val = newSourceValue.trim();
+                          if (!name || !val) return;
+                          
+                          if (newSourceType === "repo") {
+                            setIsAddingSkillsRepo(true);
+                            try {
+                              await addSkillsRepository(val);
+                              messageApi.success(`成功下载 Git 仓库源 ${val}`);
+                            } catch (err) {
+                              const errMsg = err instanceof Error ? err.message : String(err);
+                              messageApi.error(`下载 Git 仓库失败: ${errMsg}`);
+                            } finally {
+                              setIsAddingSkillsRepo(false);
+                            }
+                          }
+                          
+                          addSkillSource({
+                            type: newSourceType,
+                            name,
+                            value: val,
+                          });
+                          setIsAddSourceModalOpen(false);
+                          await refreshCurrentEditorSkills(activeEditorId);
+                        }}
+                      >
+                        确定
+                      </Button>
+                    </div>
+                  </div>
+                </Modal>
 
                 <Modal
                   isOpen={isSkillModalOpen}

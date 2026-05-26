@@ -1286,6 +1286,22 @@ async fn load_single_skill_command(payload: LoadSingleSkillPayload) -> Result<Sk
 }
 
 #[tauri::command]
+async fn load_skills_from_dir(path: String) -> Result<Vec<SkillInfo>, String> {
+    let dir_path = PathBuf::from(&path);
+    if !dir_path.exists() || !dir_path.is_dir() {
+        return Err(format!("目录不存在或不是文件夹：{}", path));
+    }
+    let managed_skill_ids = load_skills_cli_lock_ids();
+    let repo_sources = load_skills_cli_repo_sources();
+    Ok(collect_skills_from_directory(
+        &dir_path,
+        &managed_skill_ids,
+        &repo_sources,
+    ))
+}
+
+
+#[tauri::command]
 async fn add_skills_repository(repo: String) -> Result<Vec<SkillInfo>, String> {
     let Some(repo_trimmed) = normalize_repo_source(&repo) else {
         return Err(
@@ -1483,6 +1499,38 @@ async fn remove_skill(skill_id: String) -> Result<String, String> {
     }
 }
 
+#[tauri::command]
+fn select_directory() -> Result<String, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let output = std::process::Command::new("osascript")
+            .arg("-e")
+            .arg("POSIX path of (choose folder with prompt \"请选择技能物理目录:\")")
+            .output()
+            .map_err(|e| e.to_string())?;
+
+        if output.status.success() {
+            let path_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if path_str.is_empty() {
+                Err("canceled".to_string())
+            } else {
+                Ok(path_str)
+            }
+        } else {
+            let err_str = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            if err_str.contains("User canceled") || err_str.contains("-128") {
+                Err("canceled".to_string())
+            } else {
+                Err(err_str)
+            }
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err("当前系统不支持原生文件夹选择器，请手动输入路径。".to_string())
+    }
+}
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -1493,6 +1541,7 @@ fn main() {
             load_physical_skills,
             load_editor_skills_states,
             load_editor_installed_skills,
+            load_skills_from_dir,
             apply_skills_to_editor_target,
             unlink_skill_from_editor,
             link_skill_to_editor,
@@ -1502,7 +1551,8 @@ fn main() {
             open_local_path,
             reveal_local_path,
             update_skill,
-            remove_skill
+            remove_skill,
+            select_directory
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -1779,4 +1829,23 @@ mod tests {
             SkillSourceKind::FallbackDirectory
         );
     }
+
+    #[test]
+    fn test_load_skills_from_dir() {
+        let root = unique_test_dir("load-skills-from-dir");
+        let skill_dir = root.join("test-skill-one");
+        let other_dir = root.join("not-a-skill");
+        fs::create_dir_all(&skill_dir).unwrap();
+        fs::create_dir_all(&other_dir).unwrap();
+        fs::write(skill_dir.join("SKILL.md"), "# Test Skill One\nThis is content.").unwrap();
+        fs::write(other_dir.join("README.md"), "Not a skill").unwrap();
+
+        let skills = tauri::async_runtime::block_on(load_skills_from_dir(root.display().to_string())).unwrap();
+        assert_eq!(skills.len(), 1);
+        assert_eq!(skills[0].id, "test-skill-one");
+        assert_eq!(skills[0].name, "test-skill-one");
+
+        fs::remove_dir_all(root).unwrap();
+    }
 }
+
