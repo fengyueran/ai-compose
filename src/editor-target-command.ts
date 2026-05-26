@@ -121,6 +121,10 @@ export type LoadSingleSkillPayload = {
   sourceKind: 'cli' | 'fallbackDirectory'
 }
 
+export type LoadEditorInstalledSkillsPayload = {
+  editorId: EditorId
+}
+
 export type ApplySkillsResult = {
   action: 'removed' | 'unchanged' | 'updated'
   editorId: EditorId
@@ -128,12 +132,20 @@ export type ApplySkillsResult = {
   updatedAt: string
 }
 
+export type AddSkillsRepositoryResult = SkillInfo[]
+
 export async function loadPhysicalSkills(): Promise<SkillInfo[]> {
   return invoke<SkillInfo[]>('load_physical_skills')
 }
 
 export async function loadEditorSkillsStates(): Promise<EditorSkillsStates> {
   return invoke<EditorSkillsStates>('load_editor_skills_states')
+}
+
+export async function loadEditorInstalledSkills(
+  payload: LoadEditorInstalledSkillsPayload,
+): Promise<SkillInfo[]> {
+  return invoke<SkillInfo[]>('load_editor_installed_skills', { payload })
 }
 
 export async function applySkillsToEditorTarget(
@@ -160,8 +172,8 @@ export async function loadSingleSkill(
   return invoke<SkillInfo>('load_single_skill_command', { payload })
 }
 
-export async function addSkillsRepository(repo: string): Promise<string> {
-  return invoke<string>('add_skills_repository', { repo })
+export async function addSkillsRepository(repo: string): Promise<AddSkillsRepositoryResult> {
+  return invoke<AddSkillsRepositoryResult>('add_skills_repository', { repo })
 }
 
 export async function updateSkill(skillId: string): Promise<string> {

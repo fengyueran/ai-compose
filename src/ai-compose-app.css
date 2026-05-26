@@ -554,15 +554,50 @@
 }
 
 .skills-list-rows {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 16px;
   padding: 16px;
-  align-content: start;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+.skills-list-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.skills-list-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.skills-list-group__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 4px;
+}
+
+.skills-list-group__title {
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--text-soft);
+  letter-spacing: 0.02em;
+}
+
+.skills-list-group__count {
+  color: var(--text-faint);
+  font-size: 0.74rem;
+}
+
+.skills-list-group__rows {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
 }
 
 .skills-list-row {
@@ -1423,4 +1458,3 @@
   pointer-events: none;
   transition: opacity 0.2s ease;
 }
-

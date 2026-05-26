@@ -639,6 +639,12 @@ struct LoadSingleSkillPayload {
     source_kind: SkillSourceKind,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LoadEditorInstalledSkillsPayload {
+    editor_id: EditorId,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ApplySkillsResult {
@@ -685,14 +691,18 @@ fn resolve_skills_cli_lock_path() -> Result<PathBuf, String> {
     Ok(get_home_dir()?.join(".agents").join(".skill-lock.json"))
 }
 
-fn load_skills_cli_lock_ids() -> std::collections::HashSet<String> {
+fn load_skills_cli_lock_json() -> Option<serde_json::Value> {
     let Ok(lock_path) = resolve_skills_cli_lock_path() else {
-        return std::collections::HashSet::new();
+        return None;
     };
     let Ok(lock_content) = fs::read_to_string(lock_path) else {
-        return std::collections::HashSet::new();
+        return None;
     };
-    let Ok(lock_json) = serde_json::from_str::<serde_json::Value>(&lock_content) else {
+    serde_json::from_str::<serde_json::Value>(&lock_content).ok()
+}
+
+fn load_skills_cli_lock_ids() -> std::collections::HashSet<String> {
+    let Some(lock_json) = load_skills_cli_lock_json() else {
         return std::collections::HashSet::new();
     };
 
@@ -700,6 +710,30 @@ fn load_skills_cli_lock_ids() -> std::collections::HashSet<String> {
         .get("skills")
         .and_then(|skills| skills.as_object())
         .map(|skills| skills.keys().cloned().collect())
+        .unwrap_or_default()
+}
+
+fn load_skills_cli_ids_by_repo(repo: &str) -> std::collections::HashSet<String> {
+    let Some(lock_json) = load_skills_cli_lock_json() else {
+        return std::collections::HashSet::new();
+    };
+
+    lock_json
+        .get("skills")
+        .and_then(|skills| skills.as_object())
+        .map(|skills| {
+            skills
+                .iter()
+                .filter_map(|(skill_id, entry)| {
+                    let source = entry.get("source").and_then(|value| value.as_str())?;
+                    if source == repo {
+                        Some(skill_id.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -819,57 +853,85 @@ fn extract_skill_source_entries(value: &serde_json::Value) -> Vec<(String, PathB
         .collect()
 }
 
-async fn load_physical_skills_inner() -> Result<Vec<SkillInfo>, String> {
+fn collect_skills_from_directory(
+    directory: &Path,
+    managed_skill_ids: &std::collections::HashSet<String>,
+) -> Vec<SkillInfo> {
     let mut skills = Vec::new();
     let mut loaded_ids = std::collections::HashSet::new();
 
-    let npx_output = AsyncCommand::new(npx_command_name())
-        .args(["skills", "ls", "-g", "--json"])
-        .output()
-        .await;
+    let Ok(entries) = fs::read_dir(directory) else {
+        return skills;
+    };
 
-    if let Ok(output) = npx_output {
-        if output.status.success() {
-            if let Ok(json_val) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
-                let managed_skill_ids = load_skills_cli_lock_ids();
-                for (name, path) in extract_skill_source_entries(&json_val) {
-                    let source_kind = classify_cli_skill_source(&path, &name, &managed_skill_ids);
-                    if let Some(skill) = load_single_skill(&path, &name, source_kind) {
-                        if !loaded_ids.contains(&skill.id) {
-                            loaded_ids.insert(skill.id.clone());
-                            skills.push(skill);
-                        }
-                    }
-                }
+    for entry in entries.filter_map(Result::ok) {
+        let entry_path = entry.path();
+        let Ok(metadata) = fs::symlink_metadata(&entry_path) else {
+            continue;
+        };
+
+        let Some(skill_id) = entry_path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .map(|value| value.to_string())
+        else {
+            continue;
+        };
+
+        let source_path = if metadata.file_type().is_symlink() {
+            let Ok(target) = fs::read_link(&entry_path) else {
+                continue;
+            };
+            let absolute_target = if target.is_absolute() {
+                target
+            } else {
+                directory.join(target)
+            };
+            fs::canonicalize(&absolute_target).unwrap_or(absolute_target)
+        } else if metadata.is_dir() {
+            fs::canonicalize(&entry_path).unwrap_or(entry_path.clone())
+        } else {
+            continue;
+        };
+
+        let source_kind = classify_cli_skill_source(&source_path, &skill_id, managed_skill_ids);
+        if let Some(skill) = load_single_skill(&source_path, &skill_id, source_kind) {
+            if loaded_ids.insert(skill.id.clone()) {
+                skills.push(skill);
             }
         }
     }
 
-    if skills.is_empty() {
-        let home = get_home_dir()?;
-        let physical_dir = home.join(".gemini").join("antigravity").join("skills");
-        if physical_dir.exists() && physical_dir.is_dir() {
-            if let Ok(entries) = fs::read_dir(&physical_dir) {
-                for entry in entries.filter_map(Result::ok) {
-                    let path = entry.path();
-                    if path.is_dir() {
-                        if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
-                            if let Some(skill) =
-                                load_single_skill(&path, name, SkillSourceKind::FallbackDirectory)
-                            {
-                                if !loaded_ids.contains(&skill.id) {
-                                    loaded_ids.insert(skill.id.clone());
-                                    skills.push(skill);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    skills
+}
+
+fn resolve_global_skills_root() -> Result<PathBuf, String> {
+    Ok(get_home_dir()?.join(".agents").join("skills"))
+}
+
+fn load_global_skills() -> Result<Vec<SkillInfo>, String> {
+    let managed_skill_ids = load_skills_cli_lock_ids();
+    let global_root = resolve_global_skills_root()?;
+
+    if !global_root.exists() || !global_root.is_dir() {
+        return Ok(Vec::new());
     }
 
-    Ok(skills)
+    Ok(collect_skills_from_directory(&global_root, &managed_skill_ids))
+}
+
+fn load_editor_installed_skills_inner(editor_id: EditorId) -> Result<Vec<SkillInfo>, String> {
+    let target_path = resolve_editor_skills_path(editor_id)?;
+    if !target_path.exists() || !target_path.is_dir() {
+        return Ok(Vec::new());
+    }
+
+    let managed_skill_ids = load_skills_cli_lock_ids();
+    Ok(collect_skills_from_directory(&target_path, &managed_skill_ids))
+}
+
+async fn load_physical_skills_inner() -> Result<Vec<SkillInfo>, String> {
+    load_global_skills()
 }
 
 #[tauri::command]
@@ -905,21 +967,12 @@ fn is_skill_enabled(editor_skills_dir: &Path, skill_id: &str, physical_skill_pat
 
 fn build_editor_skills_state(
     editor_id: EditorId,
-    physical_skills: &[SkillInfo],
 ) -> Result<EditorSkillsState, String> {
     let target_path = resolve_editor_skills_path(editor_id)?;
-    let mut enabled_skills = Vec::new();
-
-    if target_path.exists() && target_path.is_dir() {
-        for skill in physical_skills {
-            if skill.source_kind != SkillSourceKind::Cli {
-                continue;
-            }
-            if is_skill_enabled(&target_path, &skill.id, Path::new(&skill.path)) {
-                enabled_skills.push(skill.id.clone());
-            }
-        }
-    }
+    let enabled_skills = load_editor_installed_skills_inner(editor_id)?
+        .into_iter()
+        .map(|skill| skill.id)
+        .collect::<Vec<_>>();
 
     let enabled = !enabled_skills.is_empty();
 
@@ -932,12 +985,18 @@ fn build_editor_skills_state(
 
 #[tauri::command]
 async fn load_editor_skills_states() -> Result<EditorSkillsStates, String> {
-    let physical_skills = load_physical_skills_inner().await?;
     Ok(EditorSkillsStates {
-        antigravity: build_editor_skills_state(EditorId::Antigravity, &physical_skills)?,
-        codex: build_editor_skills_state(EditorId::Codex, &physical_skills)?,
-        cursor: build_editor_skills_state(EditorId::Cursor, &physical_skills)?,
+        antigravity: build_editor_skills_state(EditorId::Antigravity)?,
+        codex: build_editor_skills_state(EditorId::Codex)?,
+        cursor: build_editor_skills_state(EditorId::Cursor)?,
     })
+}
+
+#[tauri::command]
+async fn load_editor_installed_skills(
+    payload: LoadEditorInstalledSkillsPayload,
+) -> Result<Vec<SkillInfo>, String> {
+    load_editor_installed_skills_inner(payload.editor_id)
 }
 
 #[cfg(unix)]
@@ -1116,7 +1175,7 @@ async fn load_single_skill_command(payload: LoadSingleSkillPayload) -> Result<Sk
 }
 
 #[tauri::command]
-async fn add_skills_repository(repo: String) -> Result<String, String> {
+async fn add_skills_repository(repo: String) -> Result<Vec<SkillInfo>, String> {
     let repo_trimmed = repo.trim().to_string();
     if !is_safe_repo_source(&repo_trimmed) {
         return Err(
@@ -1135,7 +1194,12 @@ async fn add_skills_repository(repo: String) -> Result<String, String> {
             let stdout = String::from_utf8_lossy(&out.stdout).to_string();
             let stderr = String::from_utf8_lossy(&out.stderr).to_string();
             if out.status.success() {
-                Ok(stdout)
+                let repo_skill_ids = load_skills_cli_ids_by_repo(&repo_trimmed);
+                let repo_skills = load_global_skills()?
+                    .into_iter()
+                    .filter(|skill| repo_skill_ids.contains(&skill.id))
+                    .collect();
+                Ok(repo_skills)
             } else {
                 Err(format!(
                     "安装技能失败，错误码：{:?}\n输出：{}\n错误：{}",
@@ -1226,6 +1290,7 @@ fn main() {
             apply_mcp_to_editor_target,
             load_physical_skills,
             load_editor_skills_states,
+            load_editor_installed_skills,
             apply_skills_to_editor_target,
             unlink_skill_from_editor,
             link_skill_to_editor,
@@ -1333,6 +1398,29 @@ mod tests {
         let wrapped_entries = extract_skill_source_entries(&wrapped_json);
         assert_eq!(wrapped_entries.len(), 1);
         assert_eq!(wrapped_entries[0].0, "gamma");
+    }
+
+    #[test]
+    fn test_collect_skills_from_directory_reads_symlink_targets_and_local_dirs() {
+        let root = unique_test_dir("collect-skills-from-directory");
+        let source_dir = root.join("source").join("find-skills");
+        let local_dir = root.join("editor").join("local-skill");
+        let linked_dir = root.join("editor").join("find-skills");
+        fs::create_dir_all(&source_dir).unwrap();
+        fs::create_dir_all(&local_dir).unwrap();
+        fs::write(source_dir.join("SKILL.md"), "# find-skills").unwrap();
+        fs::write(local_dir.join("SKILL.md"), "# local-skill").unwrap();
+        create_symlink(&source_dir, &linked_dir).unwrap();
+
+        let mut managed_ids = std::collections::HashSet::new();
+        managed_ids.insert("find-skills".to_string());
+
+        let skills = collect_skills_from_directory(&root.join("editor"), &managed_ids);
+        assert_eq!(skills.len(), 2);
+        assert!(skills.iter().any(|skill| skill.id == "find-skills" && skill.source_kind == SkillSourceKind::Cli));
+        assert!(skills.iter().any(|skill| skill.id == "local-skill" && skill.source_kind == SkillSourceKind::FallbackDirectory));
+
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

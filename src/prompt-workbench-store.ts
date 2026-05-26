@@ -9,6 +9,7 @@ import {
   type McpServer,
   presetMcpServers,
 } from './mcp-servers'
+import { isPresetSkillMatch } from './skills-utils'
 
 interface LocalMcpConfig {
   command?: string
@@ -489,77 +490,55 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
 
     setSkillsList: (physicalSkills) => {
       const { selectedSkillId } = get()
-
-      const isPresetMatch = (psId: string, presetId: string): boolean => {
-        const pId = psId.toLowerCase();
-        const prId = presetId.toLowerCase();
-        return pId === prId || pId.endsWith('/' + prId) || pId.endsWith('__' + prId);
-      };
       
       const mappedPhysical = physicalSkills.map(ps => {
-        const preset = BUILTIN_SKILLS_PRESET.find(p => isPresetMatch(ps.id, p.id));
+        const preset = BUILTIN_SKILLS_PRESET.find(p => isPresetSkillMatch(ps.id, p.id));
         return {
           ...ps,
-          isBuiltin: !!preset,
+          isBuiltin: preset ? true : ps.isBuiltin,
           installed: true,
-          repoSource: preset?.repoSource,
+          repoSource: preset?.repoSource ?? ps.repoSource,
         };
       });
 
-      const uninstalledBuiltin = BUILTIN_SKILLS_PRESET
-        .filter(p => !physicalSkills.some(ps => isPresetMatch(ps.id, p.id)))
-        .map(p => ({
-          id: p.id,
-          name: p.name,
-          description: p.description,
-          content: p.content,
-          path: '',
-          sourceKind: 'cli' as const,
+      const missingBuiltinSkills = BUILTIN_SKILLS_PRESET
+        .filter((preset) => !mappedPhysical.some((skill) => isPresetSkillMatch(skill.id, preset.id)))
+        .map((preset) => ({
+          id: preset.id,
+          name: preset.name,
+          description: preset.description,
+          content: preset.content,
+          path: "",
+          sourceKind: "cli" as const,
           isBuiltin: true,
           installed: false,
-          repoSource: p.repoSource,
+          repoSource: preset.repoSource,
         }));
 
-      const mergedSkills = [...mappedPhysical, ...uninstalledBuiltin];
-
-      mergedSkills.sort((a, b) => {
-        if (a.isBuiltin && !b.isBuiltin) return -1;
-        if (!a.isBuiltin && b.isBuiltin) return 1;
-        
-        if (a.installed && !b.installed) return -1;
-        if (!a.installed && b.installed) return 1;
-        
+      const nextSkills = [...mappedPhysical, ...missingBuiltinSkills].sort((a, b) => {
+        if (Boolean(a.isBuiltin) !== Boolean(b.isBuiltin)) {
+          return a.isBuiltin ? -1 : 1;
+        }
         return a.id.localeCompare(b.id);
       });
 
-      let nextSelectedId = mergedSkills.length > 0 ? selectedSkillId : '';
-      if (mergedSkills.length > 0 && (!selectedSkillId || !mergedSkills.some((s) => s.id === selectedSkillId))) {
-        nextSelectedId = mergedSkills[0].id;
+      let nextSelectedId = nextSkills.length > 0 ? selectedSkillId : '';
+      if (nextSkills.length > 0 && (!selectedSkillId || !nextSkills.some((s) => s.id === selectedSkillId))) {
+        nextSelectedId = nextSkills[0].id;
       }
 
       set({
-        skills: mergedSkills,
+        skills: nextSkills,
         selectedSkillId: nextSelectedId,
       });
     },
 
     replaceSkill: (skill) => {
-      const currentPhysicalSkills = get().skills
-        .filter((item) => item.installed !== false)
-        .map((item) => ({
-          id: item.id,
-          name: item.name,
-          description: item.description,
-          content: item.content,
-          path: item.path,
-          sourceKind: item.sourceKind,
-        }))
-
-      const nextPhysicalSkills = currentPhysicalSkills.some((item) => item.id === skill.id)
-        ? currentPhysicalSkills.map((item) => (item.id === skill.id ? skill : item))
-        : [...currentPhysicalSkills, skill]
-
-      get().setSkillsList(nextPhysicalSkills)
+      const currentSkills = get().skills
+      const nextSkills = currentSkills.some((item) => item.id === skill.id)
+        ? currentSkills.map((item) => (item.id === skill.id ? skill : item))
+        : [...currentSkills, skill]
+      get().setSkillsList(nextSkills)
     },
   }),
 )
