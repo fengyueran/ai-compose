@@ -392,8 +392,11 @@ function AiComposeApp() {
   const isMcpEnabledForEditor = (editorId: EditorId, serverId: string) =>
     getEnabledMcpIdsForEditor(editorId).includes(serverId);
 
-  const buildMcpPayload = (enabledIds: string[]) => {
-    const enabledServers = mcpServers.filter((server) => enabledIds.includes(server.id));
+  const buildMcpPayload = (
+    enabledIds: string[],
+    sourceServers: typeof mcpServers = mcpServers,
+  ) => {
+    const enabledServers = sourceServers.filter((server) => enabledIds.includes(server.id));
     const payloadMcpServers: Record<string, Record<string, unknown>> = {};
 
     enabledServers.forEach((server) => {
@@ -419,7 +422,7 @@ function AiComposeApp() {
       enabledServers,
       payloadData: {
         mcpServers: payloadMcpServers,
-        managedNames: mcpServers.map((server) => server.name),
+        managedNames: sourceServers.map((server) => server.name),
       },
     };
   };
@@ -427,8 +430,9 @@ function AiComposeApp() {
   const applyMcpSelectionToEditor = async (
     editorId: EditorId,
     enabledIds: string[],
+    sourceServers?: typeof mcpServers,
   ) => {
-    const { enabledServers, payloadData } = buildMcpPayload(enabledIds);
+    const { enabledServers, payloadData } = buildMcpPayload(enabledIds, sourceServers);
 
     return applyMcpToEditorTarget({
       editorId,
@@ -650,7 +654,7 @@ function AiComposeApp() {
     selectedMcpServer && selectedMcpServerId !== "__new__" ? (selectedMcpServer.url ?? "") : ""
   );
 
-  const handleSaveMcp = () => {
+  const handleSaveMcp = async () => {
     if (!formName.trim()) {
       messageApi.error("名称不能为空");
       return;
@@ -713,10 +717,60 @@ function AiComposeApp() {
         ...mcpData,
         enabled: true,
       });
-      messageApi.success("添加 MCP 服务成功！请点击右侧“应用配置”写入编辑器");
+      messageApi.success("添加 MCP 服务成功。可继续为不同编辑器开启后自动同步。");
     } else {
       updateMcpServer(selectedMcpServer.id, mcpData);
-      messageApi.success("修改 MCP 服务成功！请点击右侧“应用配置”写入编辑器");
+
+      const latestStore = usePromptWorkbenchStore.getState();
+      const latestServers = latestStore.mcpServers;
+      const enabledEditorIds = editorIds.filter((editorId) =>
+        (latestStore.mcpEnabledServerIdsByEditor[editorId] ?? []).includes(selectedMcpServer.id),
+      );
+
+      if (!isTauriRuntime() || enabledEditorIds.length === 0) {
+        messageApi.success(
+          enabledEditorIds.length === 0
+            ? "修改 MCP 服务成功。当前没有已启用该服务的编辑器。"
+            : "修改 MCP 服务成功。",
+        );
+        return;
+      }
+
+      messageApi.loading({
+        content: `正在同步到 ${enabledEditorIds.map((editorId) => editorMeta[editorId].title).join("、")}...`,
+        key: "save-mcp",
+      });
+
+      const syncResults = await Promise.allSettled(
+        enabledEditorIds.map(async (editorId) => {
+          const enabledIdsForEditor = latestStore.mcpEnabledServerIdsByEditor[editorId] ?? [];
+          await applyMcpSelectionToEditor(editorId, enabledIdsForEditor, latestServers);
+          return editorId;
+        }),
+      );
+
+      const failedResults = syncResults.filter(
+        (result): result is PromiseRejectedResult => result.status === "rejected",
+      );
+
+      const nextMcpStates = await loadEditorMcpStates();
+      hydrateMcpEditorStates(nextMcpStates);
+
+      if (failedResults.length > 0) {
+        const errorMessage = failedResults[0].reason instanceof Error
+          ? failedResults[0].reason.message
+          : String(failedResults[0].reason);
+        messageApi.error({
+          content: `保存成功，但同步部分编辑器失败：${errorMessage}`,
+          key: "save-mcp",
+        });
+        return;
+      }
+
+      messageApi.success({
+        content: `修改 MCP 服务成功，并已同步到 ${enabledEditorIds.map((editorId) => editorMeta[editorId].title).join("、")}。`,
+        key: "save-mcp",
+      });
     }
   };
 
