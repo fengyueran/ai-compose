@@ -222,6 +222,8 @@
   grid-template-columns: 260px minmax(0, 1.4fr) minmax(340px, 0.9fr);
   gap: 18px;
   align-items: stretch;
+  height: calc(100dvh - 128px);
+  min-height: 0;
 }
 
 .workspace-grid--skills {
@@ -401,7 +403,7 @@
   display: grid;
   gap: 14px;
   grid-template-rows: auto minmax(0, 1fr);
-  height: calc(100dvh - 128px);
+  height: 100%;
   min-height: 0;
 }
 
@@ -1066,15 +1068,38 @@
 }
 
 .fragment-detail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
   padding: 16px 16px 20px;
 }
 
+.fragment-detail .panel__header {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.fragment-detail .panel__header > div {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.fragment-detail .panel__header .fragment-action-btn {
+  flex: 0 1 auto;
+  max-width: 100%;
+}
+
 .fragment-detail__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
   margin-top: 16px;
   padding: 18px;
   border-radius: 22px;
   background: rgba(255, 255, 255, 0.62);
   border: 1px solid var(--panel-border);
+  scrollbar-gutter: stable;
 }
 
 .fragment-detail__list,
@@ -1091,6 +1116,7 @@
 .preview-card__list li {
   line-height: 1.55;
   padding-left: 2px;
+  overflow-wrap: anywhere;
 }
 
 .fragment-detail__list li::marker,
@@ -1099,11 +1125,10 @@
 }
 
 .preview-column {
-  position: sticky;
-  top: 28px;
+  position: static;
   display: flex;
-  align-self: start;
-  height: calc(100dvh - 56px);
+  align-self: stretch;
+  height: 100%;
   min-height: 0;
   min-width: 0;
 }
@@ -1321,6 +1346,12 @@
     position: static;
     display: block;
     height: auto;
+  }
+
+  .fragment-detail .panel__header .fragment-action-btn {
+    width: 100%;
+    justify-content: center;
+    white-space: normal;
   }
 }
 
