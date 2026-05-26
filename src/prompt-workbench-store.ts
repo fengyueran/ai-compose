@@ -737,5 +737,12 @@ const BUILTIN_SKILLS_PRESET = [
     description: "UI/UX 高级设计指南，教您编写顶级视觉美学与动效的现代前端页面",
     repoSource: "nextlevelbuilder/ui-ux-pro-max-skill",
     content: "<!--内置技能-->\n\n# ui-ux-pro-max\n\n专为打造高视觉冲击力（WOW体验）、优秀人机交互和微动画设计的前端美学技能方案。\n\n### 官方仓库\nhttps://github.com/nextlevelbuilder/ui-ux-pro-max-skill",
+  },
+  {
+    id: "vercel-react-best-practices",
+    name: "vercel-react-best-practices",
+    description: "React and Next.js performance optimization guidelines from Vercel Engineering. This skill should be used when writing, reviewing, or refactoring React/Next.js code to ensure optimal performance patterns.",
+    repoSource: "vercel-labs/agent-skills",
+    content: "<!--内置技能-->\n\n# Vercel React Best Practices\n\nReact and Next.js performance optimization guidelines from Vercel Engineering. This skill should be used when writing, reviewing, or refactoring React/Next.js code to ensure optimal performance patterns.\n\n### 官方仓库\nhttps://github.com/vercel-labs/agent-skills",
   }
 ]
