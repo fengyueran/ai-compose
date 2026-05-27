@@ -380,8 +380,6 @@ function AiComposeApp() {
     () => skillsEditorStates[activeEditorId]?.enabledSkills ?? [],
     [skillsEditorStates, activeEditorId],
   );
-  const canToggleEditorsInDomain = activeDomain === "Prompt";
-
   const selectedSource = useMemo(() => {
     return skillSources.find((s) => s.id === selectedSkillSourceId) || skillSources[0];
   }, [skillSources, selectedSkillSourceId]);
@@ -1158,13 +1156,29 @@ function AiComposeApp() {
     return null;
   };
 
-  const isCurrentPromptEditorEnabled = promptEditorStates[activeEditorId]?.enabled ?? false;
+  const enabledPromptEditorIds = useMemo(
+    () => editorIds.filter((editorId) => promptEditorStates[editorId]?.enabled),
+    [editorIds, promptEditorStates],
+  );
 
   const handleApplyClick = async () => {
-    if (activeDomain === "Prompt" && !isCurrentPromptEditorEnabled) {
-      messageApi.warning(`请先在当前配置域中启用 ${editorMeta[activeEditorId].title}`);
+    if (activeDomain === "Prompt") {
+      if (enabledPromptEditorIds.length === 0) {
+        messageApi.warning("请先在当前配置域中启用至少一个编辑器");
+        return;
+      }
+
+      const results = await Promise.all(
+        enabledPromptEditorIds.map((editorId) => applyToEditor(editorId, true)),
+      );
+      const succeededEditors = enabledPromptEditorIds.filter((_, index) => results[index]);
+
+      if (succeededEditors.length > 0) {
+        messageApi.success(`已将最新配置成功应用到 ${succeededEditors.map((editorId) => editorMeta[editorId].title).join("、")}！`);
+      }
       return;
     }
+
     const result = await applyToEditor(
       activeEditorId,
       activeDomain === "MCP" ? enabledMcp.length > 0 : true,
@@ -1176,7 +1190,9 @@ function AiComposeApp() {
 
   const handleToggleEditor = async (editorId: EditorId) => {
     const nextEnabled = !editorStates[editorId].enabled;
-    selectEditor(editorId);
+    if (activeDomain !== "Prompt") {
+      selectEditor(editorId);
+    }
 
     if (activeDomain === "Prompt") {
       if (nextEnabled && enabledFragments.length === 0) {
@@ -1206,34 +1222,6 @@ function AiComposeApp() {
         duration: 4.8,
       });
     }
-  };
-
-  const getDomainEditorCardMeta = (editorId: EditorId) => {
-    if (activeDomain === "Skills") {
-      const linkedSkillsCount = skillsEditorStates[editorId]?.enabledSkills.length ?? 0;
-      return {
-        detail:
-          skillsEditorStates[editorId]?.targetPath || "未检测到 Skills 目标目录",
-        status: linkedSkillsCount > 0 ? `已链接 ${linkedSkillsCount} 项` : "未链接技能",
-      };
-    }
-
-    if (activeDomain === "MCP") {
-      const enabledCount = getEnabledMcpIdsForEditor(editorId).length;
-      return {
-        detail:
-          mcpEditorStates[editorId]?.targetPath || "未检测到 MCP 配置文件",
-        status: enabledCount > 0 ? `已启用 ${enabledCount} 项` : "未启用服务",
-      };
-    }
-
-    return {
-      detail:
-        promptEditorStates[editorId]?.enabled
-          ? "受管 Prompt 已启用"
-          : "点击开关后写入受管 Prompt",
-      status: promptEditorStates[editorId]?.enabled ? "已启用" : "已关闭",
-    };
   };
 
   return (
@@ -1282,86 +1270,7 @@ function AiComposeApp() {
             </section>
           </aside>
 
-          <main className={`workbench${activeDomain === "Prompt" ? " workbench--with-editor-panel" : " workbench--skills"}`}>
-            {activeDomain === "Prompt" ? (
-              <section
-                className="panel domain-editor-panel"
-                aria-labelledby="domain-editor-panel-title"
-              >
-                <div className="panel__header">
-                  <div>
-                    <h2 className="panel__title" id="domain-editor-panel-title">
-                      当前配置域编辑器
-                    </h2>
-                    <p className="panel__subtitle">
-                      先选择目标编辑器，再分别开关每个编辑器的 Prompt 受管配置。
-                    </p>
-                  </div>
-                  <span className="chip chip--accent">
-                    当前 {editorMeta[activeEditorId].title}
-                  </span>
-                </div>
-
-                <div className="domain-editor-panel__grid">
-                  {editorIds.map((editorId) => {
-                    const isSelected = activeEditorId === editorId;
-                    const { detail, status } = getDomainEditorCardMeta(editorId);
-
-                    return (
-                      <div
-                        key={editorId}
-                        className={`domain-editor-card${
-                          isSelected ? " domain-editor-card--active" : ""
-                        }`}
-                      >
-                        <button
-                          className="domain-editor-card__select"
-                          onClick={() => selectEditor(editorId)}
-                          type="button"
-                        >
-                          <div className="domain-editor-card__title-row">
-                            <span className="domain-editor-card__title">
-                              {editorMeta[editorId].title}
-                            </span>
-                            {isSelected ? (
-                              <span className="domain-editor-card__badge">
-                                当前查看
-                              </span>
-                            ) : null}
-                          </div>
-                          <span className="domain-editor-card__status">{status}</span>
-                          <span
-                            className="domain-editor-card__detail"
-                            title={detail}
-                          >
-                            {detail}
-                          </span>
-                        </button>
-
-                        {canToggleEditorsInDomain ? (
-                          <button
-                            aria-pressed={editorStates[editorId].enabled}
-                            className={`editor-toggle${
-                              editorStates[editorId].enabled
-                                ? " editor-toggle--enabled"
-                                : ""
-                            }`}
-                            disabled={isHydratingEditorStates}
-                            onClick={() => {
-                              void handleToggleEditor(editorId);
-                            }}
-                            type="button"
-                          >
-                            <span className="editor-toggle__thumb" />
-                          </button>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-            ) : null}
-
+          <main className={`workbench${activeDomain === "Prompt" ? "" : " workbench--skills"}`}>
             {activeDomain === "Prompt" ? (
               <>
                 <section
@@ -2552,14 +2461,46 @@ function AiComposeApp() {
                       右侧始终展示当前启用片段的最终组合结果。
                     </p>
                   </div>
-                  <button
-                    className={`preview-apply-btn${isCurrentPromptEditorEnabled && applyStatus !== "pending" ? "" : " preview-apply-btn--disabled"}`}
-                    onClick={handleApplyClick}
-                    disabled={!isCurrentPromptEditorEnabled || applyStatus === "pending"}
-                    title={isCurrentPromptEditorEnabled ? `应用 Prompt 配置到 ${editorMeta[activeEditorId].title}` : `请先启用当前配置域中的 ${editorMeta[activeEditorId].title}`}
-                  >
-                    {applyStatus === "pending" ? "正在应用..." : "应用配置"}
-                  </button>
+                  <div className="preview-card__actions">
+                    <div className="preview-card__editor-toggles">
+                      {editorIds.map((editorId) => {
+                        const isEnabled = editorStates[editorId].enabled;
+                        const tooltipContent = `${editorMeta[editorId].title}${isEnabled ? " Prompt 已启用" : " Prompt 未启用"}`;
+
+                        return (
+                          <Tooltip
+                            key={`prompt-preview-${editorId}`}
+                            content={tooltipContent}
+                            placement="top"
+                            styles={{ overlay: { zIndex: 1400 } }}
+                          >
+                            <button
+                              aria-label={tooltipContent}
+                              aria-pressed={isEnabled}
+                              className={`editor-icon-toggle${
+                                isEnabled ? " editor-icon-toggle--enabled" : ""
+                              }`}
+                              disabled={isHydratingEditorStates}
+                              onClick={() => {
+                                void handleToggleEditor(editorId);
+                              }}
+                              type="button"
+                            >
+                              {renderEditorToggleIcon(editorId)}
+                            </button>
+                          </Tooltip>
+                        );
+                      })}
+                    </div>
+                    <button
+                      className={`preview-apply-btn${enabledPromptEditorIds.length > 0 && applyStatus !== "pending" ? "" : " preview-apply-btn--disabled"}`}
+                      onClick={handleApplyClick}
+                      disabled={enabledPromptEditorIds.length === 0 || applyStatus === "pending"}
+                      title={enabledPromptEditorIds.length > 0 ? `将 Prompt 配置应用到 ${enabledPromptEditorIds.map((editorId) => editorMeta[editorId].title).join("、")}` : "请先在当前配置域中启用至少一个编辑器"}
+                    >
+                      {applyStatus === "pending" ? "正在应用..." : "应用配置"}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="preview-card__body">
