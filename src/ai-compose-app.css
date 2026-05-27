@@ -1214,6 +1214,26 @@
   color: var(--accent);
 }
 
+.skills-detail-pane__multi-paths {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.skills-detail-pane__multi-path-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.skills-detail-pane__multi-path-label {
+  color: var(--text-main);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .skills-detail-pane__markdown {
   margin: 0;
   padding: 16px;

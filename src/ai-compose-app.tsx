@@ -129,6 +129,8 @@ const editorMeta: Record<
   },
 };
 
+const editorIds = Object.keys(editorMeta) as EditorId[];
+
 function renderEditorToggleIcon(editorId: EditorId) {
   if (editorId === "antigravity") {
     return (
@@ -375,7 +377,6 @@ function AiComposeApp() {
 
   const isSkillsLoading = isHydratingEditorStates || isSkillsListLoading || isAddingSkillsRepo || isRemovingSkill || isUpdatingSkill;
 
-  const activeSkillsTargetPath = skillsEditorStates[activeEditorId]?.targetPath ?? "";
   const activeEnabledSkillIds = useMemo(
     () => skillsEditorStates[activeEditorId]?.enabledSkills ?? [],
     [skillsEditorStates, activeEditorId],
@@ -428,15 +429,30 @@ function AiComposeApp() {
         .includes(normalizedQuery);
     });
   }, [skills, selectedSource, skillsFilter, skillsQuery, activeEnabledSkillIds]);
-  const selectedSkillTargetLink = selectedSkill && activeSkillsTargetPath
-    ? `${activeSkillsTargetPath}/${selectedSkill.id}`
-    : "";
   const selectedSkillPhysicalPath = selectedSkill?.isBuiltin && !selectedSkill.installed
     ? ""
     : (selectedSkill?.path || "");
-  const selectedSkillLinkPath = selectedSkill?.isBuiltin && !selectedSkill.installed
-    ? ""
-    : (selectedSkillTargetLink || selectedSkill?.path || "");
+  const selectedSkillLinkedTargets = useMemo(() => {
+    if (!selectedSkill || (selectedSkill.isBuiltin && !selectedSkill.installed)) {
+      return [];
+    }
+
+    return editorIds
+      .map((editorId) => {
+        const targetPath = skillsEditorStates[editorId]?.targetPath ?? "";
+        const isLinked = (skillsEditorStates[editorId]?.enabledSkills ?? []).includes(selectedSkill.id);
+
+        if (!targetPath || !isLinked) {
+          return null;
+        }
+
+        return {
+          editorId,
+          path: `${targetPath}/${selectedSkill.id}`,
+        };
+      })
+      .filter((item): item is { editorId: EditorId; path: string } => Boolean(item));
+  }, [editorIds, selectedSkill, skillsEditorStates]);
   const isSelectedSkillCliManaged = selectedSkill?.sourceKind === "cli";
   const isSelectedSkillLinked = selectedSkill
     ? activeEnabledSkillIds.includes(selectedSkill.id)
@@ -475,8 +491,6 @@ function AiComposeApp() {
     setSkillsList(combinedSkills);
     return combinedSkills;
   };
-
-  const editorIds = Object.keys(editorMeta) as EditorId[];
 
   const getEnabledMcpIdsForEditor = (editorId: EditorId) =>
     mcpEnabledServerIdsByEditor[editorId] ?? [];
@@ -2420,20 +2434,29 @@ function AiComposeApp() {
                             </button>
                           ) : "未安装，暂无物理路径"}
                         </p>
-                        <p className="skills-detail-pane__path">
+                        <div className="skills-detail-pane__path">
                           <strong>目标软链接：</strong>
-                          {selectedSkillLinkPath ? (
-                            <button
-                              className="skills-detail-pane__link-button"
-                              onClick={() => {
-                                void revealSkillLocalPath(selectedSkillLinkPath);
-                              }}
-                              type="button"
-                            >
-                              {selectedSkillLinkPath}
-                            </button>
-                          ) : "未安装，暂不可创建软链接"}
-                        </p>
+                          {selectedSkillLinkedTargets.length > 0 ? (
+                            <div className="skills-detail-pane__multi-paths">
+                              {selectedSkillLinkedTargets.map(({ editorId, path }) => (
+                                <div key={`${selectedSkill.id}-${editorId}`} className="skills-detail-pane__multi-path-row">
+                                  <span className="skills-detail-pane__multi-path-label">
+                                    {editorMeta[editorId].title}:
+                                  </span>
+                                  <button
+                                    className="skills-detail-pane__link-button"
+                                    onClick={() => {
+                                      void revealSkillLocalPath(path);
+                                    }}
+                                    type="button"
+                                  >
+                                    {path}
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : "当前未链接到任何编辑器"}
+                        </div>
                         <pre className="skills-detail-pane__markdown" style={{ marginTop: "16px" }}>
                           <code>{selectedSkill.content || "(SKILL.md 内容为空)"}</code>
                         </pre>
