@@ -1,4 +1,4 @@
-import { Message, Select, Button, Modal, type SelectOption } from "@xinghunm/compass-ui";
+import { Message, Select, Button, Modal, Tooltip, type SelectOption } from "@xinghunm/compass-ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -128,6 +128,103 @@ const editorMeta: Record<
     title: "Cursor",
   },
 };
+
+function renderEditorToggleIcon(editorId: EditorId) {
+  if (editorId === "antigravity") {
+    return (
+      <svg
+        aria-hidden="true"
+        className="editor-icon-toggle__icon editor-icon-toggle__icon--antigravity"
+        viewBox="0 0 24 24"
+      >
+        <defs>
+          <linearGradient id="editor-icon-antigravity-arc" x1="6.4" y1="5.6" x2="17.6" y2="5.6" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stopColor="#4A8FFF" />
+            <stop offset="0.28" stopColor="#4FB6FF" />
+            <stop offset="0.54" stopColor="#81D66A" />
+            <stop offset="0.76" stopColor="#FFB243" />
+            <stop offset="1" stopColor="#FF5A4F" />
+          </linearGradient>
+        </defs>
+        <rect x="2.2" y="2.2" width="19.6" height="19.6" rx="5.2" fill="#ffffff" />
+        <path
+          fill="url(#editor-icon-antigravity-arc)"
+          d="M6.1 18.1c-.46 0-.86-.17-1.18-.5a1.66 1.66 0 0 1-.48-1.18c0-.44.16-.82.48-1.14.88-.94 1.62-1.92 2.22-2.94.62-1.04 1.18-2.17 1.68-3.38.52-1.24 1.03-2.2 1.54-2.88.55-.72 1.28-1.08 2.18-1.08.9 0 1.62.36 2.16 1.08.5.68 1.02 1.64 1.54 2.88.5 1.2 1.06 2.33 1.68 3.38.6 1.02 1.34 2 2.22 2.94.32.32.48.7.48 1.14 0 .46-.16.85-.48 1.18-.32.33-.72.5-1.18.5-.42 0-.8-.16-1.12-.48-.96-.98-1.8-2.07-2.52-3.26a24.53 24.53 0 0 1-1.9-3.88 17.28 17.28 0 0 0-1.08-2.44c-.34-.56-.74-.84-1.2-.84-.46 0-.86.28-1.2.84-.3.5-.66 1.3-1.08 2.44-.58 1.48-1.2 2.78-1.9 3.88-.72 1.2-1.56 2.28-2.52 3.26-.32.32-.7.48-1.12.48Z"
+        />
+      </svg>
+    );
+  }
+
+  if (editorId === "codex") {
+    return (
+      <svg
+        aria-hidden="true"
+        className="editor-icon-toggle__icon editor-icon-toggle__icon--codex"
+        viewBox="0 0 24 24"
+      >
+        <defs>
+          <radialGradient id="editor-icon-codex-cloud" cx="35%" cy="28%" r="88%">
+            <stop offset="0" stopColor="#C7BCFF" />
+            <stop offset="0.42" stopColor="#8E95FF" />
+            <stop offset="1" stopColor="#4432FF" />
+          </radialGradient>
+        </defs>
+        <rect x="2.2" y="2.2" width="19.6" height="19.6" rx="5.2" fill="#ffffff" />
+        <path
+          fill="url(#editor-icon-codex-cloud)"
+          d="M8.15 18.55c-1.2 0-2.18-.4-2.95-1.2-.75-.78-1.12-1.73-1.12-2.87 0-.9.24-1.7.72-2.4.5-.7 1.15-1.2 1.96-1.48.16-1.14.68-2.1 1.58-2.9.9-.82 1.97-1.23 3.22-1.23 1.02 0 1.94.28 2.76.84a5.01 5.01 0 0 1 1.84 2.24c1.1.16 2 .64 2.7 1.46.72.8 1.08 1.77 1.08 2.92 0 1.2-.42 2.22-1.26 3.06-.82.84-1.84 1.26-3.05 1.26H8.15Z"
+        />
+        <path
+          d="M9.25 10.15 11.1 13l-1.85 2.85"
+          fill="none"
+          stroke="#F7F8FF"
+          strokeWidth="1.55"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M13.2 15.85h2.85"
+          fill="none"
+          stroke="#F7F8FF"
+          strokeWidth="1.55"
+          strokeLinecap="round"
+        />
+      </svg>
+    );
+  }
+
+  return (
+      <svg
+        aria-hidden="true"
+        className="editor-icon-toggle__icon editor-icon-toggle__icon--cursor"
+        viewBox="0 0 24 24"
+      >
+        <defs>
+          <linearGradient id="editor-icon-cursor-top" x1="7" y1="7.5" x2="17" y2="7.5" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stopColor="#6E6A62" />
+            <stop offset="1" stopColor="#4D4942" />
+          </linearGradient>
+          <linearGradient id="editor-icon-cursor-left" x1="7" y1="9.5" x2="12" y2="17" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stopColor="#6A6660" />
+            <stop offset="1" stopColor="#59554F" />
+          </linearGradient>
+          <linearGradient id="editor-icon-cursor-right" x1="12" y1="9.5" x2="17" y2="17" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stopColor="#E8E7E5" />
+            <stop offset="1" stopColor="#CFCFCD" />
+          </linearGradient>
+          <linearGradient id="editor-icon-cursor-base" x1="7" y1="16" x2="17" y2="16" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stopColor="#504C45" />
+            <stop offset="1" stopColor="#6B6760" />
+          </linearGradient>
+        </defs>
+        <rect x="2.2" y="2.2" width="19.6" height="19.6" rx="5.2" fill="#15130E" />
+        <path fill="url(#editor-icon-cursor-top)" d="M12 5.4 17.4 8.55 12 11.35 6.6 8.55 12 5.4Z" />
+        <path fill="url(#editor-icon-cursor-left)" d="M6.6 8.55v6.2L12 18V11.35L6.6 8.55Z" />
+        <path fill="url(#editor-icon-cursor-right)" d="M17.4 8.55v6.2L12 18V11.35l5.4-2.8Z" />
+        <path fill="url(#editor-icon-cursor-base)" opacity="0.82" d="M6.6 14.75 12 18l5.4-3.25L12 13.05l-5.4 1.7Z" />
+      </svg>
+  );
+}
 
 function renderSkillIcon(name: string, id: string) {
   const lowercaseName = name.toLowerCase();
@@ -551,8 +648,10 @@ function AiComposeApp() {
 
   const renderSkillRow = (skill: typeof skills[number]) => {
     const isSelected = skill.id === selectedSkillId;
-    const isLinkedToEditor = activeEnabledSkillIds.includes(skill.id);
     const badgeMeta = getSkillSourceBadgeMeta(skill, skillSources);
+    const linkedCount = editorIds.filter((editorId) =>
+      isSkillLinkedToEditor(editorId, skill.id),
+    ).length;
 
     return (
       <div
@@ -560,15 +659,21 @@ function AiComposeApp() {
         className={`skills-list-row${
           isSelected ? " skills-list-row--selected" : ""
         }`}
-      >
-        <button
-          className="skills-list-row__select"
-          onClick={() => {
+        onClick={() => {
+          selectSkill(skill.id);
+          setIsSkillModalOpen(true);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
             selectSkill(skill.id);
             setIsSkillModalOpen(true);
-          }}
-          type="button"
-        >
+          }
+        }}
+        role="button"
+        tabIndex={0}
+      >
+        <div className="skills-list-row__select">
           <div className="skill-card__icon-container">
             {renderSkillIcon(skill.name, skill.id)}
           </div>
@@ -577,51 +682,20 @@ function AiComposeApp() {
               <span className="skills-list-row__title" title={skill.name}>
                 {skill.name}
               </span>
-              <span className={`skill-source-badge ${badgeMeta.className}`}>
-                {badgeMeta.text}
-              </span>
             </div>
             <span className="skills-list-row__description" title={skill.description || "无描述"}>
               {skill.description || "无描述"}
             </span>
+            <div className="skills-list-row__meta-line">
+              <span className={`skill-source-badge ${badgeMeta.className}`}>
+                {badgeMeta.text}
+              </span>
+              <span className="skills-list-row__summary-count">
+                已链接 {linkedCount}/{editorIds.length}
+              </span>
+            </div>
           </div>
-        </button>
-        <div className="per-editor-switches" onClick={(event) => event.stopPropagation()}>
-          {editorIds.map((editorId) => {
-            const isLinked = isSkillLinkedToEditor(editorId, skill.id);
-            const isReadOnly = isSkillToggleReadOnly(skill);
-
-            return (
-              <button
-                key={`${skill.id}-${editorId}`}
-                type="button"
-                className={`per-editor-switch${
-                  isLinked ? " per-editor-switch--enabled" : ""
-                }${isReadOnly ? " per-editor-switch--readonly" : ""}`}
-                aria-pressed={isLinked}
-                disabled={isReadOnly || isAddingSkillsRepo || isRemovingSkill}
-                onClick={() => {
-                  void handleSkillEditorToggle(skill, editorId);
-                }}
-                title={`${editorMeta[editorId].title}${isLinked ? " 已链接" : " 未链接"}`}
-              >
-                <span className="per-editor-switch__label">
-                  {editorMeta[editorId].title}
-                </span>
-                <span className="per-editor-switch__track">
-                  <span className="per-editor-switch__thumb" />
-                </span>
-              </button>
-            );
-          })}
         </div>
-        {isLinkedToEditor && (
-          <span className="skill-card__status-check" aria-label="已安装">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-          </span>
-        )}
       </div>
     );
   };
@@ -1485,31 +1559,33 @@ function AiComposeApp() {
                         <span className="mcp-detail-switches__hint">
                           仅控制当前 MCP 在各编辑器中的启用状态
                         </span>
-                        <div className="per-editor-switches per-editor-switches--detail">
+                        <div className="editor-icon-toggle-group">
                           {editorIds.map((editorId) => {
                             const isEnabled = isMcpEnabledForEditor(editorId, selectedMcpServer.id);
+                            const tooltipContent = `${editorMeta[editorId].title}${isEnabled ? " 已启用" : " 未启用"}`;
 
                             return (
-                              <button
+                              <Tooltip
                                 key={`detail-${selectedMcpServer.id}-${editorId}`}
-                                type="button"
-                                className={`per-editor-switch${
-                                  isEnabled ? " per-editor-switch--enabled" : ""
-                                }`}
-                                aria-pressed={isEnabled}
-                                disabled={pendingMcpToggleKey === `${editorId}:${selectedMcpServer.id}`}
-                                onClick={() => {
-                                  void handleMcpEditorToggle(editorId, selectedMcpServer.id);
-                                }}
-                                title={`${editorMeta[editorId].title}${isEnabled ? " 已启用" : " 未启用"}`}
+                                content={tooltipContent}
+                                placement="top"
+                                styles={{ overlay: { zIndex: 1400 } }}
                               >
-                                <span className="per-editor-switch__label">
-                                  {editorMeta[editorId].title}
-                                </span>
-                                <span className="per-editor-switch__track">
-                                  <span className="per-editor-switch__thumb" />
-                                </span>
-                              </button>
+                                <button
+                                  type="button"
+                                  className={`editor-icon-toggle${
+                                    isEnabled ? " editor-icon-toggle--enabled" : ""
+                                  }`}
+                                  aria-label={tooltipContent}
+                                  aria-pressed={isEnabled}
+                                  disabled={pendingMcpToggleKey === `${editorId}:${selectedMcpServer.id}`}
+                                  onClick={() => {
+                                    void handleMcpEditorToggle(editorId, selectedMcpServer.id);
+                                  }}
+                                >
+                                  {renderEditorToggleIcon(editorId)}
+                                </button>
+                              </Tooltip>
                             );
                           })}
                         </div>
@@ -1757,7 +1833,6 @@ function AiComposeApp() {
                         管理已链接的技能，添加第三方仓库或本地物理目录作为技能源。
                       </p>
                     </div>
-                    <span className="chip">已安装/已链接 {installedSkills.length} 项技能</span>
                   </div>
                 </div>
 
@@ -1893,14 +1968,28 @@ function AiComposeApp() {
                     <div className="skills-list-pane__summary" style={{ padding: "10px 18px", background: "var(--panel-muted)" }}>
                       <span>
                         共 {filteredSkills.length} 项
-                        <span style={{ marginLeft: "10px", color: "var(--accent-primary)" }}>
-                          已链接 {filteredSkills.filter(s => activeEnabledSkillIds.includes(s.id)).length}
-                        </span>
-                        <span style={{ marginLeft: "10px", color: "var(--text-faint)" }}>
-                          未链接 {filteredSkills.filter(s => !activeEnabledSkillIds.includes(s.id)).length}
-                        </span>
+                        {editorIds
+                          .map((editorId) => ({
+                            editorId,
+                            count: filteredSkills.filter((skill) =>
+                              isSkillLinkedToEditor(editorId, skill.id),
+                            ).length,
+                          }))
+                          .filter(({ count }) => count > 0)
+                          .map(({ editorId, count }) => (
+                            <span
+                              key={`skills-summary-${editorId}`}
+                              style={{
+                                marginLeft: "10px",
+                                color: editorId === activeEditorId
+                                  ? "var(--accent-primary)"
+                                  : "var(--text-faint)",
+                              }}
+                            >
+                              {editorMeta[editorId].title} {count}
+                            </span>
+                          ))}
                       </span>
-                      <span>目标：{activeSkillsTargetPath || "未检测到目标路径"}</span>
                     </div>
 
                     <div className="skills-manager__controls" style={{ padding: "10px 18px", borderBottom: "1px solid var(--panel-border)", gap: "10px" }}>
@@ -2209,6 +2298,42 @@ function AiComposeApp() {
                           <p className="skills-detail-pane__description" style={{ marginTop: "12px" }}>
                             {selectedSkill.description || "无描述"}
                           </p>
+                          <div className="skills-detail-switches">
+                            <span className="skills-detail-switches__hint">
+                              仅控制当前 Skill 在各编辑器中的链接状态
+                            </span>
+                            <div className="editor-icon-toggle-group editor-icon-toggle-group--skill-detail">
+                              {editorIds.map((editorId) => {
+                                const isLinked = isSkillLinkedToEditor(editorId, selectedSkill.id);
+                                const isReadOnly = isSkillToggleReadOnly(selectedSkill);
+                                const tooltipContent = `${editorMeta[editorId].title}${isLinked ? " 已链接" : " 未链接"}`;
+
+                                return (
+                                  <Tooltip
+                                    key={`detail-${selectedSkill.id}-${editorId}`}
+                                    content={tooltipContent}
+                                    placement="top"
+                                    styles={{ overlay: { zIndex: 1400 } }}
+                                  >
+                                    <button
+                                      type="button"
+                                      className={`editor-icon-toggle${
+                                        isLinked ? " editor-icon-toggle--enabled" : ""
+                                      }${isReadOnly ? " editor-icon-toggle--readonly" : ""}`}
+                                      aria-label={tooltipContent}
+                                      aria-pressed={isLinked}
+                                      disabled={isReadOnly || isAddingSkillsRepo || isRemovingSkill || isUpdatingSkill}
+                                      onClick={() => {
+                                        void handleSkillEditorToggle(selectedSkill, editorId);
+                                      }}
+                                    >
+                                      {renderEditorToggleIcon(editorId)}
+                                    </button>
+                                  </Tooltip>
+                                );
+                              })}
+                            </div>
+                          </div>
                         </div>
                         <div className="skills-detail-pane__actions">
                           {canInstallSelectedSkill ? (
