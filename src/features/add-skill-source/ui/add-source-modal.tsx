@@ -1,6 +1,7 @@
 import { Modal, Button, Message } from "@xinghunm/compass-ui";
 import { useState } from "react";
 import { addSkillsRepository, selectDirectory, normalizeRepoSource, type EditorId } from "../../../shared";
+import { AddSourceModalContent } from "./add-source-modal.styles";
 
 interface AddSourceModalProps {
   isOpen: boolean;
@@ -67,7 +68,7 @@ export function AddSourceModal({
       footer={null}
       width={480}
     >
-      <div className="skills-add-source-form" style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+      <AddSourceModalContent className="skills-add-source-form">
         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
           <label style={{ fontSize: "12px", color: "var(--text-soft)", fontWeight: 600 }}>
             技能源类型
@@ -206,7 +207,7 @@ export function AddSourceModal({
             确定
           </Button>
         </div>
-      </div>
+      </AddSourceModalContent>
     </Modal>
   );
 }

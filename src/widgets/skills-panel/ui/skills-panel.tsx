@@ -17,6 +17,7 @@ import {
 } from "../../../shared";
 import { AddSourceModal } from "../../../features/add-skill-source";
 import { SkillDetailModal } from "../../../features/manage-skill";
+import { SkillsPanelRoot } from "./skills-panel.styles";
 
 const editorMeta: Record<
   EditorId,
@@ -355,6 +356,7 @@ export function SkillsPanel({ messageApi }: SkillsPanelProps) {
   };
 
   return (
+    <SkillsPanelRoot>
     <main className="workbench workbench--skills">
       <section className="panel skills-manager" aria-labelledby="skills-list-title">
         <div className="skills-manager__toolbar">
@@ -691,5 +693,6 @@ export function SkillsPanel({ messageApi }: SkillsPanelProps) {
       )}
       </section>
     </main>
+    </SkillsPanelRoot>
   );
 }

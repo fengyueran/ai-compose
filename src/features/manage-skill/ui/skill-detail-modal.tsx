@@ -18,6 +18,7 @@ import {
   revealSkillLocalPath,
   EditorToggleIcon,
 } from "../../../shared";
+import { SkillDetailModalContent } from "./skill-detail-modal.styles";
 
 const editorMeta: Record<
   EditorId,
@@ -129,7 +130,7 @@ export function SkillDetailModal({
       footer={null}
       width={720}
     >
-      <div className={`skills-detail-pane${
+      <SkillDetailModalContent className={`skills-detail-pane${
         isRemovingSkill || isUpdatingSkill || isAddingSkillsRepo
           ? " skills-detail-pane--loading"
           : ""
@@ -381,7 +382,7 @@ export function SkillDetailModal({
             <code>{selectedSkill.content || "(SKILL.md 内容为空)"}</code>
           </pre>
         </div>
-      </div>
+      </SkillDetailModalContent>
     </Modal>
   );
 }

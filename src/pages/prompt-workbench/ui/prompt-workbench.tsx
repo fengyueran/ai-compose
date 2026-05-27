@@ -15,7 +15,23 @@ import {
 import { PromptPanel } from "../../../widgets/prompt-panel";
 import { McpPanel } from "../../../widgets/mcp-panel";
 import { SkillsPanel } from "../../../widgets/skills-panel";
-import "./prompt-workbench.css";
+import {
+  Brand,
+  BrandTitle,
+  DisabledTag,
+  GlobalBar,
+  PageFrame,
+  PageShell,
+  SideNavItem,
+  SideNavItems,
+  SideNavLabel,
+  SideNavPanel,
+  SideNavSection,
+  StatusArea,
+  StatusChip,
+  StatusChipLabel,
+  WorkspaceGrid,
+} from "./prompt-workbench.styles";
 
 const configurationDomains = [
   { name: "Prompt", isAvailable: true },
@@ -170,50 +186,45 @@ export function PromptWorkbenchPage() {
   }, [activeDomain, activeEditorId, setSkillsList, skillSources]);
 
   return (
-    <div className="app-shell">
+    <PageShell>
       {messageContextHolder}
-      <div className="app-frame">
-        <header className="global-bar">
-          <div className="global-bar__brand">
-            <h1 className="global-bar__title">AI Compose</h1>
-          </div>
+      <PageFrame>
+        <GlobalBar>
+          <Brand>
+            <BrandTitle>AI Compose</BrandTitle>
+          </Brand>
 
-          <div className="global-bar__status" aria-label="当前上下文">
-            <span className="chip">
-              <span className="chip__label">配置域</span>
+          <StatusArea aria-label="当前上下文">
+            <StatusChip>
+              <StatusChipLabel>配置域</StatusChipLabel>
               {activeDomain}
-            </span>
-          </div>
-        </header>
+            </StatusChip>
+          </StatusArea>
+        </GlobalBar>
 
-        <div className={`workspace-grid${activeDomain === "Skills" ? " workspace-grid--skills" : ""}`}>
-          <aside className="panel side-nav" aria-label="工作台导航">
-            <section className="side-nav__section">
-              <h2 className="side-nav__label">配置域</h2>
-              <div className="side-nav__items">
+        <WorkspaceGrid isSkillsDomain={activeDomain === "Skills"}>
+          <SideNavPanel aria-label="工作台导航">
+            <SideNavSection>
+              <SideNavLabel>配置域</SideNavLabel>
+              <SideNavItems>
                 {configurationDomains.map((domain) => (
-                  <button
+                  <SideNavItem
                     key={domain.name}
-                    className={`side-nav__item${
-                      activeDomain === domain.name
-                        ? " side-nav__item--active"
-                        : !domain.isAvailable
-                          ? " side-nav__item--disabled"
-                          : ""
-                    }`}
                     disabled={!domain.isAvailable}
+                    isActive={activeDomain === domain.name}
+                    isDisabled={!domain.isAvailable}
                     onClick={() => domain.isAvailable && selectDomain(domain.name)}
                     type="button"
                   >
                     <span>{domain.name}</span>
                     {!domain.isAvailable ? (
-                      <span className="disabled-tag">即将支持</span>
+                      <DisabledTag>即将支持</DisabledTag>
                     ) : null}
-                  </button>
+                  </SideNavItem>
                 ))}
-              </div>
-            </section>
-          </aside>
+              </SideNavItems>
+            </SideNavSection>
+          </SideNavPanel>
 
           {activeDomain === "Prompt" ? (
             <PromptPanel messageApi={messageApi} />
@@ -222,8 +233,8 @@ export function PromptWorkbenchPage() {
           ) : (
             <SkillsPanel messageApi={messageApi} />
           )}
-        </div>
-      </div>
-    </div>
+        </WorkspaceGrid>
+      </PageFrame>
+    </PageShell>
   );
 }

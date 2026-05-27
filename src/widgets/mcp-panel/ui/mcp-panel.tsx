@@ -9,6 +9,7 @@ import {
   type McpServer,
   EditorToggleIcon,
 } from "../../../shared";
+import { McpPanelRoot } from "./mcp-panel.styles";
 
 const editorMeta: Record<
   EditorId,
@@ -426,7 +427,7 @@ export function McpPanel({ messageApi }: McpPanelProps) {
   };
 
   return (
-    <>
+    <McpPanelRoot>
       <main className="workbench">
         <section
           className="panel fragment-list"
@@ -842,6 +843,6 @@ export function McpPanel({ messageApi }: McpPanelProps) {
           </div>
         </section>
       </aside>
-    </>
+    </McpPanelRoot>
   );
 }

@@ -1,6 +1,24 @@
 @import 'tailwindcss';
 
 :root {
+  --app-bg: #f5efe2;
+  --panel-bg: rgba(255, 251, 244, 0.82);
+  --panel-strong: #fffdf8;
+  --panel-border: rgba(82, 63, 41, 0.12);
+  --panel-muted: rgba(90, 73, 52, 0.06);
+  --text-main: #211910;
+  --text-soft: #695742;
+  --text-faint: #8e7c67;
+  --accent: #c55d33;
+  --accent-strong: #9a4521;
+  --accent-soft: rgba(197, 93, 51, 0.14);
+  --success: #2f7d57;
+  --shadow:
+    0 18px 42px rgba(53, 37, 20, 0.08), 0 2px 10px rgba(53, 37, 20, 0.05);
+  --radius-xl: 28px;
+  --radius-lg: 20px;
+  --radius-md: 14px;
+  --workspace-max: 1600px;
   font-family:
     'Avenir Next', 'IBM Plex Sans', 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
     'Microsoft YaHei', sans-serif;

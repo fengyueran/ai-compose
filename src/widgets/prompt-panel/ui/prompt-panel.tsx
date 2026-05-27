@@ -8,6 +8,7 @@ import {
   composeManagedPromptBlock,
   EditorToggleIcon,
 } from "../../../shared";
+import { PromptPanelRoot } from "./prompt-panel.styles";
 
 const editorMeta: Record<
   EditorId,
@@ -203,7 +204,7 @@ export function PromptPanel({ messageApi }: PromptPanelProps) {
   };
 
   return (
-    <>
+    <PromptPanelRoot>
       <main className="workbench">
       <section
         className="panel fragment-list"
@@ -390,6 +391,6 @@ export function PromptPanel({ messageApi }: PromptPanelProps) {
           </div>
         </section>
       </aside>
-    </>
+    </PromptPanelRoot>
   );
 }
