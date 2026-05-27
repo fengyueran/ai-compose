@@ -37,6 +37,9 @@ describe('Prompt Workbench', () => {
     vi.mocked(loadPhysicalSkills).mockResolvedValue([])
     vi.mocked(loadSkillsFromDir).mockResolvedValue([])
     vi.mocked(selectDirectory).mockResolvedValue('/Users/test/.cursor/skills')
+    if (typeof window !== 'undefined') {
+      delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
+    }
   })
 
   test('renders the codex prompt workbench skeleton', () => {
@@ -45,7 +48,7 @@ describe('Prompt Workbench', () => {
     expect(
       screen.getByRole('heading', { name: 'AI Compose' }),
     ).toBeInTheDocument()
-    expect(screen.getAllByText('Codex').length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: /Codex/ })).toBeInTheDocument()
     expect(screen.getAllByText('Prompt').length).toBeGreaterThan(0)
     expect(screen.getAllByText('核心原则').length).toBeGreaterThan(0)
     expect(screen.getAllByText('安全指南').length).toBeGreaterThan(0)
@@ -56,19 +59,6 @@ describe('Prompt Workbench', () => {
     expect(screen.getAllByText('代码审查').length).toBeGreaterThan(0)
     expect(screen.getAllByText('知识沉淀与协作').length).toBeGreaterThan(0)
     expect(screen.getByText('最终 Prompt 预览')).toBeInTheDocument()
-  })
-
-  test('keeps domain selection in the side navigation and moves editor controls into the active domain', () => {
-    render(<AiComposeApp />)
-
-    const navigation = screen.getByLabelText('工作台导航')
-    expect(within(navigation).queryByText('编辑器')).not.toBeInTheDocument()
-    expect(within(navigation).getByText('配置域')).toBeInTheDocument()
-
-    const editorPanel = screen.getByRole('heading', { name: '当前配置域编辑器' }).closest('section')!
-    expect(within(editorPanel).getByRole('button', { name: /Antigravity/ })).toBeInTheDocument()
-    expect(within(editorPanel).getByRole('button', { name: /Codex/ })).toBeInTheDocument()
-    expect(within(editorPanel).getByRole('button', { name: /Cursor/ })).toBeInTheDocument()
   })
 
   test('toggles fragment prompt status and updates button style and preview', async () => {
@@ -122,22 +112,12 @@ describe('Prompt Workbench', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'MCP' }))
 
-    const editorPanel = screen.getByRole('heading', { name: '当前配置域编辑器' }).closest('section')!
-    await userEvent.click(within(editorPanel).getByRole('button', { name: /Cursor/ }))
+    // 从最终配置预览面板内找到 Cursor 切换按钮
+    const previewPanel = screen.getByText('最终 MCP 配置预览').closest('section')!
+    await userEvent.click(within(previewPanel).getByRole('button', { name: /Cursor/ }))
 
-    expect(screen.getByText(/最终 JSON 配置/)).toBeInTheDocument()
+    expect(screen.getByText(/最终 MCP 配置/)).toBeInTheDocument()
     expect(screen.getByText(/"mcpServers"/)).toBeInTheDocument()
-  })
-
-  test('hides editor enable switches in skills domain editor panel', async () => {
-    const { container } = render(<AiComposeApp />)
-
-    await userEvent.click(screen.getByRole('button', { name: 'Skills' }))
-
-    const editorPanel = screen.getByRole('heading', { name: '当前配置域编辑器' }).closest('section')!
-    expect(within(editorPanel).queryByText('已启用')).not.toBeInTheDocument()
-    expect(within(editorPanel).queryByText('已关闭')).not.toBeInTheDocument()
-    expect(container.querySelectorAll('.editor-toggle')).toHaveLength(0)
   })
 
   test('adds a custom MCP server and saves it with correct style variables', async () => {

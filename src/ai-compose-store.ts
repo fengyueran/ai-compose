@@ -40,19 +40,22 @@ const loadCustomServersFromStorage = (): McpServer[] => {
   try {
     const data = typeof window !== 'undefined' ? localStorage.getItem('ai-compose:custom-mcp-servers') : null
     const list: McpServer[] = data ? JSON.parse(data) : []
-    // 过滤掉非 custom- 开头的历史同步脏数据，并查重官方预设服务
+    // 查重官方预设服务，并确保自定义服务 ID 以 custom- 开头
     return list
       .filter(
         (item) =>
-        item.id.startsWith('custom-') &&
         !presetMcpServers.some(
           (p) => p.name.toLowerCase() === item.name.toLowerCase()
         )
       )
-      .map((item) => ({
-        ...item,
-        source: 'user',
-      }))
+      .map((item) => {
+        const id = item.id.startsWith('custom-') ? item.id : `custom-${item.id}`
+        return {
+          ...item,
+          id,
+          source: 'user',
+        }
+      })
   } catch (e) {
     console.error('Failed to load custom MCP servers from storage', e)
     return []
@@ -396,7 +399,7 @@ export const useAiComposeStore = create<AiComposeState>(
     },
     
     addMcpServer: (server) => {
-      const newId = server.name.toLowerCase().replace(/\s+/g, '-')
+      const newId = `custom-${server.name.toLowerCase().replace(/\s+/g, '-')}`
       const newServer: McpServer = {
         ...server,
         id: newId,
@@ -405,8 +408,19 @@ export const useAiComposeStore = create<AiComposeState>(
       set((state) => {
         const nextServers = [...state.mcpServers, newServer]
         saveCustomServersToStorage(nextServers)
+        
+        const activeEditorId = state.activeEditorId
+        const currentEnabledIds = state.mcpEnabledServerIdsByEditor[activeEditorId] ?? []
+        const nextEnabledIds = currentEnabledIds.includes(newId)
+          ? currentEnabledIds
+          : [...currentEnabledIds, newId]
+
         return {
           mcpServers: nextServers,
+          mcpEnabledServerIdsByEditor: {
+            ...state.mcpEnabledServerIdsByEditor,
+            [activeEditorId]: nextEnabledIds,
+          },
           selectedMcpServerId: newId,
         }
       })
