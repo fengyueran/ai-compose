@@ -129,7 +129,7 @@ export function McpPanel({ messageApi }: McpPanelProps) {
 
   const [pendingMcpToggleKey, setPendingMcpToggleKey] = useState<string | null>(null);
 
-  // 表单状态，用于编辑/创建 MCP
+  // Form state for editing or creating an MCP server.
   const [formName, setFormName] = useState("");
   const [formTransportType, setFormTransportType] = useState<'stdio' | 'http'>("stdio");
   const [formCommand, setFormCommand] = useState("npx");
@@ -138,7 +138,7 @@ export function McpPanel({ messageApi }: McpPanelProps) {
   const [formType, setFormType] = useState("streamable_http");
   const [formUrl, setFormUrl] = useState("");
 
-  // 当选中的 MCP Server 改变时，同步表单状态
+  // Keep the form state in sync when the selected MCP server changes.
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (selectedMcpServer && selectedMcpServerId !== "__new__") {

@@ -54,7 +54,7 @@ interface SkillDetailModalProps {
   handleSkillEditorToggle: (skill: SkillInfo, editorId: EditorId) => Promise<void>;
 }
 
-// 模拟 isPresetSkillMatchLocal
+// Local helper mirroring isPresetSkillMatch behavior.
 function isPresetSkillMatchLocal(presetId: string, skillId: string): boolean {
   const normPreset = presetId.toLowerCase().replace(/\.md$/, "");
   const normSkill = skillId.toLowerCase().replace(/\.md$/, "");

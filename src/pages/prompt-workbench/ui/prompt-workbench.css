@@ -173,7 +173,7 @@
   color: #8e7c67 !important;
 }
 
-/* 加载状态：保留渐变背景并强制前景色为暖白 */
+/* Loading state: keep the gradient background and force a warm off-white foreground. */
 .fragment-action-btn--loading,
 .fragment-action-btn--loading:disabled,
 .fragment-action-btn--loading:hover {
@@ -191,7 +191,7 @@
   fill: #fffdf8 !important;
 }
 
-/* 已启用状态（点击则从最终 Prompt 移除） */
+/* Enabled state; clicking removes it from the final prompt. */
 .fragment-action-btn--active {
   border-color: rgba(179, 58, 58, 0.24);
   background: rgba(179, 58, 58, 0.05);
@@ -1402,7 +1402,7 @@
   font-size: 0.8rem;
 }
 
-/* MCP 来源徽章 */
+/* MCP source badge */
 .mcp-source-badge {
   display: inline-flex;
   align-items: center;
@@ -1415,21 +1415,21 @@
   letter-spacing: 0.01em;
 }
 
-/* 官方预设 */
+/* Official preset */
 .mcp-source-badge--preset {
   background: rgba(0, 122, 255, 0.12);
   color: #007aff;
   border: 1px solid rgba(0, 122, 255, 0.2);
 }
 
-/* 自定义服务 */
+/* Custom service */
 .mcp-source-badge--user {
   background: rgba(142, 68, 173, 0.12);
   color: #9f7aea;
   border: 1px solid rgba(142, 68, 173, 0.2);
 }
 
-/* 外部手动配置 */
+/* Externally managed configuration */
 .mcp-source-badge--external {
   background: rgba(221, 107, 32, 0.12);
   color: #dd6b20;
@@ -1828,7 +1828,7 @@
   border-radius: 4px;
 }
 
-/* 应用配置按钮 */
+/* Apply configuration button */
 .preview-apply-btn {
   display: inline-flex;
   align-items: center;
@@ -1873,7 +1873,7 @@
   transform: none;
 }
 
-/* Skills Loading 态样式 */
+/* Loading styles for the Skills panel */
 @keyframes skills-spin {
   0% {
     transform: rotate(0deg);

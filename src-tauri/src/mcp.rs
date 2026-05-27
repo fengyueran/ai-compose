@@ -48,7 +48,7 @@ pub async fn apply_mcp_to_editor_target(payload: ApplyMcpPayload) -> Result<Appl
     fs::create_dir_all(parent_directory)
         .map_err(|error| format!("创建编辑器目标目录失败：{error}"))?;
 
-    // 解析配置 JSON，包含 mcpServers 以及 managedNames
+    // Parse the config JSON, including mcpServers and managedNames.
     let parsed: serde_json::Value = serde_json::from_str(&payload.config_json)
         .map_err(|error| format!("非法的 MCP JSON 配置：{error}"))?;
 
@@ -75,7 +75,7 @@ pub async fn apply_mcp_to_editor_target(payload: ApplyMcpPayload) -> Result<Appl
 
     match payload.editor_id {
         EditorId::Codex => {
-            // TOML 处理逻辑 (config.toml) - 外科手术式局部标记块替换
+            // TOML handling for config.toml using surgical block replacement.
             let mut enabled_servers = toml::map::Map::new();
             if payload.enabled {
                 for name in &managed_names {
@@ -115,25 +115,25 @@ pub async fn apply_mcp_to_editor_target(payload: ApplyMcpPayload) -> Result<Appl
             };
 
             if toml_str.contains(begin_marker) && toml_str.contains(end_marker) {
-                // 分支 1：存在边界标记
+                // Branch 1: the managed block markers already exist.
                 let start_idx = toml_str.find(begin_marker).unwrap();
                 let end_idx = toml_str.find(end_marker).unwrap() + end_marker.len();
 
                 if fragment.is_empty() {
-                    // 如果要写入的配置为空，说明需要全部清除。我们直接把整个包含边界的块全部抹除！
+                    // If the fragment is empty, remove the entire managed block including markers.
                     let mut delete_range = start_idx..end_idx;
-                    // 防御性处理：顺便删掉末尾多余的一个换行
+                    // Defensive cleanup: also remove the trailing newline when present.
                     if end_idx < toml_str.len() && toml_str.as_bytes()[end_idx] == b'\n' {
                         delete_range = start_idx..(end_idx + 1);
                     }
                     toml_str.replace_range(delete_range, "");
                 } else {
-                    // 有内容，正常更新受管块
+                    // Replace the managed block with the updated content.
                     let block_to_write = format!("{}\n{}\n{}", begin_marker, fragment, end_marker);
                     toml_str.replace_range(start_idx..end_idx, &block_to_write);
                 }
             } else {
-                // 分支 2：没有标记，只有在需要写入内容时才创建标记块
+                // Branch 2: no markers exist yet, so only create the block when needed.
                 if !fragment.is_empty() {
                     let block_to_write = format!("{}\n{}\n{}", begin_marker, fragment, end_marker);
 
@@ -182,7 +182,7 @@ pub async fn apply_mcp_to_editor_target(payload: ApplyMcpPayload) -> Result<Appl
                 .map_err(|error| format!("写入 Codex 配置文件失败：{error}"))?;
         }
         _ => {
-            // JSON 处理逻辑 (mcp.json)
+            // JSON handling for mcp.json.
             let mut json_root = if target_path.exists() {
                 let json_str = fs::read_to_string(&target_path)
                     .map_err(|error| format!("读取编辑器配置文件失败：{error}"))?;
@@ -192,7 +192,7 @@ pub async fn apply_mcp_to_editor_target(payload: ApplyMcpPayload) -> Result<Appl
                 serde_json::json!({})
             };
 
-            // 确保有 mcpServers object
+            // Ensure the mcpServers object exists.
             if !json_root.is_object() {
                 json_root = serde_json::json!({});
             }
@@ -207,7 +207,7 @@ pub async fn apply_mcp_to_editor_target(payload: ApplyMcpPayload) -> Result<Appl
                 .ok_or_else(|| "配置文件中的 mcpServers 不是一个 Object。".to_string())?;
 
             if payload.enabled {
-                // 合并启用项：先从 mcpServers 中删除所有 managed_names，再从 mcp_servers_json 中取启用值插入
+                // Merge enabled entries by clearing managed names first, then inserting enabled values.
                 for name in &managed_names {
                     mcp_servers_obj.remove(name);
                     if let Some(json_val) = mcp_servers_json.get(name) {
@@ -215,7 +215,7 @@ pub async fn apply_mcp_to_editor_target(payload: ApplyMcpPayload) -> Result<Appl
                     }
                 }
             } else {
-                // 移除所有 managed_names
+                // Remove all managed names.
                 for name in &managed_names {
                     mcp_servers_obj.remove(name);
                 }
@@ -248,7 +248,7 @@ pub fn extract_managed_mcp_servers(content: &str) -> Option<serde_json::Value> {
     }
 
     let managed_block = &content[start_idx + begin_marker.len()..end_idx];
-    // 构造一个可被完整 TOML 解析器载入的伪文档
+    // Build a synthetic document that can be parsed by the full TOML parser.
     let toml_doc = format!("[mcp_servers]\n{}", managed_block);
     if let Ok(parsed) = toml::from_str::<toml::Value>(&toml_doc) {
         if let Some(servers) = parsed.get("mcp_servers") {
@@ -278,7 +278,7 @@ pub fn build_editor_mcp_state(editor_id: EditorId) -> Result<EditorTargetState, 
                         }
                     }
                 }
-                // 提取受管服务
+                // Extract managed services.
                 managed_mcp_servers = extract_managed_mcp_servers(&content);
             }
             _ => {

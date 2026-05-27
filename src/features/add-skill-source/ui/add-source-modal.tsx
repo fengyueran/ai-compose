@@ -49,7 +49,7 @@ export function AddSourceModal({
       value: finalVal,
     });
     onCancel();
-    // 清空状态
+    // Reset the form state.
     setNewSourceName("");
     setNewSourceValue("");
     await refreshCurrentEditorSkills(activeEditorId);

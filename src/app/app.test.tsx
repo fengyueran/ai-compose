@@ -64,19 +64,19 @@ describe('Prompt Workbench', () => {
   test('toggles fragment prompt status and updates button style and preview', async () => {
     render(<App />)
 
-    // 默认是启用的，因此按钮应该显示 “从最终 Prompt 移除”
+    // The fragment is enabled by default, so the button should show "Remove from final prompt".
     const actionBtn = screen.getByRole('button', { name: '从最终 Prompt 移除' })
     expect(actionBtn).toBeInTheDocument()
     expect(actionBtn.className).toContain('fragment-action-btn--active')
 
-    // 点击该按钮移除它
+    // Click the button to remove it.
     await userEvent.click(actionBtn)
 
-    // 按钮文案应该变成 “加入最终 Prompt”，且不应该包含 active 类名
+    // The label should change to "Add to final prompt" and the active class should be removed.
     expect(screen.getByRole('button', { name: '加入最终 Prompt' })).toBeInTheDocument()
     expect(actionBtn.className).not.toContain('fragment-action-btn--active')
 
-    // 再次点击加入
+    // Click again to add it back.
     await userEvent.click(actionBtn)
     expect(screen.getByRole('button', { name: '从最终 Prompt 移除' })).toBeInTheDocument()
     expect(actionBtn.className).toContain('fragment-action-btn--active')
@@ -85,22 +85,22 @@ describe('Prompt Workbench', () => {
   test('toggles active configuration domain to MCP and displays server list and json preview', async () => {
     render(<App />)
 
-    // 默认是 Prompt 域激活，MCP 配置域应该可被点击
+    // Prompt is active by default, and the MCP tab should be clickable.
     const mcpDomainBtn = screen.getByRole('button', { name: 'MCP' })
     expect(mcpDomainBtn).toBeInTheDocument()
 
-    // 切换到 MCP 配置域
+    // Switch to the MCP configuration domain.
     await userEvent.click(mcpDomainBtn)
 
-    // 应切换为 active，且中间区域应当显示 MCP 相关的标题
+    // The MCP tab should become active and show MCP-related content in the center pane.
     expect(screen.getByText('官方预设 MCP 服务')).toBeInTheDocument()
 
-    // 预设列表中应展示 context7, playwright, memory 等
+    // The preset list should show servers such as context7, playwright, and memory.
     expect(screen.getAllByText('context7').length).toBeGreaterThan(0)
     expect(screen.getAllByText('playwright').length).toBeGreaterThan(0)
     expect(screen.getAllByText('memory').length).toBeGreaterThan(0)
 
-    // 默认右侧预览区应该展示 MCP TOML 格式（因为默认编辑器是 codex）
+    // The preview should default to TOML because Codex is the default editor.
     expect(screen.getByText(/\[mcp_servers\]/)).toBeInTheDocument()
     expect(screen.getByText(/\[mcp_servers\.context7\]/)).toBeInTheDocument()
     expect(screen.getByText(/\[mcp_servers\.playwright\]/)).toBeInTheDocument()
@@ -112,7 +112,7 @@ describe('Prompt Workbench', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'MCP' }))
 
-    // 从最终配置预览面板内找到 Cursor 切换按钮
+    // Find the Cursor toggle inside the final configuration preview panel.
     const previewPanel = screen.getByText('最终 MCP 配置预览').closest('section')!
     await userEvent.click(within(previewPanel).getByRole('button', { name: /Cursor/ }))
 
@@ -123,23 +123,23 @@ describe('Prompt Workbench', () => {
   test('adds a custom MCP server and saves it with correct style variables', async () => {
     render(<App />)
 
-    // 切换到 MCP 配置域
+    // Switch to the MCP configuration domain.
     await userEvent.click(screen.getByRole('button', { name: 'MCP' }))
 
-    // 点击 “+ 添加自定义” 按钮
+    // Click the "+ Add custom" button.
     const addBtn = screen.getByRole('button', { name: '+ 添加自定义' })
     await userEvent.click(addBtn)
 
-    // 此时表单应该呈现 “添加自定义 MCP” 的标题
+    // The form should now show the "Add custom MCP" title.
     expect(screen.getByText('添加自定义 MCP')).toBeInTheDocument()
 
-    // 检查 “+ 添加环境变量” 按钮的 style 是否使用了正确的变量，避免 `--accent-color`
+    // Verify the "+ Add environment variable" button uses the expected style variables instead of `--accent-color`.
     const addEnvBtn = screen.getByRole('button', { name: '+ 添加环境变量' })
     expect(addEnvBtn).toBeInTheDocument()
     expect(addEnvBtn.style.color).toBe('var(--accent)')
     expect(addEnvBtn.style.border).toContain('var(--accent)')
 
-    // 检查 “创建服务” 按钮的 style 是否使用了正确的变量
+    // Verify the "Create service" button uses the expected style variables.
     const createBtn = screen.getByRole('button', { name: '创建服务' })
     expect(createBtn).toBeInTheDocument()
     expect(createBtn.style.background).toContain('var(--accent)')
@@ -148,35 +148,35 @@ describe('Prompt Workbench', () => {
   test('adds a custom HTTP/SSE direct MCP server and updates configuration preview', async () => {
     render(<App />)
 
-    // 切换到 MCP 配置域
+    // Switch to the MCP configuration domain.
     await userEvent.click(screen.getByRole('button', { name: 'MCP' }))
 
-    // 点击 “+ 添加自定义” 按钮
+    // Click the "+ Add custom" button.
     const addBtn = screen.getByRole('button', { name: '+ 添加自定义' })
     await userEvent.click(addBtn)
 
-    // 输入服务名称
+    // Enter the service name.
     const nameInput = screen.getByPlaceholderText('例如: weather')
     await userEvent.type(nameInput, 'figma_local')
 
-    // 切换传输协议类型为 “直连服务 (HTTP/SSE)”
+    // Switch the transport type to "Direct service (HTTP/SSE)".
     const httpTabBtn = screen.getByRole('button', { name: '直连服务 (HTTP/SSE)' })
     await userEvent.click(httpTabBtn)
 
-    // 输入 URL
+    // Enter the URL.
     const urlInput = screen.getByPlaceholderText('例如: http://127.0.0.1:3845/mcp')
     await userEvent.type(urlInput, 'http://127.0.0.1:3845/mcp')
 
-    // 点击创建服务
+    // Create the service.
     const createBtn = screen.getByRole('button', { name: '创建服务' })
     await userEvent.click(createBtn)
 
     expect(useAiComposeStore.getState().mcpServers.some((server) => server.name === 'figma_local')).toBe(true)
 
-    // 断言 figma_local 已在左侧列表中展示
+    // Confirm figma_local appears in the left-side list.
     expect((await screen.findAllByText('figma_local')).length).toBeGreaterThan(0)
 
-    // 默认展示的 TOML 预览中，应包含 type 和 url 的定义
+    // The default TOML preview should include both type and url definitions.
     expect(await screen.findByText(/\[mcp_servers\.figma_local\]/)).toBeInTheDocument()
     expect(screen.getByText(/type = "streamable_http"/)).toBeInTheDocument()
     expect(screen.getByText(/url = "http:\/\/127.0.0.1:3845\/mcp"/)).toBeInTheDocument()
@@ -286,11 +286,11 @@ describe('Prompt Workbench', () => {
     expect(screen.getAllByText('官方预设').length).toBeGreaterThan(0)
     expect(screen.getByText('本地源')).toBeInTheDocument()
 
-    // Currently "官方预设" is selected, so brainstorming is shown, but local-scan-skill is not
+    // "Official preset" is selected, so brainstorming is shown while local-scan-skill is hidden.
     expect(screen.getByText('brainstorming')).toBeInTheDocument()
     expect(screen.queryByText('Local Scan Skill')).not.toBeInTheDocument()
 
-    // Click "本地源"
+    // Click "Local source".
     await userEvent.click(screen.getByText('本地源'))
     expect(useAiComposeStore.getState().selectedSkillSourceId).toBe('local:dir')
   })
@@ -833,7 +833,7 @@ describe('Prompt Workbench', () => {
 
     render(<App />)
 
-    // Click "+ 添加源"
+    // Click "+ Add source".
     await userEvent.click(screen.getByRole('button', { name: '+ 添加源' }))
     const dialog = screen.getAllByRole('dialog').find(el => el.textContent?.includes('添加技能源'))!
     
@@ -946,26 +946,26 @@ describe('Prompt Workbench', () => {
 
     render(<App />)
 
-    // Click "+ 添加源"
+    // Click "+ Add source".
     await userEvent.click(screen.getByRole('button', { name: '+ 添加源' }))
     const dialog = screen.getAllByRole('dialog').find(el => el.textContent?.includes('添加技能源'))!
 
-    // Click "本地物理目录" tab button
+    // Click the "Local directory" tab button.
     await userEvent.click(within(dialog).getByRole('button', { name: '本地物理目录' }))
 
     // Now the dialog should render the folder selection button
     const selectFolderBtn = within(dialog).getByRole('button', { name: '选择文件夹' })
     expect(selectFolderBtn).toBeInTheDocument()
 
-    // Mock click "选择文件夹"
+    // Click the mocked "Choose folder" button.
     await userEvent.click(selectFolderBtn)
     expect(selectDirectory).toHaveBeenCalled()
 
-    // The input should now contain the selected directory path from our mock
+    // The input should now contain the selected directory path from the mock.
     const inputElement = within(dialog).getByPlaceholderText('例如：/Users/username/my-skills')
     expect(inputElement).toHaveValue('/Users/test/.cursor/skills')
 
-    // Input name
+    // Enter the source name.
     await userEvent.type(within(dialog).getByPlaceholderText('例如：开发规范、Vercel 技能集'), '测试本地源')
     
     // Click confirm

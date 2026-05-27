@@ -11,7 +11,7 @@ import {
 } from '../mcp-servers'
 import { isPresetSkillMatch } from '../../lib/skills-utils'
 
-// 从 localStorage 加载自定义技能源
+// Load custom skill sources from localStorage.
 const loadCustomSkillSourcesFromStorage = (): SkillSource[] => {
   try {
     const data = typeof window !== 'undefined' ? localStorage.getItem('ai-compose:custom-skill-sources') : null
@@ -22,7 +22,7 @@ const loadCustomSkillSourcesFromStorage = (): SkillSource[] => {
   }
 }
 
-// 保存自定义技能源到 localStorage
+// Save custom skill sources to localStorage.
 const saveCustomSkillSourcesToStorage = (sources: SkillSource[]) => {
   try {
     if (typeof window !== 'undefined') {
@@ -35,12 +35,12 @@ const saveCustomSkillSourcesToStorage = (sources: SkillSource[]) => {
 }
 
 
-// 从 localStorage 加载自定义服务
+// Load custom services from localStorage.
 const loadCustomServersFromStorage = (): McpServer[] => {
   try {
     const data = typeof window !== 'undefined' ? localStorage.getItem('ai-compose:custom-mcp-servers') : null
     const list: McpServer[] = data ? JSON.parse(data) : []
-    // 查重官方预设服务，并确保自定义服务 ID 以 custom- 开头
+    // Deduplicate against preset services and ensure custom IDs start with `custom-`.
     return list
       .filter(
         (item) =>
@@ -62,7 +62,7 @@ const loadCustomServersFromStorage = (): McpServer[] => {
   }
 }
 
-// 保存自定义服务到 localStorage
+// Save custom services to localStorage.
 const saveCustomServersToStorage = (servers: McpServer[]) => {
   try {
     if (typeof window !== 'undefined') {
@@ -96,11 +96,11 @@ type AiComposeState = {
   selectedFragmentId: string
   enabledFragmentIds: string[]
   
-  // MCP 状态
+  // MCP state
   mcpServers: McpServer[]
   selectedMcpServerId: string
 
-  // Skills 状态
+  // Skills state
   skills: SkillInfo[]
   selectedSkillId: string
   skillSources: SkillSource[]
@@ -266,7 +266,7 @@ export const useAiComposeStore = create<AiComposeState>(
         cursor: { ...editorStates.cursor },
       }
 
-      // 根据受管边界内是否有启用的有效配置，重新判定大开关的开启状态
+      // Recompute the top-level toggle based on valid enabled config inside the managed block.
       const checkEditorEnabled = (targetState: typeof editorStates.codex) => {
         const managedMcp = targetState.managedMcpServers
         if (!managedMcp) return false
@@ -579,7 +579,7 @@ export const useAiComposeStore = create<AiComposeState>(
 
     deleteSkillSource: (id) => {
       const { skillSources, selectedSkillSourceId } = get()
-      // 不允许删除内置的 all / preset 源
+      // Do not allow built-in `all` or `preset` sources to be deleted.
       if (id === 'all' || id === 'preset') return
       const nextSources = skillSources.filter((s) => s.id !== id)
       let nextSelectedId = selectedSkillSourceId

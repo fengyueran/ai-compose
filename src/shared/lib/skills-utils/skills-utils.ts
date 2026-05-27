@@ -13,12 +13,12 @@ export function getSkillSourceBadgeMeta(
   skill: SkillInfo,
   skillSources: SkillSource[],
 ): { text: string; className: string } {
-  // 官方预设
+  // Built-in preset.
   if (skill.isBuiltin) {
     return { text: "官方", className: "skill-source-badge--builtin" };
   }
 
-  // 匹配用户自定义 repo 源
+  // Match a user-defined repository source.
   const matchedRepo = skillSources.find(
     (src) =>
       src.type === "repo" &&
@@ -29,7 +29,7 @@ export function getSkillSourceBadgeMeta(
     return { text: "第三方", className: "skill-source-badge--repository" };
   }
 
-  // 匹配用户自定义本地源
+  // Match a user-defined local source.
   const matchedLocal = skillSources.find(
     (src) =>
       src.type === "local" &&
