@@ -2,7 +2,7 @@ export type McpServer = {
   id: string
   name: string
   enabled: boolean
-  source: 'preset' | 'user' | 'external'
+  source: 'preset' | 'user'
   description?: string
   transportType?: 'stdio' | 'http'
   command?: string

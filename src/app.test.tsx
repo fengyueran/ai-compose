@@ -4,7 +4,7 @@ import { beforeEach, expect, test, vi } from 'vitest'
 
 import AiComposeApp from './ai-compose-app'
 import { addSkillsRepository, applySkillsToEditorTarget, linkSkillToEditor, loadEditorInstalledSkills, loadEditorMcpStates, loadEditorSkillsStates, loadEditorTargetStates, loadSingleSkill, openExternalUrl, openLocalPath, revealLocalPath, removeSkill, unlinkSkillFromEditor, updateSkill, loadPhysicalSkills, loadSkillsFromDir, selectDirectory } from './editor-target-command'
-import { usePromptWorkbenchStore } from './prompt-workbench-store'
+import { useAiComposeStore } from './ai-compose-store'
 
 vi.mock('./editor-target-command', async () => {
   const actual = await vi.importActual<typeof import('./editor-target-command')>('./editor-target-command')
@@ -32,6 +32,7 @@ vi.mock('./editor-target-command', async () => {
 
 describe('Prompt Workbench', () => {
   beforeEach(() => {
+    useAiComposeStore.setState(useAiComposeStore.getInitialState())
     vi.clearAllMocks()
     vi.mocked(loadPhysicalSkills).mockResolvedValue([])
     vi.mocked(loadSkillsFromDir).mockResolvedValue([])
@@ -55,6 +56,19 @@ describe('Prompt Workbench', () => {
     expect(screen.getAllByText('代码审查').length).toBeGreaterThan(0)
     expect(screen.getAllByText('知识沉淀与协作').length).toBeGreaterThan(0)
     expect(screen.getByText('最终 Prompt 预览')).toBeInTheDocument()
+  })
+
+  test('keeps domain selection in the side navigation and moves editor controls into the active domain', () => {
+    render(<AiComposeApp />)
+
+    const navigation = screen.getByLabelText('工作台导航')
+    expect(within(navigation).queryByText('编辑器')).not.toBeInTheDocument()
+    expect(within(navigation).getByText('配置域')).toBeInTheDocument()
+
+    const editorPanel = screen.getByRole('heading', { name: '当前配置域编辑器' }).closest('section')!
+    expect(within(editorPanel).getByRole('button', { name: /Antigravity/ })).toBeInTheDocument()
+    expect(within(editorPanel).getByRole('button', { name: /Codex/ })).toBeInTheDocument()
+    expect(within(editorPanel).getByRole('button', { name: /Cursor/ })).toBeInTheDocument()
   })
 
   test('toggles fragment prompt status and updates button style and preview', async () => {
@@ -103,12 +117,24 @@ describe('Prompt Workbench', () => {
     expect(screen.getByText(/\[mcp_servers\.memory\]/)).toBeInTheDocument()
   })
 
-  test('hides editor enable switches in skills domain', async () => {
+  test('switches MCP preview format when selecting another editor inside the domain', async () => {
+    render(<AiComposeApp />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'MCP' }))
+
+    const editorPanel = screen.getByRole('heading', { name: '当前配置域编辑器' }).closest('section')!
+    await userEvent.click(within(editorPanel).getByRole('button', { name: /Cursor/ }))
+
+    expect(screen.getByText(/最终 JSON 配置/)).toBeInTheDocument()
+    expect(screen.getByText(/"mcpServers"/)).toBeInTheDocument()
+  })
+
+  test('hides editor enable switches in skills domain editor panel', async () => {
     const { container } = render(<AiComposeApp />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Skills' }))
 
-    const editorPanel = screen.getByRole('heading', { name: '编辑器' }).closest('section')!
+    const editorPanel = screen.getByRole('heading', { name: '当前配置域编辑器' }).closest('section')!
     expect(within(editorPanel).queryByText('已启用')).not.toBeInTheDocument()
     expect(within(editorPanel).queryByText('已关闭')).not.toBeInTheDocument()
     expect(container.querySelectorAll('.editor-toggle')).toHaveLength(0)
@@ -165,17 +191,19 @@ describe('Prompt Workbench', () => {
     const createBtn = screen.getByRole('button', { name: '创建服务' })
     await userEvent.click(createBtn)
 
+    expect(useAiComposeStore.getState().mcpServers.some((server) => server.name === 'figma_local')).toBe(true)
+
     // 断言 figma_local 已在左侧列表中展示
-    expect(screen.getAllByText('figma_local').length).toBeGreaterThan(0)
+    expect((await screen.findAllByText('figma_local')).length).toBeGreaterThan(0)
 
     // 默认展示的 TOML 预览中，应包含 type 和 url 的定义
-    expect(screen.getByText(/\[mcp_servers\.figma_local\]/)).toBeInTheDocument()
+    expect(await screen.findByText(/\[mcp_servers\.figma_local\]/)).toBeInTheDocument()
     expect(screen.getByText(/type = "streamable_http"/)).toBeInTheDocument()
     expect(screen.getByText(/url = "http:\/\/127.0.0.1:3845\/mcp"/)).toBeInTheDocument()
   })
 
   test('shows current editor installed skills and keeps fallback skills read-only', async () => {
-    usePromptWorkbenchStore.setState({
+    useAiComposeStore.setState({
       activeDomain: 'Skills',
       activeEditorId: 'cursor',
       editorStates: {
@@ -231,7 +259,7 @@ describe('Prompt Workbench', () => {
   })
 
   test('renders skills sources list and filters skills by selected source', async () => {
-    usePromptWorkbenchStore.setState({
+    useAiComposeStore.setState({
       activeDomain: 'Skills',
       activeEditorId: 'cursor',
       editorStates: {
@@ -284,7 +312,7 @@ describe('Prompt Workbench', () => {
 
     // Click "本地源"
     await userEvent.click(screen.getByText('本地源'))
-    expect(usePromptWorkbenchStore.getState().selectedSkillSourceId).toBe('local:dir')
+    expect(useAiComposeStore.getState().selectedSkillSourceId).toBe('local:dir')
   })
 
   test('renders source repository as a clickable GitHub link in skill details', async () => {
@@ -315,7 +343,7 @@ describe('Prompt Workbench', () => {
         repoSource: 'fengyueran/skills',
       },
     ])
-    usePromptWorkbenchStore.setState({
+    useAiComposeStore.setState({
       activeDomain: 'Skills',
       activeEditorId: 'cursor',
       editorStates: {
@@ -364,7 +392,7 @@ describe('Prompt Workbench', () => {
   })
 
   test('renders third-party badge for skills installed from custom repositories', () => {
-    usePromptWorkbenchStore.setState({
+    useAiComposeStore.setState({
       activeDomain: 'Skills',
       activeEditorId: 'cursor',
       editorStates: {
@@ -405,7 +433,7 @@ describe('Prompt Workbench', () => {
   })
 
   test('shows synced repository skills even before they are linked to the current editor', () => {
-    usePromptWorkbenchStore.setState({
+    useAiComposeStore.setState({
       activeDomain: 'Skills',
       activeEditorId: 'antigravity',
       editorStates: {
@@ -473,7 +501,7 @@ describe('Prompt Workbench', () => {
         repoSource: 'fengyueran/skills',
       },
     ])
-    usePromptWorkbenchStore.setState({
+    useAiComposeStore.setState({
       activeDomain: 'Skills',
       activeEditorId: 'cursor',
       editorStates: {
@@ -532,7 +560,7 @@ describe('Prompt Workbench', () => {
     vi.mocked(loadEditorSkillsStates).mockReturnValue(pendingPromise as never)
     vi.mocked(loadEditorInstalledSkills).mockReturnValue(pendingPromise as never)
 
-    usePromptWorkbenchStore.setState({
+    useAiComposeStore.setState({
       activeDomain: 'Skills',
       isHydratingEditorStates: true,
       skills: [],
@@ -546,7 +574,7 @@ describe('Prompt Workbench', () => {
   })
 
   test('setSkillsList preserves the builtin catalog and marks matching official skills as installed', () => {
-    const store = usePromptWorkbenchStore.getState()
+    const store = useAiComposeStore.getState()
 
     store.setSkillsList([
       {
@@ -567,7 +595,7 @@ describe('Prompt Workbench', () => {
         repoSource: 'fengyueran/skills',
       },
     ])
-    let currentSkills = usePromptWorkbenchStore.getState().skills
+    let currentSkills = useAiComposeStore.getState().skills
     const findSkillsInstalled = currentSkills.find(s => s.id === 'find-skills')
     expect(findSkillsInstalled).toBeDefined()
     expect(findSkillsInstalled?.installed).toBe(true)
@@ -584,7 +612,7 @@ describe('Prompt Workbench', () => {
     expect(customRepoSkill?.repoSource).toBe('fengyueran/skills')
 
     store.setSkillsList([])
-    currentSkills = usePromptWorkbenchStore.getState().skills
+    currentSkills = useAiComposeStore.getState().skills
     expect(currentSkills.some((skill) => skill.id === 'ui-ux-pro-max')).toBe(true)
     expect(currentSkills.every((skill) => skill.isBuiltin)).toBe(true)
   })
@@ -632,7 +660,7 @@ describe('Prompt Workbench', () => {
       },
     ])
 
-    usePromptWorkbenchStore.setState({
+    useAiComposeStore.setState({
       activeDomain: 'Skills',
       activeEditorId: 'cursor',
       editorStates: {
@@ -687,9 +715,9 @@ describe('Prompt Workbench', () => {
       editorId: 'cursor',
       skillId: 'linked-skill',
     })
-    expect(usePromptWorkbenchStore.getState().skillsEditorStates.cursor.enabledSkills).toEqual(['keep-skill'])
-    expect(usePromptWorkbenchStore.getState().skills.find((skill) => skill.id === 'keep-skill')).toBeDefined()
-    expect(usePromptWorkbenchStore.getState().skills.find((skill) => skill.id === 'linked-skill')).toBeDefined() // unlinked skill is NOT removed from available skills
+    expect(useAiComposeStore.getState().skillsEditorStates.cursor.enabledSkills).toEqual(['keep-skill'])
+    expect(useAiComposeStore.getState().skills.find((skill) => skill.id === 'keep-skill')).toBeDefined()
+    expect(useAiComposeStore.getState().skills.find((skill) => skill.id === 'linked-skill')).toBeDefined() // unlinked skill is NOT removed from available skills
   })
 
   test('shows only skills linked to the current editor even when other third-party skills exist globally', async () => {
@@ -719,7 +747,7 @@ describe('Prompt Workbench', () => {
         sourceKind: 'cli',
       },
     ])
-    usePromptWorkbenchStore.setState({
+    useAiComposeStore.setState({
       activeDomain: 'Skills',
       activeEditorId: 'cursor',
       editorStates: {
@@ -767,7 +795,7 @@ describe('Prompt Workbench', () => {
     expect(applySkillsToEditorTarget).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: /Linked Skill/ })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Global Third Party Skill/ })).not.toBeInTheDocument()
-    expect(usePromptWorkbenchStore.getState().skillsEditorStates.cursor.enabledSkills).toEqual(['linked-skill'])
+    expect(useAiComposeStore.getState().skillsEditorStates.cursor.enabledSkills).toEqual(['linked-skill'])
 
     delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
   })
@@ -805,7 +833,7 @@ describe('Prompt Workbench', () => {
       },
     ])
 
-    usePromptWorkbenchStore.setState({
+    useAiComposeStore.setState({
       activeDomain: 'Skills',
       activeEditorId: 'cursor',
       editorStates: {
@@ -835,7 +863,7 @@ describe('Prompt Workbench', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: '确定' }))
 
     expect(addSkillsRepository).toHaveBeenCalledWith('vercel-labs/skills')
-    expect(usePromptWorkbenchStore.getState().skillsEditorStates.cursor.enabledSkills).toEqual([])
+    expect(useAiComposeStore.getState().skillsEditorStates.cursor.enabledSkills).toEqual([])
   })
 
   test('updates only the selected skill metadata without reloading the full skills list', async () => {
@@ -869,7 +897,7 @@ describe('Prompt Workbench', () => {
       sourceKind: 'cli',
     })
 
-    usePromptWorkbenchStore.setState({
+    useAiComposeStore.setState({
       activeDomain: 'Skills',
       activeEditorId: 'cursor',
       editorStates: {
@@ -914,11 +942,11 @@ describe('Prompt Workbench', () => {
       path: '/Users/test/.agents/skills/linked-skill',
       sourceKind: 'cli',
     })
-    expect(usePromptWorkbenchStore.getState().skills.find((skill) => skill.id === 'linked-skill')?.description).toBe('Updated description')
+    expect(useAiComposeStore.getState().skills.find((skill) => skill.id === 'linked-skill')?.description).toBe('Updated description')
   })
 
   test('adds a custom local source using native directory dialog', async () => {
-    usePromptWorkbenchStore.setState({
+    useAiComposeStore.setState({
       activeDomain: 'Skills',
       activeEditorId: 'cursor',
       editorStates: {
@@ -964,7 +992,7 @@ describe('Prompt Workbench', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: '确定' }))
 
     // Verify it adds a new skill source to store
-    const skillSources = usePromptWorkbenchStore.getState().skillSources
+    const skillSources = useAiComposeStore.getState().skillSources
     const addedSource = skillSources.find(s => s.name === '测试本地源')
     expect(addedSource).toBeDefined()
     expect(addedSource?.type).toBe('local')

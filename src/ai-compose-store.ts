@@ -11,14 +11,6 @@ import {
 } from './mcp-servers'
 import { isPresetSkillMatch } from './skills-utils'
 
-interface LocalMcpConfig {
-  command?: string
-  args?: string[]
-  env?: Record<string, string>
-  type?: string
-  url?: string
-}
-
 // 从 localStorage 加载自定义技能源
 const loadCustomSkillSourcesFromStorage = (): SkillSource[] => {
   try {
@@ -49,13 +41,18 @@ const loadCustomServersFromStorage = (): McpServer[] => {
     const data = typeof window !== 'undefined' ? localStorage.getItem('ai-compose:custom-mcp-servers') : null
     const list: McpServer[] = data ? JSON.parse(data) : []
     // 过滤掉非 custom- 开头的历史同步脏数据，并查重官方预设服务
-    return list.filter(
-      (item) =>
+    return list
+      .filter(
+        (item) =>
         item.id.startsWith('custom-') &&
         !presetMcpServers.some(
           (p) => p.name.toLowerCase() === item.name.toLowerCase()
         )
-    )
+      )
+      .map((item) => ({
+        ...item,
+        source: 'user',
+      }))
   } catch (e) {
     console.error('Failed to load custom MCP servers from storage', e)
     return []
@@ -80,7 +77,7 @@ type EditorState = {
   enabled: boolean
 }
 
-type PromptWorkbenchState = {
+type AiComposeState = {
   activeDomain: 'Prompt' | 'MCP' | 'Skills'
   activeEditorId: EditorId
   applyStatus: ApplyStatus
@@ -88,6 +85,7 @@ type PromptWorkbenchState = {
   editorStates: Record<EditorId, EditorState> | Record<EditorId, EditorTargetState> | Record<EditorId, EditorSkillsState>
   promptEditorStates: Record<EditorId, EditorState>
   mcpEditorStates: Record<EditorId, EditorTargetState>
+  mcpEnabledServerIdsByEditor: Record<EditorId, string[]>
   skillsEditorStates: Record<EditorId, EditorSkillsState>
   isHydratingEditorStates: boolean
   lastAppliedAt: string | null
@@ -122,7 +120,7 @@ type PromptWorkbenchState = {
   
   // MCP actions
   selectMcpServer: (serverId: string) => void
-  toggleMcpServer: (serverId: string) => void
+  toggleMcpServerForEditor: (editorId: EditorId, serverId: string) => void
   addMcpServer: (server: Omit<McpServer, 'id' | 'source'>) => void
   updateMcpServer: (id: string, serverUpdate: Partial<McpServer>) => void
   deleteMcpServer: (id: string) => void
@@ -130,6 +128,7 @@ type PromptWorkbenchState = {
   // Skills actions
   selectSkill: (skillId: string) => void
   toggleSkill: (skillId: string) => void
+  toggleSkillForEditor: (editorId: EditorId, skillId: string) => void
   setSkillsList: (skills: SkillInfo[]) => void
   replaceSkill: (skill: SkillInfo) => void
   addSkillSource: (source: Omit<SkillSource, 'id'>) => void
@@ -156,97 +155,54 @@ const initialMcpEditorStates = {
   cursor: { enabled: false, targetPath: '' },
 }
 
+const initialMcpEnabledServerIdsByEditor = {
+  antigravity: presetMcpServers.filter((server) => server.enabled).map((server) => server.id),
+  codex: presetMcpServers.filter((server) => server.enabled).map((server) => server.id),
+  cursor: presetMcpServers.filter((server) => server.enabled).map((server) => server.id),
+}
+
 const initialSkillsEditorStates = {
   antigravity: { enabled: false, targetPath: '', enabledSkills: [] },
   codex: { enabled: false, targetPath: '', enabledSkills: [] },
   cursor: { enabled: false, targetPath: '', enabledSkills: [] },
 }
 
-const syncMcpServersWithLocal = (
+const resolveMcpServerIdsFromManaged = (
+  managedMcp: Record<string, unknown> | undefined,
   mcpServers: McpServer[],
-  localMcp: Record<string, unknown> | undefined,
-  managedMcp: Record<string, unknown> | undefined
-): McpServer[] => {
-  const safeLocalMcp = localMcp || {}
+): string[] => {
+  if (!managedMcp) {
+    return []
+  }
 
-  // 1. 用本地配置更新已有的服务启用状态和配置内容
-  const nextServers: McpServer[] = []
-  mcpServers.forEach((server) => {
-    const localVal = safeLocalMcp[server.name]
-    // 必须要含有 command 字段或 url 字段才认为是真正有效启用的服务
-    if (localVal && typeof localVal === 'object' && ('command' in localVal || 'url' in localVal)) {
-      let source = server.source
-      if (source !== 'preset') {
-        source = server.id.startsWith('custom-') ? 'user' : 'external'
-      }
-
-      const transportType = 'url' in localVal ? 'http' : 'stdio'
-      const configVal = localVal as LocalMcpConfig
-
-      nextServers.push({
-        ...server,
-        enabled: true,
-        transportType,
-        command: configVal.command ?? server.command,
-        args: configVal.args ?? server.args,
-        env: configVal.env ?? server.env,
-        type: configVal.type ?? server.type,
-        url: configVal.url ?? server.url,
-        source,
-      })
-    } else {
-      // 外部服务只要本地配置文件中不存在，即直接丢弃（不显示在列表中）
-      if (server.source === 'external') {
-        return
-      }
-      // 预设服务或自定义服务（user）即使本地不存在（即从物理文件中移出了），依然在工作台列表中保留草稿
-      // 如果该服务在受管 MCP 中不存在（说明从未被应用配置过），则保留其在定义文件中的默认启用状态，否则设为 false
-      const isPresetUnmanaged = server.source === 'preset' && !(managedMcp && server.name in managedMcp)
-      nextServers.push({
-        ...server,
-        enabled: isPresetUnmanaged ? !!server.enabled : false,
-      })
-    }
-  })
-
-  // 2. 将本地存在但工作台列表中没有的自定义服务动态拉取进来
-  Object.entries(safeLocalMcp).forEach(([name, val]) => {
-    if (!val || typeof val !== 'object' || Array.isArray(val)) {
-      return
-    }
-    if (!('command' in val) && !('url' in val)) {
-      return
-    }
-
-    const exists = nextServers.some((s) => s.name === name)
-    if (!exists) {
-      const newId = name.toLowerCase().replace(/\s+/g, '-')
-      const source = 'external'
-      const transportType = 'url' in val ? 'http' : 'stdio'
-      const configVal = val as LocalMcpConfig
-
-      nextServers.push({
-        id: newId,
-        name,
-        transportType,
-        command: configVal.command,
-        args: configVal.args,
-        env: configVal.env,
-        type: configVal.type,
-        url: configVal.url,
-        enabled: true,
-        source,
-        description: source === 'external' 
-          ? '检测到本地配置文件中手动写入的外部服务 (只读)' 
-          : '从本地编辑器配置文件中加载的自定义服务',
-      })
-    }
-  })
-
-  return nextServers
+  return Object.entries(managedMcp)
+    .filter(([, value]) => value && typeof value === 'object' && ('command' in value || 'url' in value))
+    .map(([name]) => mcpServers.find((server) => server.name === name)?.id)
+    .filter((serverId): serverId is string => Boolean(serverId))
 }
 
-export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
+const buildEnabledServerIdsByEditor = (
+  nextMcpStates: Record<EditorId, EditorTargetState>,
+  updatedServers: McpServer[],
+): Record<EditorId, string[]> => {
+  const nextEnabledIds: Record<EditorId, string[]> = {
+    antigravity: resolveMcpServerIdsFromManaged(nextMcpStates.antigravity.managedMcpServers, updatedServers),
+    codex: resolveMcpServerIdsFromManaged(nextMcpStates.codex.managedMcpServers, updatedServers),
+    cursor: resolveMcpServerIdsFromManaged(nextMcpStates.cursor.managedMcpServers, updatedServers),
+  }
+
+  ;(Object.keys(nextEnabledIds) as EditorId[]).forEach((editorId) => {
+    if (nextEnabledIds[editorId].length === 0 && !nextMcpStates[editorId].managedMcpServers) {
+      nextEnabledIds[editorId] = presetMcpServers
+        .filter((server) => server.enabled)
+        .map((server) => server.id)
+    }
+  })
+
+  return nextEnabledIds
+}
+
+export const useAiComposeStore = create<AiComposeState>(
   (set, get) => ({
     activeDomain: 'Prompt',
     activeEditorId: 'codex',
@@ -255,6 +211,7 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
     editorStates: initialEditorStates,
     promptEditorStates: initialEditorStates,
     mcpEditorStates: initialMcpEditorStates,
+    mcpEnabledServerIdsByEditor: initialMcpEnabledServerIdsByEditor,
     skillsEditorStates: initialSkillsEditorStates,
     isHydratingEditorStates: true,
     lastAppliedAt: null,
@@ -273,15 +230,7 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
     selectedSkillSourceId: 'all',
     
     selectDomain: (domain) => {
-      const { promptEditorStates, mcpEditorStates, skillsEditorStates, activeEditorId, mcpServers } = get()
-      
-      let nextMcpServers = mcpServers
-      if (domain === 'MCP') {
-        const targetState = mcpEditorStates[activeEditorId]
-        if (targetState && targetState.targetPath !== '') {
-          nextMcpServers = syncMcpServersWithLocal(mcpServers, targetState.mcpServers, targetState.managedMcpServers)
-        }
-      }
+      const { promptEditorStates, mcpEditorStates, skillsEditorStates } = get()
 
       set({
         activeDomain: domain,
@@ -290,7 +239,6 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
           : domain === 'MCP' 
           ? mcpEditorStates 
           : skillsEditorStates,
-        mcpServers: nextMcpServers,
       })
     },
     
@@ -308,7 +256,7 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
     },
     
     hydrateMcpEditorStates: (editorStates) => {
-      const { activeEditorId, mcpServers } = get()
+      const { mcpServers, selectedMcpServerId } = get()
       const nextMcpStates = {
         antigravity: { ...editorStates.antigravity },
         codex: { ...editorStates.codex },
@@ -329,16 +277,16 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
         nextMcpStates[k].enabled = checkEditorEnabled(nextMcpStates[k])
       })
       
-      const targetState = nextMcpStates[activeEditorId]
-      let updatedServers = mcpServers
-      if (targetState && targetState.targetPath !== '') {
-        updatedServers = syncMcpServersWithLocal(mcpServers, targetState.mcpServers, targetState.managedMcpServers)
-      }
+      const nextEnabledIdsByEditor = buildEnabledServerIdsByEditor(nextMcpStates, mcpServers)
+      const nextSelectedMcpServerId = mcpServers.some((server) => server.id === selectedMcpServerId)
+        ? selectedMcpServerId
+        : mcpServers[0]?.id ?? ''
 
       set((state) => ({
         mcpEditorStates: nextMcpStates,
+        mcpEnabledServerIdsByEditor: nextEnabledIdsByEditor,
         editorStates: state.activeDomain === 'MCP' ? nextMcpStates : state.editorStates,
-        mcpServers: updatedServers,
+        selectedMcpServerId: nextSelectedMcpServerId,
       }))
     },
 
@@ -360,19 +308,8 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
     },
     
     selectEditor: (editorId) => {
-      const { activeDomain, mcpEditorStates, mcpServers } = get()
-      
-      let nextMcpServers = mcpServers
-      if (activeDomain === 'MCP') {
-        const targetState = mcpEditorStates[editorId]
-        if (targetState && targetState.targetPath !== '') {
-          nextMcpServers = syncMcpServersWithLocal(mcpServers, targetState.mcpServers, targetState.managedMcpServers)
-        }
-      }
-
       set({
         activeEditorId: editorId,
-        mcpServers: nextMcpServers,
       })
     },
     
@@ -443,13 +380,18 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
       set({ selectedMcpServerId: serverId })
     },
     
-    toggleMcpServer: (serverId) => {
+    toggleMcpServerForEditor: (editorId, serverId) => {
       set((state) => {
-        const nextServers = state.mcpServers.map((server) =>
-          server.id === serverId ? { ...server, enabled: !server.enabled } : server
-        )
-        saveCustomServersToStorage(nextServers)
-        return { mcpServers: nextServers }
+        const enabledIds = state.mcpEnabledServerIdsByEditor[editorId] ?? []
+        const isEnabled = enabledIds.includes(serverId)
+        return {
+          mcpEnabledServerIdsByEditor: {
+            ...state.mcpEnabledServerIdsByEditor,
+            [editorId]: isEnabled
+              ? enabledIds.filter((id) => id !== serverId)
+              : [...enabledIds, serverId],
+          },
+        }
       })
     },
     
@@ -490,6 +432,11 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
       saveCustomServersToStorage(nextServers)
       set({
         mcpServers: nextServers,
+        mcpEnabledServerIdsByEditor: {
+          antigravity: get().mcpEnabledServerIdsByEditor.antigravity.filter((serverId) => serverId !== id),
+          codex: get().mcpEnabledServerIdsByEditor.codex.filter((serverId) => serverId !== id),
+          cursor: get().mcpEnabledServerIdsByEditor.cursor.filter((serverId) => serverId !== id),
+        },
         selectedMcpServerId: nextSelectedId,
       })
     },
@@ -512,6 +459,30 @@ export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
       const nextSkillsStates = {
         ...skillsEditorStates,
         [activeEditorId]: {
+          ...currentEditorState,
+          enabledSkills: nextEnabledSkills,
+        },
+      }
+
+      set({
+        skillsEditorStates: nextSkillsStates,
+        editorStates: nextSkillsStates,
+      })
+    },
+
+    toggleSkillForEditor: (editorId, skillId) => {
+      const { skillsEditorStates } = get()
+      const currentEditorState = skillsEditorStates[editorId]
+      if (!currentEditorState) return
+
+      const isEnabled = currentEditorState.enabledSkills.includes(skillId)
+      const nextEnabledSkills = isEnabled
+        ? currentEditorState.enabledSkills.filter((id) => id !== skillId)
+        : [...currentEditorState.enabledSkills, skillId]
+
+      const nextSkillsStates = {
+        ...skillsEditorStates,
+        [editorId]: {
           ...currentEditorState,
           enabledSkills: nextEnabledSkills,
         },

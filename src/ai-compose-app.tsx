@@ -1,4 +1,4 @@
-import { Message, Select, Button, Modal, type SelectOption } from "@xinghunm/compass-ui";
+import { Message, Select, Button, Modal, Tooltip, type SelectOption } from "@xinghunm/compass-ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -26,7 +26,7 @@ import {
 } from "./editor-target-command";
 import { composeManagedPromptBlock } from "./compose-prompt";
 import "./ai-compose-app.css";
-import { usePromptWorkbenchStore } from "./prompt-workbench-store";
+import { useAiComposeStore } from "./ai-compose-store";
 import { isPresetSkillMatch } from "./skills-utils";
 
 const configurationDomains = [
@@ -129,6 +129,105 @@ const editorMeta: Record<
   },
 };
 
+const editorIds = Object.keys(editorMeta) as EditorId[];
+
+function renderEditorToggleIcon(editorId: EditorId) {
+  if (editorId === "antigravity") {
+    return (
+      <svg
+        aria-hidden="true"
+        className="editor-icon-toggle__icon editor-icon-toggle__icon--antigravity"
+        viewBox="0 0 24 24"
+      >
+        <defs>
+          <linearGradient id="editor-icon-antigravity-arc" x1="6.4" y1="5.6" x2="17.6" y2="5.6" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stopColor="#4A8FFF" />
+            <stop offset="0.28" stopColor="#4FB6FF" />
+            <stop offset="0.54" stopColor="#81D66A" />
+            <stop offset="0.76" stopColor="#FFB243" />
+            <stop offset="1" stopColor="#FF5A4F" />
+          </linearGradient>
+        </defs>
+        <rect x="2.2" y="2.2" width="19.6" height="19.6" rx="5.2" fill="#ffffff" />
+        <path
+          fill="url(#editor-icon-antigravity-arc)"
+          d="M6.1 18.1c-.46 0-.86-.17-1.18-.5a1.66 1.66 0 0 1-.48-1.18c0-.44.16-.82.48-1.14.88-.94 1.62-1.92 2.22-2.94.62-1.04 1.18-2.17 1.68-3.38.52-1.24 1.03-2.2 1.54-2.88.55-.72 1.28-1.08 2.18-1.08.9 0 1.62.36 2.16 1.08.5.68 1.02 1.64 1.54 2.88.5 1.2 1.06 2.33 1.68 3.38.6 1.02 1.34 2 2.22 2.94.32.32.48.7.48 1.14 0 .46-.16.85-.48 1.18-.32.33-.72.5-1.18.5-.42 0-.8-.16-1.12-.48-.96-.98-1.8-2.07-2.52-3.26a24.53 24.53 0 0 1-1.9-3.88 17.28 17.28 0 0 0-1.08-2.44c-.34-.56-.74-.84-1.2-.84-.46 0-.86.28-1.2.84-.3.5-.66 1.3-1.08 2.44-.58 1.48-1.2 2.78-1.9 3.88-.72 1.2-1.56 2.28-2.52 3.26-.32.32-.7.48-1.12.48Z"
+        />
+      </svg>
+    );
+  }
+
+  if (editorId === "codex") {
+    return (
+      <svg
+        aria-hidden="true"
+        className="editor-icon-toggle__icon editor-icon-toggle__icon--codex"
+        viewBox="0 0 24 24"
+      >
+        <defs>
+          <radialGradient id="editor-icon-codex-cloud" cx="35%" cy="28%" r="88%">
+            <stop offset="0" stopColor="#C7BCFF" />
+            <stop offset="0.42" stopColor="#8E95FF" />
+            <stop offset="1" stopColor="#4432FF" />
+          </radialGradient>
+        </defs>
+        <rect x="2.2" y="2.2" width="19.6" height="19.6" rx="5.2" fill="#ffffff" />
+        <path
+          fill="url(#editor-icon-codex-cloud)"
+          d="M8.15 18.55c-1.2 0-2.18-.4-2.95-1.2-.75-.78-1.12-1.73-1.12-2.87 0-.9.24-1.7.72-2.4.5-.7 1.15-1.2 1.96-1.48.16-1.14.68-2.1 1.58-2.9.9-.82 1.97-1.23 3.22-1.23 1.02 0 1.94.28 2.76.84a5.01 5.01 0 0 1 1.84 2.24c1.1.16 2 .64 2.7 1.46.72.8 1.08 1.77 1.08 2.92 0 1.2-.42 2.22-1.26 3.06-.82.84-1.84 1.26-3.05 1.26H8.15Z"
+        />
+        <path
+          d="M9.25 10.15 11.1 13l-1.85 2.85"
+          fill="none"
+          stroke="#F7F8FF"
+          strokeWidth="1.55"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M13.2 15.85h2.85"
+          fill="none"
+          stroke="#F7F8FF"
+          strokeWidth="1.55"
+          strokeLinecap="round"
+        />
+      </svg>
+    );
+  }
+
+  return (
+      <svg
+        aria-hidden="true"
+        className="editor-icon-toggle__icon editor-icon-toggle__icon--cursor"
+        viewBox="0 0 24 24"
+      >
+        <defs>
+          <linearGradient id="editor-icon-cursor-top" x1="7" y1="7.5" x2="17" y2="7.5" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stopColor="#6E6A62" />
+            <stop offset="1" stopColor="#4D4942" />
+          </linearGradient>
+          <linearGradient id="editor-icon-cursor-left" x1="7" y1="9.5" x2="12" y2="17" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stopColor="#6A6660" />
+            <stop offset="1" stopColor="#59554F" />
+          </linearGradient>
+          <linearGradient id="editor-icon-cursor-right" x1="12" y1="9.5" x2="17" y2="17" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stopColor="#E8E7E5" />
+            <stop offset="1" stopColor="#CFCFCD" />
+          </linearGradient>
+          <linearGradient id="editor-icon-cursor-base" x1="7" y1="16" x2="17" y2="16" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stopColor="#504C45" />
+            <stop offset="1" stopColor="#6B6760" />
+          </linearGradient>
+        </defs>
+        <rect x="2.2" y="2.2" width="19.6" height="19.6" rx="5.2" fill="#15130E" />
+        <path fill="url(#editor-icon-cursor-top)" d="M12 5.4 17.4 8.55 12 11.35 6.6 8.55 12 5.4Z" />
+        <path fill="url(#editor-icon-cursor-left)" d="M6.6 8.55v6.2L12 18V11.35L6.6 8.55Z" />
+        <path fill="url(#editor-icon-cursor-right)" d="M17.4 8.55v6.2L12 18V11.35l5.4-2.8Z" />
+        <path fill="url(#editor-icon-cursor-base)" opacity="0.82" d="M6.6 14.75 12 18l5.4-3.25L12 13.05l-5.4 1.7Z" />
+      </svg>
+  );
+}
+
 function renderSkillIcon(name: string, id: string) {
   const lowercaseName = name.toLowerCase();
   const lowercaseId = id.toLowerCase();
@@ -185,6 +284,8 @@ function AiComposeApp() {
     selectDomain,
     activeEditorId,
     editorStates,
+    promptEditorStates,
+    mcpEditorStates,
     enabledFragmentIds,
     hydratePromptEditorStates,
     hydrateMcpEditorStates,
@@ -201,9 +302,10 @@ function AiComposeApp() {
     toggleFragment,
     // MCP
     mcpServers,
+    mcpEnabledServerIdsByEditor,
     selectedMcpServerId,
     selectMcpServer,
-    toggleMcpServer,
+    toggleMcpServerForEditor,
     addMcpServer,
     updateMcpServer,
     deleteMcpServer,
@@ -212,6 +314,7 @@ function AiComposeApp() {
     selectedSkillId,
     skillsEditorStates,
     selectSkill,
+    toggleSkillForEditor,
     replaceSkill,
     setSkillsList,
     skillSources,
@@ -219,7 +322,7 @@ function AiComposeApp() {
     addSkillSource,
     deleteSkillSource,
     selectSkillSource,
-  } = usePromptWorkbenchStore();
+  } = useAiComposeStore();
 
   const selectedFragment =
     presetFragments.find((fragment) => fragment.id === selectedFragmentId) ??
@@ -237,12 +340,14 @@ function AiComposeApp() {
     mcpServers.find((server) => server.id === selectedMcpServerId) ??
     mcpServers[0];
 
-  const isExternalServer = selectedMcpServerId !== "__new__" && selectedMcpServer?.source === "external";
-  const isPresetServer = selectedMcpServerId !== "__new__" && selectedMcpServer?.source === "preset";
+  const activeEnabledMcpIds = useMemo(
+    () => mcpEnabledServerIdsByEditor[activeEditorId] ?? [],
+    [mcpEnabledServerIdsByEditor, activeEditorId],
+  );
 
   const enabledMcp = useMemo(
-    () => mcpServers.filter((server) => server.enabled),
-    [mcpServers],
+    () => mcpServers.filter((server) => activeEnabledMcpIds.includes(server.id)),
+    [mcpServers, activeEnabledMcpIds],
   );
 
   const selectedSkill = useMemo(
@@ -262,6 +367,7 @@ function AiComposeApp() {
   const [skillsFilter, setSkillsFilter] = useState<SkillsFilter>("all");
   const [isSkillModalOpen, setIsSkillModalOpen] = useState(false);
   const [isSkillsListLoading, setIsSkillsListLoading] = useState(false);
+  const [pendingMcpToggleKey, setPendingMcpToggleKey] = useState<string | null>(null);
 
   // Skills Sources
   const [isAddSourceModalOpen, setIsAddSourceModalOpen] = useState(false);
@@ -271,78 +377,10 @@ function AiComposeApp() {
 
   const isSkillsLoading = isHydratingEditorStates || isSkillsListLoading || isAddingSkillsRepo || isRemovingSkill || isUpdatingSkill;
 
-  const generatedMcpJson = useMemo(() => {
-    const mcpServersObj: Record<
-      string,
-      {
-        type?: string;
-        url?: string;
-        command?: string;
-        args?: string[];
-        env?: Record<string, string>;
-      }
-    > = {};
-    enabledMcp.forEach((server) => {
-      if (server.transportType === 'http') {
-        mcpServersObj[server.name] = {
-          type: server.type || 'streamable_http',
-          url: server.url || '',
-        };
-      } else {
-        const entry: {
-          command: string;
-          args: string[];
-          env?: Record<string, string>;
-        } = {
-          command: server.command || '',
-          args: server.args || [],
-        };
-        if (server.env && Object.keys(server.env).length > 0) {
-          entry.env = server.env;
-        }
-        mcpServersObj[server.name] = entry;
-      }
-    });
-    return JSON.stringify({ mcpServers: mcpServersObj }, null, 2);
-  }, [enabledMcp]);
-
-  const generatedMcpToml = useMemo(() => {
-    let tomlStr = "";
-    if (enabledMcp.length > 0) {
-      tomlStr += "[mcp_servers]\n";
-      enabledMcp.forEach((server) => {
-        tomlStr += `\n[mcp_servers.${server.name}]\n`;
-        if (server.transportType === 'http') {
-          tomlStr += `type = "${server.type || 'streamable_http'}"\n`;
-          tomlStr += `url = "${server.url || ''}"\n`;
-        } else {
-          tomlStr += `command = "${server.command || ''}"\n`;
-          if (server.args && server.args.length > 0) {
-            tomlStr += `args = ${JSON.stringify(server.args)}\n`;
-          }
-          if (server.env && Object.keys(server.env).length > 0) {
-            tomlStr += "env = { ";
-            const envPairs = Object.entries(server.env)
-              .map(([k, v]) => `${k} = "${v}"`)
-              .join(", ");
-            tomlStr += envPairs;
-            tomlStr += " }\n";
-          }
-        }
-      });
-    } else {
-      tomlStr += "# 还没有启用任何 MCP 服务";
-    }
-    return tomlStr.trim();
-  }, [enabledMcp]);
-
-  const activeSkillsTargetPath = skillsEditorStates[activeEditorId]?.targetPath ?? "";
   const activeEnabledSkillIds = useMemo(
     () => skillsEditorStates[activeEditorId]?.enabledSkills ?? [],
     [skillsEditorStates, activeEditorId],
   );
-  const showEditorToggle = activeDomain !== "Skills";
-
   const selectedSource = useMemo(() => {
     return skillSources.find((s) => s.id === selectedSkillSourceId) || skillSources[0];
   }, [skillSources, selectedSkillSourceId]);
@@ -391,15 +429,30 @@ function AiComposeApp() {
         .includes(normalizedQuery);
     });
   }, [skills, selectedSource, skillsFilter, skillsQuery, activeEnabledSkillIds]);
-  const selectedSkillTargetLink = selectedSkill && activeSkillsTargetPath
-    ? `${activeSkillsTargetPath}/${selectedSkill.id}`
-    : "";
   const selectedSkillPhysicalPath = selectedSkill?.isBuiltin && !selectedSkill.installed
     ? ""
     : (selectedSkill?.path || "");
-  const selectedSkillLinkPath = selectedSkill?.isBuiltin && !selectedSkill.installed
-    ? ""
-    : (selectedSkillTargetLink || selectedSkill?.path || "");
+  const selectedSkillLinkedTargets = useMemo(() => {
+    if (!selectedSkill || (selectedSkill.isBuiltin && !selectedSkill.installed)) {
+      return [];
+    }
+
+    return editorIds
+      .map((editorId) => {
+        const targetPath = skillsEditorStates[editorId]?.targetPath ?? "";
+        const isLinked = (skillsEditorStates[editorId]?.enabledSkills ?? []).includes(selectedSkill.id);
+
+        if (!targetPath || !isLinked) {
+          return null;
+        }
+
+        return {
+          editorId,
+          path: `${targetPath}/${selectedSkill.id}`,
+        };
+      })
+      .filter((item): item is { editorId: EditorId; path: string } => Boolean(item));
+  }, [editorIds, selectedSkill, skillsEditorStates]);
   const isSelectedSkillCliManaged = selectedSkill?.sourceKind === "cli";
   const isSelectedSkillLinked = selectedSkill
     ? activeEnabledSkillIds.includes(selectedSkill.id)
@@ -439,13 +492,181 @@ function AiComposeApp() {
     return combinedSkills;
   };
 
+  const getEnabledMcpIdsForEditor = (editorId: EditorId) =>
+    mcpEnabledServerIdsByEditor[editorId] ?? [];
+
+  const isMcpEnabledForEditor = (editorId: EditorId, serverId: string) =>
+    getEnabledMcpIdsForEditor(editorId).includes(serverId);
+
+  const buildMcpPayload = (
+    enabledIds: string[],
+    sourceServers: typeof mcpServers = mcpServers,
+  ) => {
+    const enabledServers = sourceServers.filter((server) => enabledIds.includes(server.id));
+    const payloadMcpServers: Record<string, Record<string, unknown>> = {};
+
+    enabledServers.forEach((server) => {
+      if (server.transportType === "http") {
+        payloadMcpServers[server.name] = {
+          type: server.type || "streamable_http",
+          url: server.url || "",
+        };
+        return;
+      }
+
+      payloadMcpServers[server.name] = {
+        command: server.command || "",
+        args: server.args || [],
+      };
+
+      if (server.env && Object.keys(server.env).length > 0) {
+        payloadMcpServers[server.name].env = server.env;
+      }
+    });
+
+    return {
+      enabledServers,
+      payloadData: {
+        mcpServers: payloadMcpServers,
+        managedNames: sourceServers.map((server) => server.name),
+      },
+    };
+  };
+
+  const applyMcpSelectionToEditor = async (
+    editorId: EditorId,
+    enabledIds: string[],
+    sourceServers?: typeof mcpServers,
+  ) => {
+    const { enabledServers, payloadData } = buildMcpPayload(enabledIds, sourceServers);
+
+    return applyMcpToEditorTarget({
+      editorId,
+      enabled: enabledServers.length > 0,
+      configJson: JSON.stringify(payloadData),
+    });
+  };
+
+  const handleMcpEditorToggle = async (
+    editorId: EditorId,
+    serverId: string,
+  ) => {
+    const currentEnabledIds = getEnabledMcpIdsForEditor(editorId);
+    const nextEnabledIds = currentEnabledIds.includes(serverId)
+      ? currentEnabledIds.filter((id) => id !== serverId)
+      : [...currentEnabledIds, serverId];
+
+    toggleMcpServerForEditor(editorId, serverId);
+
+    if (!isTauriRuntime()) {
+      return;
+    }
+
+    const toggleKey = `${editorId}:${serverId}`;
+    setPendingMcpToggleKey(toggleKey);
+
+    try {
+      await applyMcpSelectionToEditor(editorId, nextEnabledIds);
+      const nextMcpStates = await loadEditorMcpStates();
+      hydrateMcpEditorStates(nextMcpStates);
+      messageApi.success(`${editorMeta[editorId].title} 的 MCP 配置已更新。`);
+    } catch (error) {
+      toggleMcpServerForEditor(editorId, serverId);
+      const errMsg = error instanceof Error ? error.message : String(error);
+      messageApi.error(`更新 ${editorMeta[editorId].title} 的 MCP 配置失败: ${errMsg}`);
+    } finally {
+      setPendingMcpToggleKey(null);
+    }
+  };
+
+  const isSkillLinkedToEditor = (editorId: EditorId, skillId: string) =>
+    skillsEditorStates[editorId]?.enabledSkills.includes(skillId) ?? false;
+
+  const isSkillToggleReadOnly = (skill: SkillInfo) =>
+    skill.sourceKind === "fallbackDirectory";
+
+  const handleSkillEditorToggle = async (
+    skill: SkillInfo,
+    editorId: EditorId,
+  ) => {
+    if (isSkillToggleReadOnly(skill)) {
+      return;
+    }
+
+    const isLinked = isSkillLinkedToEditor(editorId, skill.id);
+
+    if (isLinked) {
+      setIsRemovingSkill(true);
+      try {
+        await unlinkSkillFromEditor({
+          editorId,
+          skillId: skill.id,
+        });
+        const nextSkillsStates = await loadEditorSkillsStates();
+        hydrateSkillsEditorStates(nextSkillsStates);
+        await refreshCurrentEditorSkills(activeEditorId);
+        messageApi.success(`已取消 ${skill.name} 在 ${editorMeta[editorId].title} 中的链接。`);
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        messageApi.error(`取消链接失败: ${errMsg}`);
+      } finally {
+        setIsRemovingSkill(false);
+      }
+      return;
+    }
+
+    setIsAddingSkillsRepo(true);
+    try {
+      let skillPath = skill.path;
+
+      if (skill.installed === false) {
+        if (!skill.repoSource) {
+          throw new Error("缺少可安装的技能来源。");
+        }
+
+        const installedSkills = await addSkillsRepository(skill.repoSource);
+        const installedSkill = installedSkills.find((item) =>
+          isPresetSkillMatch(item.id, skill.id),
+        );
+
+        if (!installedSkill) {
+          throw new Error(`安装完成后未找到技能 ${skill.name} 的物理路径。`);
+        }
+
+        skillPath = installedSkill.path;
+      }
+
+      if (!skillPath) {
+        throw new Error("缺少技能物理路径，无法创建链接。");
+      }
+
+      await linkSkillToEditor({
+        editorId,
+        skillId: skill.id,
+        skillPath,
+      });
+
+      const nextSkillsStates = await loadEditorSkillsStates();
+      hydrateSkillsEditorStates(nextSkillsStates);
+      await refreshCurrentEditorSkills(activeEditorId);
+      messageApi.success(`已将 ${skill.name} 链接到 ${editorMeta[editorId].title}。`);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      messageApi.error(`链接技能失败: ${errMsg}`);
+    } finally {
+      setIsAddingSkillsRepo(false);
+    }
+  };
+
   const renderSkillRow = (skill: typeof skills[number]) => {
     const isSelected = skill.id === selectedSkillId;
-    const isLinkedToEditor = activeEnabledSkillIds.includes(skill.id);
     const badgeMeta = getSkillSourceBadgeMeta(skill, skillSources);
+    const linkedCount = editorIds.filter((editorId) =>
+      isSkillLinkedToEditor(editorId, skill.id),
+    ).length;
 
     return (
-      <button
+      <div
         key={skill.id}
         className={`skills-list-row${
           isSelected ? " skills-list-row--selected" : ""
@@ -454,32 +675,40 @@ function AiComposeApp() {
           selectSkill(skill.id);
           setIsSkillModalOpen(true);
         }}
-        type="button"
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            selectSkill(skill.id);
+            setIsSkillModalOpen(true);
+          }
+        }}
+        role="button"
+        tabIndex={0}
       >
-        <div className="skill-card__icon-container">
-          {renderSkillIcon(skill.name, skill.id)}
-        </div>
-        <div className="skills-list-row__content">
-          <div className="skills-list-row__title-line">
-            <span className="skills-list-row__title" title={skill.name}>
-              {skill.name}
-            </span>
-            <span className={`skill-source-badge ${badgeMeta.className}`}>
-              {badgeMeta.text}
-            </span>
+        <div className="skills-list-row__select">
+          <div className="skill-card__icon-container">
+            {renderSkillIcon(skill.name, skill.id)}
           </div>
-          <span className="skills-list-row__description" title={skill.description || "无描述"}>
-            {skill.description || "无描述"}
-          </span>
+          <div className="skills-list-row__content">
+            <div className="skills-list-row__title-line">
+              <span className="skills-list-row__title" title={skill.name}>
+                {skill.name}
+              </span>
+            </div>
+            <span className="skills-list-row__description" title={skill.description || "无描述"}>
+              {skill.description || "无描述"}
+            </span>
+            <div className="skills-list-row__meta-line">
+              <span className={`skill-source-badge ${badgeMeta.className}`}>
+                {badgeMeta.text}
+              </span>
+              <span className="skills-list-row__summary-count">
+                已链接 {linkedCount}/{editorIds.length}
+              </span>
+            </div>
+          </div>
         </div>
-        {isLinkedToEditor && (
-          <span className="skill-card__status-check" aria-label="已安装">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-          </span>
-        )}
-      </button>
+      </div>
     );
   };
 
@@ -508,7 +737,7 @@ function AiComposeApp() {
     selectedMcpServer && selectedMcpServerId !== "__new__" ? (selectedMcpServer.url ?? "") : ""
   );
 
-  const handleSaveMcp = () => {
+  const handleSaveMcp = async () => {
     if (!formName.trim()) {
       messageApi.error("名称不能为空");
       return;
@@ -571,10 +800,60 @@ function AiComposeApp() {
         ...mcpData,
         enabled: true,
       });
-      messageApi.success("添加 MCP 服务成功！请点击右侧“应用配置”写入编辑器");
+      messageApi.success("添加 MCP 服务成功。可继续为不同编辑器开启后自动同步。");
     } else {
       updateMcpServer(selectedMcpServer.id, mcpData);
-      messageApi.success("修改 MCP 服务成功！请点击右侧“应用配置”写入编辑器");
+
+      const latestStore = useAiComposeStore.getState();
+      const latestServers = latestStore.mcpServers;
+      const enabledEditorIds = editorIds.filter((editorId) =>
+        (latestStore.mcpEnabledServerIdsByEditor[editorId] ?? []).includes(selectedMcpServer.id),
+      );
+
+      if (!isTauriRuntime() || enabledEditorIds.length === 0) {
+        messageApi.success(
+          enabledEditorIds.length === 0
+            ? "修改 MCP 服务成功。当前没有已启用该服务的编辑器。"
+            : "修改 MCP 服务成功。",
+        );
+        return;
+      }
+
+      messageApi.loading({
+        content: `正在同步到 ${enabledEditorIds.map((editorId) => editorMeta[editorId].title).join("、")}...`,
+        key: "save-mcp",
+      });
+
+      const syncResults = await Promise.allSettled(
+        enabledEditorIds.map(async (editorId) => {
+          const enabledIdsForEditor = latestStore.mcpEnabledServerIdsByEditor[editorId] ?? [];
+          await applyMcpSelectionToEditor(editorId, enabledIdsForEditor, latestServers);
+          return editorId;
+        }),
+      );
+
+      const failedResults = syncResults.filter(
+        (result): result is PromiseRejectedResult => result.status === "rejected",
+      );
+
+      const nextMcpStates = await loadEditorMcpStates();
+      hydrateMcpEditorStates(nextMcpStates);
+
+      if (failedResults.length > 0) {
+        const errorMessage = failedResults[0].reason instanceof Error
+          ? failedResults[0].reason.message
+          : String(failedResults[0].reason);
+        messageApi.error({
+          content: `保存成功，但同步部分编辑器失败：${errorMessage}`,
+          key: "save-mcp",
+        });
+        return;
+      }
+
+      messageApi.success({
+        content: `修改 MCP 服务成功，并已同步到 ${enabledEditorIds.map((editorId) => editorMeta[editorId].title).join("、")}。`,
+        key: "save-mcp",
+      });
     }
   };
 
@@ -582,7 +861,8 @@ function AiComposeApp() {
     deleteMcpServer(id);
     messageApi.loading({ content: "正在同步删除至编辑器配置...", key: "delete-mcp" });
     try {
-      await applyToEditor(activeEditorId, isCurrentEditorEnabled);
+      const nextEnabledCount = getEnabledMcpIdsForEditor(activeEditorId).filter((serverId) => serverId !== id).length;
+      await applyToEditor(activeEditorId, nextEnabledCount > 0);
       messageApi.success({ content: "删除 MCP 服务成功并已自动同步物理文件！", key: "delete-mcp" });
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
@@ -843,31 +1123,9 @@ function AiComposeApp() {
       });
 
       try {
-        const latestMcpServers = usePromptWorkbenchStore.getState().mcpServers;
-        const enabledMcpLatest = latestMcpServers.filter((s) => s.enabled);
-        
-        const payloadMcpServers: Record<string, Record<string, unknown>> = {};
-        enabledMcpLatest.forEach((s) => {
-          if (s.transportType === 'http') {
-            payloadMcpServers[s.name] = {
-              type: s.type || 'streamable_http',
-              url: s.url || '',
-            };
-          } else {
-            payloadMcpServers[s.name] = {
-              command: s.command || '',
-              args: s.args || [],
-            };
-            if (s.env && Object.keys(s.env).length > 0) {
-              payloadMcpServers[s.name].env = s.env;
-            }
-          }
-        });
-
-        const payloadData = {
-          mcpServers: payloadMcpServers,
-          managedNames: latestMcpServers.map((s) => s.name),
-        };
+        const latestStore = useAiComposeStore.getState();
+        const enabledMcpIdsForEditor = latestStore.mcpEnabledServerIdsByEditor[editorId] ?? [];
+        const { enabledServers, payloadData } = buildMcpPayload(enabledMcpIdsForEditor);
 
         const result = await applyMcpToEditorTarget({
           editorId,
@@ -886,7 +1144,7 @@ function AiComposeApp() {
           status: "success",
           message:
             result.action === "updated"
-              ? `已成功写入 ${result.targetPath}，当前共更新 ${enabledMcpLatest.length} 个 MCP 服务。`
+              ? `已成功写入 ${result.targetPath}，当前共更新 ${enabledServers.length} 个 MCP 服务。`
               : result.action === "removed"
                 ? `已从 ${result.targetPath} 清除 AI-COMPOSE 受管 MCP 配置。`
                 : `${result.targetPath} 当前无改动。`,
@@ -912,14 +1170,33 @@ function AiComposeApp() {
     return null;
   };
 
-  const isCurrentEditorEnabled = editorStates[activeEditorId]?.enabled;
+  const enabledPromptEditorIds = useMemo(
+    () => editorIds.filter((editorId) => promptEditorStates[editorId]?.enabled),
+    [editorIds, promptEditorStates],
+  );
 
   const handleApplyClick = async () => {
-    if (!isCurrentEditorEnabled) {
-      messageApi.warning(`请先在左侧侧边栏中启用 ${editorMeta[activeEditorId].title}`);
+    if (activeDomain === "Prompt") {
+      if (enabledPromptEditorIds.length === 0) {
+        messageApi.warning("请先在当前配置域中启用至少一个编辑器");
+        return;
+      }
+
+      const results = await Promise.all(
+        enabledPromptEditorIds.map((editorId) => applyToEditor(editorId, true)),
+      );
+      const succeededEditors = enabledPromptEditorIds.filter((_, index) => results[index]);
+
+      if (succeededEditors.length > 0) {
+        messageApi.success(`已将最新配置成功应用到 ${succeededEditors.map((editorId) => editorMeta[editorId].title).join("、")}！`);
+      }
       return;
     }
-    const result = await applyToEditor(activeEditorId, true);
+
+    const result = await applyToEditor(
+      activeEditorId,
+      activeDomain === "MCP" ? enabledMcp.length > 0 : true,
+    );
     if (result) {
       messageApi.success(`已将最新配置成功应用到 ${editorMeta[activeEditorId].title}！`);
     }
@@ -927,7 +1204,9 @@ function AiComposeApp() {
 
   const handleToggleEditor = async (editorId: EditorId) => {
     const nextEnabled = !editorStates[editorId].enabled;
-    selectEditor(editorId);
+    if (activeDomain !== "Prompt") {
+      selectEditor(editorId);
+    }
 
     if (activeDomain === "Prompt") {
       if (nextEnabled && enabledFragments.length === 0) {
@@ -938,16 +1217,7 @@ function AiComposeApp() {
         });
         return;
       }
-    } else if (activeDomain === "MCP") {
-      if (nextEnabled && enabledMcp.length === 0) {
-        setApplyFeedback({
-          status: "error",
-          message: `请至少启用一个 MCP 服务后再启用 ${editorMeta[editorId].title} 配置。`,
-          lastAppliedAt: null,
-        });
-        return;
-      }
-    } else if (activeDomain === "Skills") {
+    } else if (activeDomain === "MCP" || activeDomain === "Skills") {
       return;
     }
 
@@ -985,56 +1255,8 @@ function AiComposeApp() {
           </div>
         </header>
 
-        <div className={`workspace-grid${activeDomain === "Skills" ? " workspace-grid--skills" : ""}`}>
+        <div className={`workspace-grid${activeDomain === "Prompt" ? "" : " workspace-grid--skills"}`}>
           <aside className="panel side-nav" aria-label="工作台导航">
-            <section className="side-nav__section">
-              <h2 className="side-nav__label">编辑器</h2>
-              <div className="side-nav__items">
-                {(Object.keys(editorMeta) as EditorId[]).map((editorId) => (
-                  <div
-                    key={editorId}
-                    className={`side-nav__item side-nav__item--editor${
-                      activeEditorId === editorId
-                        ? " side-nav__item--active"
-                        : ""
-                    }`}
-                  >
-                    <button
-                      className="side-nav__item-select"
-                      onClick={() => selectEditor(editorId)}
-                      type="button"
-                    >
-                      <div className="side-nav__item-main">
-                        <span>{editorMeta[editorId].title}</span>
-                        {showEditorToggle ? (
-                          <span className="side-nav__item-state">
-                            {editorStates[editorId].enabled ? "已启用" : "已关闭"}
-                          </span>
-                        ) : null}
-                      </div>
-                    </button>
-                    {showEditorToggle ? (
-                      <button
-                        aria-pressed={editorStates[editorId].enabled}
-                        className={`editor-toggle${
-                          editorStates[editorId].enabled
-                            ? " editor-toggle--enabled"
-                            : ""
-                        }`}
-                        disabled={isHydratingEditorStates}
-                        onClick={() => {
-                          void handleToggleEditor(editorId);
-                        }}
-                        type="button"
-                      >
-                        <span className="editor-toggle__thumb" />
-                      </button>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            </section>
-
             <section className="side-nav__section">
               <h2 className="side-nav__label">配置域</h2>
               <div className="side-nav__items">
@@ -1062,7 +1284,7 @@ function AiComposeApp() {
             </section>
           </aside>
 
-          <main className={`workbench${activeDomain === "Skills" ? " workbench--skills" : ""}`}>
+          <main className={`workbench${activeDomain === "Prompt" ? "" : " workbench--skills"}`}>
             {activeDomain === "Prompt" ? (
               <>
                 <section
@@ -1177,7 +1399,7 @@ function AiComposeApp() {
                   <div className="panel__header">
                     <div>
                       <h2 className="panel__title" id="mcp-list-title">
-                        官方预设 MCP 服务
+                        MCP 服务列表
                       </h2>
                       <p className="panel__subtitle">
                         当前首版为直接映射为 mcpServers 配置的官方项与自定义项。
@@ -1196,51 +1418,44 @@ function AiComposeApp() {
                   <div className="fragment-list__items">
                     {mcpServers.map((server) => {
                       const isSelected = server.id === selectedMcpServerId;
-                      const isEnabled = server.enabled;
+                      const enabledCount = editorIds.filter((editorId) =>
+                        isMcpEnabledForEditor(editorId, server.id),
+                      ).length;
 
                       return (
-                        <button
+                        <div
                           key={server.id}
                           className={`fragment-list__item${
                             isSelected ? " fragment-list__item--selected" : ""
                           }`}
-                          onClick={() => selectMcpServer(server.id)}
-                          type="button"
                         >
-                          <div className="fragment-list__item-main">
-                            <div className="fragment-list__item-title-row" style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-                              <span className="fragment-list__item-title" style={{ margin: 0 }}>
-                                {server.name}
-                              </span>
-                              <span className={`mcp-source-badge mcp-source-badge--${server.source}`}>
-                                {server.source === "preset"
-                                  ? "官方"
-                                  : server.source === "external"
-                                  ? "本地配置"
-                                  : "自定义"}
-                              </span>
+                          <button
+                            className="fragment-list__item-select"
+                            onClick={() => selectMcpServer(server.id)}
+                            type="button"
+                          >
+                            <div className="fragment-list__item-main">
+                              <div className="fragment-list__item-title-row" style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                                <span className="fragment-list__item-title" style={{ margin: 0 }}>
+                                  {server.name}
+                                </span>
+                                <span className={`mcp-source-badge mcp-source-badge--${server.source}`}>
+                                  {server.source === "preset" ? "官方" : "自定义"}
+                                </span>
+                              </div>
+                              <div className="fragment-list__item-meta-row">
+                                <span className="fragment-list__item-meta">
+                                  {server.transportType === 'http'
+                                    ? server.url
+                                    : `${(server.args ?? []).length} 个参数`}
+                                </span>
+                              </div>
                             </div>
-                            <div className="fragment-list__item-meta-row">
-                              <span className="fragment-list__item-meta">
-                                {server.transportType === 'http'
-                                  ? server.url
-                                  : `${(server.args ?? []).length} 个参数`}
-                              </span>
-                            </div>
-                          </div>
-
+                          </button>
                           <span className="fragment-list__toggle">
-                            <span
-                              aria-hidden="true"
-                              className={`fragment-list__toggle-dot${
-                                isEnabled
-                                  ? " fragment-list__toggle-dot--enabled"
-                                  : ""
-                              }`}
-                            />
-                            {isEnabled ? "已启用" : "未启用"}
+                            {enabledCount} / {editorIds.length} 已启用
                           </span>
-                        </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -1263,25 +1478,41 @@ function AiComposeApp() {
                       </p>
                     </div>
                     {selectedMcpServerId !== "__new__" && selectedMcpServer && (
-                      isExternalServer ? (
-                        <span className="mcp-badge-readonly" style={{ fontSize: "12px", color: "var(--text-faint)", background: "var(--surface-container-high)", padding: "6px 10px", borderRadius: "6px", fontWeight: 500 }}>
-                          外部手动配置 (只读)
+                      <div className="mcp-detail-switches">
+                        <span className="mcp-detail-switches__hint">
+                          仅控制当前 MCP 在各编辑器中的启用状态
                         </span>
-                      ) : (
-                        <button
-                          className={`fragment-action-btn${
-                            selectedMcpServer.enabled
-                              ? " fragment-action-btn--active"
-                              : ""
-                          }`}
-                          onClick={() => toggleMcpServer(selectedMcpServer.id)}
-                          type="button"
-                        >
-                          {selectedMcpServer.enabled
-                            ? "从最终 MCP 移除"
-                            : "加入最终 MCP"}
-                        </button>
-                      )
+                        <div className="editor-icon-toggle-group">
+                          {editorIds.map((editorId) => {
+                            const isEnabled = isMcpEnabledForEditor(editorId, selectedMcpServer.id);
+                            const tooltipContent = `${editorMeta[editorId].title}${isEnabled ? " 已启用" : " 未启用"}`;
+
+                            return (
+                              <Tooltip
+                                key={`detail-${selectedMcpServer.id}-${editorId}`}
+                                content={tooltipContent}
+                                placement="top"
+                                styles={{ overlay: { zIndex: 1400 } }}
+                              >
+                                <button
+                                  type="button"
+                                  className={`editor-icon-toggle${
+                                    isEnabled ? " editor-icon-toggle--enabled" : ""
+                                  }`}
+                                  aria-label={tooltipContent}
+                                  aria-pressed={isEnabled}
+                                  disabled={pendingMcpToggleKey === `${editorId}:${selectedMcpServer.id}`}
+                                  onClick={() => {
+                                    void handleMcpEditorToggle(editorId, selectedMcpServer.id);
+                                  }}
+                                >
+                                  {renderEditorToggleIcon(editorId)}
+                                </button>
+                              </Tooltip>
+                            );
+                          })}
+                        </div>
+                      </div>
                     )}
                   </div>
 
@@ -1307,7 +1538,6 @@ function AiComposeApp() {
                           className="form-input"
                           placeholder="例如: weather"
                           value={formName}
-                          disabled={isPresetServer || isExternalServer}
                           onChange={(e) => setFormName(e.target.value)}
                         />
                       </div>
@@ -1320,7 +1550,6 @@ function AiComposeApp() {
                         <div style={{ display: "flex", gap: "12px", marginTop: "4px" }}>
                           <button
                             type="button"
-                            disabled={isPresetServer || isExternalServer}
                             style={{
                               flex: 1,
                               padding: "8px 12px",
@@ -1329,7 +1558,7 @@ function AiComposeApp() {
                               background: formTransportType === "stdio" ? "var(--accent-soft)" : "rgba(255,255,255,0.4)",
                               color: formTransportType === "stdio" ? "var(--accent-strong)" : "var(--text-main)",
                               fontWeight: formTransportType === "stdio" ? 600 : 400,
-                              cursor: (isPresetServer || isExternalServer) ? "not-allowed" : "pointer",
+                              cursor: "pointer",
                               fontSize: "13px",
                             }}
                             onClick={() => setFormTransportType("stdio")}
@@ -1338,7 +1567,6 @@ function AiComposeApp() {
                           </button>
                           <button
                             type="button"
-                            disabled={isPresetServer || isExternalServer}
                             style={{
                               flex: 1,
                               padding: "8px 12px",
@@ -1347,7 +1575,7 @@ function AiComposeApp() {
                               background: formTransportType === "http" ? "var(--accent-soft)" : "rgba(255,255,255,0.4)",
                               color: formTransportType === "http" ? "var(--accent-strong)" : "var(--text-main)",
                               fontWeight: formTransportType === "http" ? 600 : 400,
-                              cursor: (isPresetServer || isExternalServer) ? "not-allowed" : "pointer",
+                              cursor: "pointer",
                               fontSize: "13px",
                             }}
                             onClick={() => setFormTransportType("http")}
@@ -1367,7 +1595,6 @@ function AiComposeApp() {
                               className="form-input"
                               placeholder="例如: npx, python, uv"
                               value={formCommand}
-                              disabled={isPresetServer || isExternalServer}
                               onChange={(e) => setFormCommand(e.target.value)}
                             />
                           </div>
@@ -1383,7 +1610,6 @@ function AiComposeApp() {
 -y
 @modelcontextprotocol/server-sqlite"
                               value={formArgs}
-                              disabled={isPresetServer || isExternalServer}
                               onChange={(e) => setFormArgs(e.target.value)}
                             />
                           </div>
@@ -1399,7 +1625,6 @@ function AiComposeApp() {
                                     className="form-input env-input"
                                     placeholder="KEY"
                                     value={pair.key}
-                                    disabled={isExternalServer}
                                     onChange={(e) => {
                                       const next = [...formEnv];
                                       next[index].key = e.target.value;
@@ -1410,50 +1635,45 @@ function AiComposeApp() {
                                     className="form-input env-input"
                                     placeholder="VALUE"
                                     value={pair.value}
-                                    disabled={isExternalServer}
                                     onChange={(e) => {
                                       const next = [...formEnv];
                                       next[index].value = e.target.value;
                                       setFormEnv(next);
                                     }}
                                   />
-                                  {!isExternalServer && (
-                                    <button
-                                      type="button"
-                                      className="env-editor__delete-btn"
-                                      style={{
-                                        background: "none",
-                                        border: "none",
-                                        color: "#ff4d4f",
-                                        cursor: "pointer",
-                                        fontSize: "12px",
-                                      }}
-                                      onClick={() => setFormEnv(formEnv.filter((_, i) => i !== index))}
-                                    >
-                                      删除
-                                    </button>
-                                  )}
+                                  <button
+                                    type="button"
+                                    className="env-editor__delete-btn"
+                                    style={{
+                                      background: "none",
+                                      border: "none",
+                                      color: "#ff4d4f",
+                                      cursor: "pointer",
+                                      fontSize: "12px",
+                                    }}
+                                    onClick={() => setFormEnv(formEnv.filter((_, i) => i !== index))}
+                                  >
+                                    删除
+                                  </button>
                                 </div>
                               ))}
-                              {!isExternalServer && (
-                                <button
-                                  type="button"
-                                  className="env-editor__add-btn"
-                                  style={{
-                                    alignSelf: "flex-start",
-                                    background: "rgba(255, 140, 0, 0.1)",
-                                    border: "1px dashed var(--accent)",
-                                    color: "var(--accent)",
-                                    padding: "4px 8px",
-                                    borderRadius: "4px",
-                                    fontSize: "12px",
-                                    cursor: "pointer",
-                                  }}
-                                  onClick={() => setFormEnv([...formEnv, { key: "", value: "" }])}
-                                >
-                                  + 添加环境变量
-                                </button>
-                              )}
+                              <button
+                                type="button"
+                                className="env-editor__add-btn"
+                                style={{
+                                  alignSelf: "flex-start",
+                                  background: "rgba(255, 140, 0, 0.1)",
+                                  border: "1px dashed var(--accent)",
+                                  color: "var(--accent)",
+                                  padding: "4px 8px",
+                                  borderRadius: "4px",
+                                  fontSize: "12px",
+                                  cursor: "pointer",
+                                }}
+                                onClick={() => setFormEnv([...formEnv, { key: "", value: "" }])}
+                              >
+                                + 添加环境变量
+                              </button>
                             </div>
                           </div>
                         </>
@@ -1467,7 +1687,6 @@ function AiComposeApp() {
                               className="form-input"
                               placeholder="例如: streamable_http, sse"
                               value={formType}
-                              disabled={isPresetServer || isExternalServer}
                               onChange={(e) => setFormType(e.target.value)}
                             />
                           </div>
@@ -1480,7 +1699,6 @@ function AiComposeApp() {
                               className="form-input"
                               placeholder="例如: http://127.0.0.1:3845/mcp"
                               value={formUrl}
-                              disabled={isPresetServer || isExternalServer}
                               onChange={(e) => setFormUrl(e.target.value)}
                             />
                           </div>
@@ -1508,17 +1726,14 @@ function AiComposeApp() {
                         <button
                           type="button"
                           className="mcp-form__btn mcp-form__btn--primary"
-                          disabled={isExternalServer}
                           style={{
-                            background: isExternalServer 
-                              ? "var(--surface-container-high)" 
-                              : "linear-gradient(135deg, var(--accent) 0%, #ff8c00 100%)",
+                            background: "linear-gradient(135deg, var(--accent) 0%, #ff8c00 100%)",
                             border: "none",
-                            color: isExternalServer ? "var(--text-faint)" : "#fff",
+                            color: "#fff",
                             padding: "6px 12px",
                             borderRadius: "6px",
                             fontWeight: 500,
-                            cursor: isExternalServer ? "not-allowed" : "pointer",
+                            cursor: "pointer",
                           }}
                           onClick={handleSaveMcp}
                         >
@@ -1541,7 +1756,6 @@ function AiComposeApp() {
                         管理已链接的技能，添加第三方仓库或本地物理目录作为技能源。
                       </p>
                     </div>
-                    <span className="chip">已安装/已链接 {installedSkills.length} 项技能</span>
                   </div>
                 </div>
 
@@ -1677,14 +1891,28 @@ function AiComposeApp() {
                     <div className="skills-list-pane__summary" style={{ padding: "10px 18px", background: "var(--panel-muted)" }}>
                       <span>
                         共 {filteredSkills.length} 项
-                        <span style={{ marginLeft: "10px", color: "var(--accent-primary)" }}>
-                          已链接 {filteredSkills.filter(s => activeEnabledSkillIds.includes(s.id)).length}
-                        </span>
-                        <span style={{ marginLeft: "10px", color: "var(--text-faint)" }}>
-                          未链接 {filteredSkills.filter(s => !activeEnabledSkillIds.includes(s.id)).length}
-                        </span>
+                        {editorIds
+                          .map((editorId) => ({
+                            editorId,
+                            count: filteredSkills.filter((skill) =>
+                              isSkillLinkedToEditor(editorId, skill.id),
+                            ).length,
+                          }))
+                          .filter(({ count }) => count > 0)
+                          .map(({ editorId, count }) => (
+                            <span
+                              key={`skills-summary-${editorId}`}
+                              style={{
+                                marginLeft: "10px",
+                                color: editorId === activeEditorId
+                                  ? "var(--accent-primary)"
+                                  : "var(--text-faint)",
+                              }}
+                            >
+                              {editorMeta[editorId].title} {count}
+                            </span>
+                          ))}
                       </span>
-                      <span>目标：{activeSkillsTargetPath || "未检测到目标路径"}</span>
                     </div>
 
                     <div className="skills-manager__controls" style={{ padding: "10px 18px", borderBottom: "1px solid var(--panel-border)", gap: "10px" }}>
@@ -1993,6 +2221,42 @@ function AiComposeApp() {
                           <p className="skills-detail-pane__description" style={{ marginTop: "12px" }}>
                             {selectedSkill.description || "无描述"}
                           </p>
+                          <div className="skills-detail-switches">
+                            <span className="skills-detail-switches__hint">
+                              仅控制当前 Skill 在各编辑器中的链接状态
+                            </span>
+                            <div className="editor-icon-toggle-group editor-icon-toggle-group--skill-detail">
+                              {editorIds.map((editorId) => {
+                                const isLinked = isSkillLinkedToEditor(editorId, selectedSkill.id);
+                                const isReadOnly = isSkillToggleReadOnly(selectedSkill);
+                                const tooltipContent = `${editorMeta[editorId].title}${isLinked ? " 已链接" : " 未链接"}`;
+
+                                return (
+                                  <Tooltip
+                                    key={`detail-${selectedSkill.id}-${editorId}`}
+                                    content={tooltipContent}
+                                    placement="top"
+                                    styles={{ overlay: { zIndex: 1400 } }}
+                                  >
+                                    <button
+                                      type="button"
+                                      className={`editor-icon-toggle${
+                                        isLinked ? " editor-icon-toggle--enabled" : ""
+                                      }${isReadOnly ? " editor-icon-toggle--readonly" : ""}`}
+                                      aria-label={tooltipContent}
+                                      aria-pressed={isLinked}
+                                      disabled={isReadOnly || isAddingSkillsRepo || isRemovingSkill || isUpdatingSkill}
+                                      onClick={() => {
+                                        void handleSkillEditorToggle(selectedSkill, editorId);
+                                      }}
+                                    >
+                                      {renderEditorToggleIcon(editorId)}
+                                    </button>
+                                  </Tooltip>
+                                );
+                              })}
+                            </div>
+                          </div>
                         </div>
                         <div className="skills-detail-pane__actions">
                           {canInstallSelectedSkill ? (
@@ -2170,20 +2434,29 @@ function AiComposeApp() {
                             </button>
                           ) : "未安装，暂无物理路径"}
                         </p>
-                        <p className="skills-detail-pane__path">
+                        <div className="skills-detail-pane__path">
                           <strong>目标软链接：</strong>
-                          {selectedSkillLinkPath ? (
-                            <button
-                              className="skills-detail-pane__link-button"
-                              onClick={() => {
-                                void revealSkillLocalPath(selectedSkillLinkPath);
-                              }}
-                              type="button"
-                            >
-                              {selectedSkillLinkPath}
-                            </button>
-                          ) : "未安装，暂不可创建软链接"}
-                        </p>
+                          {selectedSkillLinkedTargets.length > 0 ? (
+                            <div className="skills-detail-pane__multi-paths">
+                              {selectedSkillLinkedTargets.map(({ editorId, path }) => (
+                                <div key={`${selectedSkill.id}-${editorId}`} className="skills-detail-pane__multi-path-row">
+                                  <span className="skills-detail-pane__multi-path-label">
+                                    {editorMeta[editorId].title}:
+                                  </span>
+                                  <button
+                                    className="skills-detail-pane__link-button"
+                                    onClick={() => {
+                                      void revealSkillLocalPath(path);
+                                    }}
+                                    type="button"
+                                  >
+                                    {path}
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : "当前未链接到任何编辑器"}
+                        </div>
                         <pre className="skills-detail-pane__markdown" style={{ marginTop: "16px" }}>
                           <code>{selectedSkill.content || "(SKILL.md 内容为空)"}</code>
                         </pre>
@@ -2196,9 +2469,8 @@ function AiComposeApp() {
             )}
           </main>
 
-          {activeDomain !== "Skills" ? (
+          {activeDomain === "Prompt" ? (
           <aside className="preview-column">
-            {activeDomain === "Prompt" ? (
               <section
                 className="panel preview-card"
                 aria-labelledby="preview-title"
@@ -2212,14 +2484,46 @@ function AiComposeApp() {
                       右侧始终展示当前启用片段的最终组合结果。
                     </p>
                   </div>
-                  <button
-                    className={`preview-apply-btn${isCurrentEditorEnabled && applyStatus !== "pending" ? "" : " preview-apply-btn--disabled"}`}
-                    onClick={handleApplyClick}
-                    disabled={!isCurrentEditorEnabled || applyStatus === "pending"}
-                    title={isCurrentEditorEnabled ? `应用 Prompt 配置到 ${editorMeta[activeEditorId].title}` : `请先启用左侧 ${editorMeta[activeEditorId].title}`}
-                  >
-                    {applyStatus === "pending" ? "正在应用..." : "应用配置"}
-                  </button>
+                  <div className="preview-card__actions">
+                    <div className="preview-card__editor-toggles">
+                      {editorIds.map((editorId) => {
+                        const isEnabled = editorStates[editorId].enabled;
+                        const tooltipContent = `${editorMeta[editorId].title}${isEnabled ? " Prompt 已启用" : " Prompt 未启用"}`;
+
+                        return (
+                          <Tooltip
+                            key={`prompt-preview-${editorId}`}
+                            content={tooltipContent}
+                            placement="top"
+                            styles={{ overlay: { zIndex: 1400 } }}
+                          >
+                            <button
+                              aria-label={tooltipContent}
+                              aria-pressed={isEnabled}
+                              className={`editor-icon-toggle${
+                                isEnabled ? " editor-icon-toggle--enabled" : ""
+                              }`}
+                              disabled={isHydratingEditorStates}
+                              onClick={() => {
+                                void handleToggleEditor(editorId);
+                              }}
+                              type="button"
+                            >
+                              {renderEditorToggleIcon(editorId)}
+                            </button>
+                          </Tooltip>
+                        );
+                      })}
+                    </div>
+                    <button
+                      className={`preview-apply-btn${enabledPromptEditorIds.length > 0 && applyStatus !== "pending" ? "" : " preview-apply-btn--disabled"}`}
+                      onClick={handleApplyClick}
+                      disabled={enabledPromptEditorIds.length === 0 || applyStatus === "pending"}
+                      title={enabledPromptEditorIds.length > 0 ? `将 Prompt 配置应用到 ${enabledPromptEditorIds.map((editorId) => editorMeta[editorId].title).join("、")}` : "请先在当前配置域中启用至少一个编辑器"}
+                    >
+                      {applyStatus === "pending" ? "正在应用..." : "应用配置"}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="preview-card__body">
@@ -2247,108 +2551,6 @@ function AiComposeApp() {
                   )}
                 </div>
               </section>
-            ) : activeDomain === "MCP" ? (
-              <section
-                className="panel preview-card"
-                aria-labelledby="preview-title"
-              >
-                <div className="panel__header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
-                  <div>
-                    <h2 className="panel__title" id="preview-title">
-                      最终 MCP 配置预览
-                    </h2>
-                    <p className="panel__subtitle">
-                      右侧始终展示当前启用 MCP 服务的最终 {activeEditorId === "codex" ? "TOML" : "JSON"} 配置。
-                    </p>
-                  </div>
-                  <button
-                    className={`preview-apply-btn${isCurrentEditorEnabled && applyStatus !== "pending" ? "" : " preview-apply-btn--disabled"}`}
-                    onClick={handleApplyClick}
-                    disabled={!isCurrentEditorEnabled || applyStatus === "pending"}
-                    title={isCurrentEditorEnabled ? `应用 MCP 配置到 ${editorMeta[activeEditorId].title}` : `请先启用左侧 ${editorMeta[activeEditorId].title}`}
-                  >
-                    {applyStatus === "pending" ? "正在应用..." : "应用配置"}
-                  </button>
-                </div>
-
-                <div className="preview-card__body" style={{ padding: "0 16px 16px 16px" }}>
-                  {enabledMcp.length === 0 ? (
-                    <p className="preview-card__empty">
-                      还没有启用任何 MCP 服务。请先从中间工作区选择要纳入的配置。
-                    </p>
-                  ) : (
-                    <pre
-                      style={{
-                        background: "rgba(0, 0, 0, 0.2)",
-                        padding: "12px",
-                        borderRadius: "8px",
-                        overflowX: "auto",
-                        maxWidth: "100%",
-                        fontFamily: "monospace",
-                        fontSize: "13px",
-                        color: "var(--text-bright)",
-                        lineHeight: 1.5,
-                      }}
-                    >
-                      <code>{activeEditorId === "codex" ? generatedMcpToml : generatedMcpJson}</code>
-                    </pre>
-                  )}
-                </div>
-              </section>
-            ) : (
-              <section
-                className="panel preview-card"
-                aria-labelledby="preview-title"
-              >
-                <div className="panel__header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
-                  <div>
-                    <h2 className="panel__title" id="preview-title">
-                      Skills 链接预览
-                    </h2>
-                    <p className="panel__subtitle">
-                      展示当前 {editorMeta[activeEditorId].title} 已链接的技能软链接。
-                    </p>
-                  </div>
-                </div>
-
-                <div className="preview-card__body" style={{ padding: "0 16px 16px 16px" }}>
-                  {activeEnabledSkillIds.length === 0 ? (
-                    <p className="preview-card__empty">
-                      当前未在此编辑器中链接任何技能。
-                    </p>
-                  ) : (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                      <p style={{ fontSize: "12px", color: "var(--text-faint)", margin: 0 }}>
-                        目标路径: <strong>{skillsEditorStates[activeEditorId]?.targetPath || "—"}</strong>
-                      </p>
-                      {activeEnabledSkillIds.map((skillId) => {
-                        const skill = skills.find((s) => s.id === skillId);
-                        return (
-                          <div
-                            key={skillId}
-                            style={{
-                              background: "rgba(0, 0, 0, 0.15)",
-                              padding: "10px 12px",
-                              borderRadius: "8px",
-                              fontSize: "13px",
-                              color: "var(--text-bright)",
-                              fontFamily: "monospace",
-                            }}
-                          >
-                            <div style={{ fontWeight: 600, marginBottom: "4px" }}>
-                              {skill?.name ?? skillId}
-                            </div>
-                            <div style={{ fontSize: "11px", color: "var(--text-faint)", wordBreak: "break-all" }}>
-                              {skill?.path ?? "未知路径"} → {skillsEditorStates[activeEditorId]?.targetPath}/{skillId}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </section>
-            )}
           </aside>
           ) : null}
         </div>
