@@ -77,7 +77,7 @@ type EditorState = {
   enabled: boolean
 }
 
-type PromptWorkbenchState = {
+type AiComposeState = {
   activeDomain: 'Prompt' | 'MCP' | 'Skills'
   activeEditorId: EditorId
   applyStatus: ApplyStatus
@@ -202,7 +202,7 @@ const buildEnabledServerIdsByEditor = (
   return nextEnabledIds
 }
 
-export const usePromptWorkbenchStore = create<PromptWorkbenchState>(
+export const useAiComposeStore = create<AiComposeState>(
   (set, get) => ({
     activeDomain: 'Prompt',
     activeEditorId: 'codex',

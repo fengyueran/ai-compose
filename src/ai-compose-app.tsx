@@ -26,7 +26,7 @@ import {
 } from "./editor-target-command";
 import { composeManagedPromptBlock } from "./compose-prompt";
 import "./ai-compose-app.css";
-import { usePromptWorkbenchStore } from "./prompt-workbench-store";
+import { useAiComposeStore } from "./ai-compose-store";
 import { isPresetSkillMatch } from "./skills-utils";
 
 const configurationDomains = [
@@ -322,7 +322,7 @@ function AiComposeApp() {
     addSkillSource,
     deleteSkillSource,
     selectSkillSource,
-  } = usePromptWorkbenchStore();
+  } = useAiComposeStore();
 
   const selectedFragment =
     presetFragments.find((fragment) => fragment.id === selectedFragmentId) ??
@@ -804,7 +804,7 @@ function AiComposeApp() {
     } else {
       updateMcpServer(selectedMcpServer.id, mcpData);
 
-      const latestStore = usePromptWorkbenchStore.getState();
+      const latestStore = useAiComposeStore.getState();
       const latestServers = latestStore.mcpServers;
       const enabledEditorIds = editorIds.filter((editorId) =>
         (latestStore.mcpEnabledServerIdsByEditor[editorId] ?? []).includes(selectedMcpServer.id),
@@ -1123,7 +1123,7 @@ function AiComposeApp() {
       });
 
       try {
-        const latestStore = usePromptWorkbenchStore.getState();
+        const latestStore = useAiComposeStore.getState();
         const enabledMcpIdsForEditor = latestStore.mcpEnabledServerIdsByEditor[editorId] ?? [];
         const { enabledServers, payloadData } = buildMcpPayload(enabledMcpIdsForEditor);
 
