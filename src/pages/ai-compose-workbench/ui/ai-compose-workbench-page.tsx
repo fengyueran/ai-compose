@@ -27,9 +27,6 @@ import {
   SideNavLabel,
   SideNavPanel,
   SideNavSection,
-  StatusArea,
-  StatusChip,
-  StatusChipLabel,
   WorkspaceGrid,
 } from "./ai-compose-workbench-page.styles";
 
@@ -193,13 +190,6 @@ export function AiComposeWorkbenchPage() {
           <Brand>
             <BrandTitle>AI Compose</BrandTitle>
           </Brand>
-
-          <StatusArea aria-label="当前上下文">
-            <StatusChip>
-              <StatusChipLabel>配置域</StatusChipLabel>
-              {activeDomain}
-            </StatusChip>
-          </StatusArea>
         </GlobalBar>
 
         <WorkspaceGrid isSkillsDomain={activeDomain === "Skills"}>

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Tooltip, Select, Button, Message, type SelectOption } from "@xinghunm/compass-ui";
+import { Select, Button, Message, type SelectOption } from "@xinghunm/compass-ui";
 import {
   useAiComposeStore,
   addSkillsRepository,
@@ -13,7 +13,6 @@ import {
   type EditorId,
   type SkillInfo,
   getSkillSourceBadgeMeta,
-  EditorToggleIcon,
 } from "../../../shared";
 import { AddSourceModal } from "../../../features/add-skill-source";
 import { SkillDetailModal } from "../../../features/manage-skill";
@@ -109,13 +108,7 @@ export function SkillsPanel({ messageApi }: SkillsPanelProps) {
     selectSkillSource,
     hydrateSkillsEditorStates,
     isHydratingEditorStates,
-    selectEditor,
   } = useAiComposeStore();
-
-  const installedSkills = useMemo(
-    () => skills.filter((skill) => skill.installed !== false),
-    [skills],
-  );
 
   const selectedSkill = useMemo(
     () => skills.find((s) => s.id === selectedSkillId) ?? skills[0] ?? null,
@@ -369,32 +362,6 @@ export function SkillsPanel({ messageApi }: SkillsPanelProps) {
                 管理已链接的技能，添加第三方仓库或本地物理目录作为技能源。
               </p>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-              <span className="chip">已安装/已链接 {installedSkills.length} 项技能</span>
-              <div className="preview-card__editor-toggles">
-                {editorIds.map((editorId) => {
-                  return (
-                    <Tooltip
-                      key={`preview-toggle-${editorId}`}
-                      content={editorMeta[editorId].title}
-                      placement="top"
-                      styles={{ overlay: { zIndex: 1400 } }}
-                    >
-                      <button
-                        aria-label={editorMeta[editorId].title}
-                        className={`editor-icon-toggle${activeEditorId === editorId ? " editor-icon-toggle--active" : ""}`}
-                        onClick={() => {
-                          selectEditor(editorId);
-                        }}
-                        type="button"
-                      >
-                        <EditorToggleIcon editorId={editorId} />
-                      </button>
-                    </Tooltip>
-                  );
-                })}
-              </div>
-            </div>
           </div>
         </div>
 
@@ -527,14 +494,7 @@ export function SkillsPanel({ messageApi }: SkillsPanelProps) {
           <div className="skills-list-pane__summary" style={{ padding: "10px 18px", background: "var(--panel-muted)" }}>
             <span>
               <span>共 {filteredSkills.length} 项</span>
-              <span style={{ marginLeft: "10px", color: "var(--accent-primary)" }}>
-                已链接 {filteredSkills.filter(s => isSkillLinkedToEditor(activeEditorId, s.id)).length}
-              </span>
-              <span style={{ marginLeft: "10px", color: "var(--text-faint)" }}>
-                未链接 {filteredSkills.filter(s => !isSkillLinkedToEditor(activeEditorId, s.id)).length}
-              </span>
               {editorIds
-                .filter((editorId) => editorId !== activeEditorId)
                 .map((editorId) => ({
                   editorId,
                   count: filteredSkills.filter((skill) =>

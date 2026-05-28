@@ -103,7 +103,6 @@ describe('App skills browse flows', () => {
 
     render(<App />)
 
-    expect(screen.getByText(/已安装\/已链接 2 项技能/)).toBeInTheDocument()
     expect(screen.getByText(/Scanned from an editor target directory/)).toBeInTheDocument()
 
     const localSkillRow = screen.getByRole('button', { name: /Local Scan Skill/ })
@@ -329,7 +328,7 @@ describe('App skills browse flows', () => {
       activeEditorId: 'antigravity',
       editorStates: {
         antigravity: { enabled: false, targetPath: '~/.gemini/antigravity/skills', enabledSkills: [] },
-        codex: { enabled: false, targetPath: '', enabledSkills: [] },
+        codex: { enabled: true, targetPath: '/Users/test/.codex/skills', enabledSkills: ['react-development'] },
         cursor: { enabled: false, targetPath: '', enabledSkills: [] },
       },
       skillsEditorStates: {
@@ -338,7 +337,11 @@ describe('App skills browse flows', () => {
           targetPath: '/Users/test/.gemini/antigravity/skills',
           enabledSkills: [],
         },
-        codex: { enabled: false, targetPath: '', enabledSkills: [] },
+        codex: {
+          enabled: true,
+          targetPath: '/Users/test/.codex/skills',
+          enabledSkills: ['react-development'],
+        },
         cursor: { enabled: false, targetPath: '', enabledSkills: [] },
       },
       skillSources: [
@@ -370,7 +373,7 @@ describe('App skills browse flows', () => {
 
     expect(screen.getByRole('button', { name: /react-development/ })).toBeInTheDocument()
     expect(screen.getByText(/共 1 项/)).toBeInTheDocument()
-    expect(screen.getByText(/未链接 1/)).toBeInTheDocument()
+    expect(screen.getByText(/Codex 1/)).toBeInTheDocument()
   })
 
   test('renders physical source path and target link path as clickable local paths in skill details', async () => {

@@ -2,6 +2,8 @@ import styled from "@emotion/styled";
 
 export const PageShell = styled.div`
   min-height: 100dvh;
+  height: 100dvh;
+  overflow: hidden;
   background:
     radial-gradient(
       circle at top left,
@@ -15,14 +17,25 @@ export const PageShell = styled.div`
     ),
     linear-gradient(180deg, #f9f4eb 0%, var(--app-bg) 100%);
   color: var(--text-main);
+
+  @media (max-width: 960px) {
+    height: auto;
+    overflow: visible;
+  }
 `;
 
 export const PageFrame = styled.div`
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
   max-width: var(--workspace-max);
   margin: 0 auto;
   padding: 28px;
 
   @media (max-width: 960px) {
+    height: auto;
     padding: 18px;
   }
 `;
@@ -61,47 +74,16 @@ export const BrandTitle = styled.h1`
   letter-spacing: -0.04em;
 `;
 
-export const StatusArea = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  justify-content: flex-end;
-  align-items: center;
-
-  @media (max-width: 960px) {
-    justify-content: flex-start;
-  }
-`;
-
-export const StatusChip = styled.span`
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 40px;
-  padding: 0 12px;
-  border: 1px solid var(--panel-border);
-  border-radius: 999px;
-  background: var(--panel-strong);
-  color: var(--text-main);
-  font-size: 0.92rem;
-  font-weight: 600;
-  white-space: nowrap;
-`;
-
-export const StatusChipLabel = styled.span`
-  color: var(--text-faint);
-  font-weight: 500;
-`;
-
 export const WorkspaceGrid = styled.div<{ isSkillsDomain: boolean }>`
   display: grid;
+  flex: 1;
   grid-template-columns: ${({ isSkillsDomain }) =>
     isSkillsDomain
       ? "260px minmax(0, 1fr)"
       : "260px minmax(0, 1.4fr) minmax(340px, 0.9fr)"};
+  grid-template-rows: minmax(0, 1fr);
   gap: 18px;
   align-items: stretch;
-  height: calc(100dvh - 128px);
   min-height: 0;
 
   @media (max-width: 1280px) {
@@ -112,7 +94,10 @@ export const WorkspaceGrid = styled.div<{ isSkillsDomain: boolean }>`
   }
 
   @media (max-width: 960px) {
+    flex: none;
     grid-template-columns: 1fr;
+    grid-template-rows: auto;
+    min-height: auto;
   }
 `;
 

@@ -15,7 +15,7 @@ export const workbenchStyles = css`
   }
 
   .workbench--skills {
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
   }
 `;
 
