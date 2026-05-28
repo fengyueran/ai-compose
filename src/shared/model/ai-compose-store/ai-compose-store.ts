@@ -228,7 +228,6 @@ const createDefaultHook = (index: number): HookDefinition => ({
   id: `hook-${index}`,
   name: `新 Hook ${index}`,
   trigger: 'after-run',
-  failurePolicy: 'warn',
   commands: [
     {
       id: `hook-${index}-command-1`,

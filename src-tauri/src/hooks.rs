@@ -13,13 +13,6 @@ pub enum HookTrigger {
     BeforeCommit,
 }
 
-#[derive(Deserialize, Serialize, Clone, Copy, Debug, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub enum HookFailurePolicy {
-    Block,
-    Warn,
-}
-
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct HookCommand {
@@ -33,7 +26,6 @@ pub struct HookDefinition {
     pub id: String,
     pub name: String,
     pub trigger: HookTrigger,
-    pub failure_policy: HookFailurePolicy,
     pub commands: Vec<HookCommand>,
     pub enabled_editors: std::collections::HashMap<EditorId, bool>,
 }
@@ -67,7 +59,6 @@ pub struct HooksConfigState {
 pub struct EditorHookPayload {
     pub name: String,
     pub trigger: HookTrigger,
-    pub failure_policy: HookFailurePolicy,
     pub commands: Vec<String>,
 }
 
@@ -245,7 +236,6 @@ pub async fn apply_hooks_to_editor_target(payload: ApplyHooksPayload) -> Result<
                         file_hooks.push(EditorHookPayload {
                             name: hook.name.clone(),
                             trigger: hook.trigger,
-                            failure_policy: hook.failure_policy,
                             commands,
                         });
                     }

@@ -21,7 +21,7 @@ export type HookTrigger =
   | 'after-failure'
   | 'before-commit'
 
-export type HookFailurePolicy = 'block' | 'warn'
+
 
 export type HookCommand = {
   id: string
@@ -32,7 +32,6 @@ export type HookDefinition = {
   id: string
   name: string
   trigger: HookTrigger
-  failurePolicy: HookFailurePolicy
   commands: HookCommand[]
   enabledEditors: Record<EditorId, boolean>
 }

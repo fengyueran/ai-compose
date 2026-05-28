@@ -62,7 +62,6 @@ describe('useAiComposeStore', () => {
             id: 'shared-hook',
             name: '格式化',
             trigger: 'after-run',
-            failurePolicy: 'warn',
             commands: [{ id: 'cmd-1', command: 'prettier --write {{changed_files}}' }],
             enabledEditors: {
               antigravity: false,
@@ -112,7 +111,6 @@ describe('useAiComposeStore', () => {
             id: 'hook-to-delete',
             name: '要删除的 Hook',
             trigger: 'after-run',
-            failurePolicy: 'warn',
             commands: [{ id: 'cmd-1', command: 'echo "hello"' }],
             enabledEditors: {
               antigravity: false,
@@ -124,7 +122,6 @@ describe('useAiComposeStore', () => {
             id: 'hook-to-keep',
             name: '保留的 Hook',
             trigger: 'before-run',
-            failurePolicy: 'block',
             commands: [{ id: 'cmd-2', command: 'echo "world"' }],
             enabledEditors: {
               antigravity: true,

@@ -9,7 +9,6 @@ import {
   type EditorId,
   useAiComposeStore,
   type HookTrigger,
-  type HookFailurePolicy,
   type HookCommand,
 } from '../../../shared'
 import { HooksPanelRoot } from './hooks-panel.styles'
@@ -25,11 +24,6 @@ const triggerOptions = [
   { value: 'after-run', label: '执行后' },
   { value: 'after-failure', label: '失败后' },
   { value: 'before-commit', label: '提交前' },
-] as const
-
-const failurePolicyOptions = [
-  { value: 'warn', label: '仅告警' },
-  { value: 'block', label: '阻断后续' },
 ] as const
 
 const editorIds = Object.keys(editorMeta) as EditorId[]
@@ -67,7 +61,6 @@ export function HooksPanel({ messageApi }: HooksPanelProps) {
           hooks: previewHooks.map((hook) => ({
             name: hook.name,
             trigger: hook.trigger,
-            failurePolicy: hook.failurePolicy,
             commands: hook.commands.map((command) => command.command).filter(Boolean),
           })),
         },
@@ -117,19 +110,16 @@ export function HooksPanel({ messageApi }: HooksPanelProps) {
   // 表单本地状态
   const [formName, setFormName] = useState('')
   const [formTrigger, setFormTrigger] = useState<HookTrigger>('after-run')
-  const [formFailurePolicy, setFormFailurePolicy] = useState<HookFailurePolicy>('warn')
   const [formCommands, setFormCommands] = useState<HookCommand[]>([])
 
   useEffect(() => {
     if (selectedHook && hooksState.selectedHookId !== '__new__') {
       setFormName(selectedHook.name || '')
       setFormTrigger(selectedHook.trigger || 'after-run')
-      setFormFailurePolicy(selectedHook.failurePolicy || 'warn')
       setFormCommands(selectedHook.commands || [])
     } else {
       setFormName('')
       setFormTrigger('after-run')
-      setFormFailurePolicy('warn')
       setFormCommands([{ id: `new-hook-command-1`, command: '' }])
     }
   }, [hooksState.selectedHookId, selectedHook])
@@ -193,7 +183,6 @@ export function HooksPanel({ messageApi }: HooksPanelProps) {
       const newHookPayload = {
         name: formName.trim(),
         trigger: formTrigger,
-        failurePolicy: formFailurePolicy,
         commands: filteredCommands,
         enabledEditors: {
           antigravity: activeEditorId === 'antigravity',
@@ -237,7 +226,6 @@ export function HooksPanel({ messageApi }: HooksPanelProps) {
       updateHook(selectedHook.id, {
         name: formName.trim(),
         trigger: formTrigger,
-        failurePolicy: formFailurePolicy,
         commands: filteredCommands,
       })
 
@@ -489,25 +477,6 @@ export function HooksPanel({ messageApi }: HooksPanelProps) {
                         </option>
                       ))}
                     </select>
-                  </div>
-
-                  <div className="hooks-grid">
-                    <div className="hooks-field">
-                      <span className="hooks-field__label">失败策略</span>
-                      <select
-                        className="hooks-select"
-                        onChange={(event) =>
-                          setFormFailurePolicy(event.target.value as HookFailurePolicy)
-                        }
-                        value={formFailurePolicy}
-                      >
-                        {failurePolicyOptions.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
                   </div>
                 </div>
 
