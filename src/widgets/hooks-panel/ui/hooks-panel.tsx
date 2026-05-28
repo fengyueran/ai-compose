@@ -54,21 +54,44 @@ export function HooksPanel({ messageApi }: HooksPanelProps) {
     [hooksState.hooks, previewEditorId],
   )
 
-  const generatedHooksJson = useMemo(
-    () =>
-      JSON.stringify(
-        {
-          hooks: previewHooks.map((hook) => ({
-            name: hook.name,
-            trigger: hook.trigger,
-            commands: hook.commands.map((command) => command.command).filter(Boolean),
-          })),
-        },
-        null,
-        2,
-      ),
-    [previewHooks],
-  )
+  const generatedHooksJson = useMemo(() => {
+    const triggerToEvent: Record<HookTrigger, string> = {
+      'before-run': 'PreToolUse',
+      'after-run': 'PostToolUse',
+      'after-failure': 'PostToolUse',
+      'before-commit': 'Stop',
+    }
+
+    const config: Record<string, any> = {}
+
+    previewHooks.forEach((hook) => {
+      const eventName = triggerToEvent[hook.trigger] || 'PostToolUse'
+      const commands = hook.commands.map((cmd) => cmd.command).filter(Boolean)
+      if (commands.length === 0) return
+
+      const handlers = commands.map((cmd) => ({
+        type: 'command',
+        command: cmd,
+        timeout: 30,
+      }))
+
+      const eventValue = (eventName === 'PreToolUse' || eventName === 'PostToolUse')
+        ? [
+            {
+              matcher: '*',
+              hooks: handlers,
+            },
+          ]
+        : handlers
+
+      config[hook.name] = {
+        enabled: true,
+        [eventName]: eventValue,
+      }
+    })
+
+    return JSON.stringify(config, null, 2)
+  }, [previewHooks])
 
   const generatedCodexHooksJson = useMemo(() => {
     const triggerToEvent: Record<HookTrigger, string> = {

@@ -53,19 +53,7 @@ pub struct HooksConfigState {
     pub validation_errors: Vec<String>,
 }
 
-// Structures for saving to editor hook files (for Antigravity and Cursor)
-#[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct EditorHookPayload {
-    pub name: String,
-    pub trigger: HookTrigger,
-    pub commands: Vec<String>,
-}
 
-#[derive(Serialize, Clone, Debug)]
-pub struct EditorHooksFile {
-    pub hooks: Vec<EditorHookPayload>,
-}
 
 // Structures for saving to Codex hooks config files (standard Codex hooks.json format)
 #[derive(Serialize, Clone, Debug)]
@@ -221,7 +209,8 @@ pub async fn apply_hooks_to_editor_target(payload: ApplyHooksPayload) -> Result<
                         .map_err(|error| format!("写入 Codex Hooks 配置文件失败：{error}"))?;
                 }
                 _ => {
-                    let mut file_hooks = Vec::new();
+                    let mut file_obj = serde_json::Map::new();
+
                     for hook in enabled_hooks {
                         let commands: Vec<String> = hook.commands
                             .iter()
@@ -233,15 +222,40 @@ pub async fn apply_hooks_to_editor_target(payload: ApplyHooksPayload) -> Result<
                             continue;
                         }
 
-                        file_hooks.push(EditorHookPayload {
-                            name: hook.name.clone(),
-                            trigger: hook.trigger,
-                            commands,
-                        });
+                        let event_name = match hook.trigger {
+                            HookTrigger::BeforeRun => "PreToolUse",
+                            HookTrigger::AfterRun | HookTrigger::AfterFailure => "PostToolUse",
+                            HookTrigger::BeforeCommit => "Stop",
+                        };
+
+                        let handlers: Vec<serde_json::Value> = commands
+                            .into_iter()
+                            .map(|cmd| serde_json::json!({
+                                "type": "command",
+                                "command": cmd,
+                                "timeout": 30
+                            }))
+                            .collect();
+
+                        let event_value = if event_name == "PreToolUse" || event_name == "PostToolUse" {
+                            serde_json::json!([
+                                {
+                                    "matcher": "*",
+                                    "hooks": handlers
+                                }
+                            ])
+                        } else {
+                            serde_json::json!(handlers)
+                        };
+
+                        let mut hook_entry = serde_json::Map::new();
+                        hook_entry.insert("enabled".to_string(), serde_json::Value::Bool(true));
+                        hook_entry.insert(event_name.to_string(), event_value);
+
+                        file_obj.insert(hook.name.clone(), serde_json::Value::Object(hook_entry));
                     }
 
-                    let file_content = EditorHooksFile { hooks: file_hooks };
-                    let serialized_file = serde_json::to_string_pretty(&file_content)
+                    let serialized_file = serde_json::to_string_pretty(&serde_json::Value::Object(file_obj))
                         .map_err(|error| format!("序列化编辑器 Hooks JSON 失败：{error}"))?;
 
                     fs::write(&target_path, serialized_file)
