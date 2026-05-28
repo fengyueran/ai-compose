@@ -78,7 +78,7 @@ export function HooksPanel({ messageApi }: HooksPanelProps) {
       const eventValue = (eventName === 'PreToolUse' || eventName === 'PostToolUse')
         ? [
             {
-              matcher: '*',
+              matcher: 'write_to_file|replace_file_content|multi_replace_file_content',
               hooks: handlers,
             },
           ]

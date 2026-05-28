@@ -240,7 +240,7 @@ pub async fn apply_hooks_to_editor_target(payload: ApplyHooksPayload) -> Result<
                         let event_value = if event_name == "PreToolUse" || event_name == "PostToolUse" {
                             serde_json::json!([
                                 {
-                                    "matcher": "*",
+                                    "matcher": "write_to_file|replace_file_content|multi_replace_file_content",
                                     "hooks": handlers
                                 }
                             ])
