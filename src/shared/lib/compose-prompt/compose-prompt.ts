@@ -1,4 +1,4 @@
-import type { PromptFragment } from './prompt-fragments'
+import type { PromptFragment } from "../../model/prompt-fragments";
 
 export const managedBlockStart = '<!-- BEGIN AI-COMPOSE -->'
 export const managedBlockEnd = '<!-- END AI-COMPOSE -->'

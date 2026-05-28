@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'vitest'
-
 import { presetPromptFragments } from './prompt-fragments'
 
 describe('presetPromptFragments', () => {

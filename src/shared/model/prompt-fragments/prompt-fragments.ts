@@ -48,7 +48,7 @@ export const presetPromptFragments: PromptFragment[] = [
       '优先使用解决当前问题的最小实现；不要增加未被要求的功能、抽象、配置或猜测性扩展',
       '错误处理要覆盖到每一层，不要静默吞掉错误',
       '界面层错误应给用户清晰反馈，系统侧日志应保留足够上下文',
-      '默认重视可读命名、错误处理和输入校验，不要把这些留到后补',
+      '默认重视可读命名、错误处理 and 输入校验，不要把这些留到后补',
     ],
   },
   {
@@ -88,7 +88,7 @@ export const presetPromptFragments: PromptFragment[] = [
     source: 'preset',
     items: [
       '提交信息默认使用 Conventional Commits 格式，例如 feat、fix、refactor、docs、test、chore、perf、ci',
-      '准备 PR 时，应基于完整提交历史整理清晰总结和验证计划',
+      '准备 PR 时，应基于完整提交历史整理清晰总结 and 验证计划',
       '推送分支时默认使用 -u，保证后续跟踪关系清晰',
       '工作区可能存在用户已有改动或生成内容，除非明确要求，不要回退、覆盖或清理不属于当前任务的修改',
       '避免使用会无条件丢弃改动的破坏性命令，例如强制重置、强制覆盖或批量清理',

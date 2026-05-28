@@ -213,28 +213,26 @@ export async function selectDirectory(): Promise<string> {
 
 export function normalizeRepoSource(repo: string): string {
   let trimmed = repo.trim();
-  // 去除尾部斜杠
+  // Remove trailing slashes.
   trimmed = trimmed.replace(/\/+$/, "");
 
-  // 去除 http/https
+  // Remove the http/https scheme.
   const withoutScheme = trimmed.replace(/^https?:\/\//, "");
-  // 去除 www.
+  // Remove the www. prefix.
   const withoutWww = withoutScheme.replace(/^www\./, "");
-  // 去除 github.com/
+  // Remove the github.com/ prefix.
   let githubPath = withoutWww.replace(/^github\.com\//, "");
 
-  // 去除 query 和 hash
+  // Strip query parameters and hash fragments.
   githubPath = githubPath.split(/[?#]/)[0];
 
-  // 去除 .git 后缀和尾部斜杠
+  // Remove the .git suffix and any trailing slashes.
   const pathWithoutSuffix = githubPath.replace(/\.git$/, "").replace(/\/+$/, "");
 
-  // 如果是 owner/repo 格式，只保留前两段
+  // If the value is in owner/repo form, keep only the first two segments.
   const parts = pathWithoutSuffix.split("/");
   if (parts.length >= 2) {
     return `${parts[0]}/${parts[1]}`;
   }
   return pathWithoutSuffix;
 }
-
-
