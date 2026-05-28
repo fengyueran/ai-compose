@@ -1,6 +1,7 @@
 import js from '@eslint/js'
 import { FlatCompat } from '@eslint/eslintrc'
 import { fileURLToPath } from 'node:url'
+import boundariesPlugin from 'eslint-plugin-boundaries'
 import globals from 'globals'
 import path from 'node:path'
 import reactHooks from 'eslint-plugin-react-hooks'
@@ -14,6 +15,54 @@ const __dirname = path.dirname(__filename)
 const compat = new FlatCompat({
   baseDirectory: __dirname,
 })
+
+const fsdLayers = ['app', 'processes', 'pages', 'widgets', 'features', 'entities', 'shared']
+
+const getLowerLayers = (layer) => fsdLayers.slice(fsdLayers.indexOf(layer) + 1)
+
+const getUpperLayers = (layer) => fsdLayers.slice(0, fsdLayers.indexOf(layer))
+
+const getNotSharedLayersRules = () =>
+  getUpperLayers('shared').map((layer) => ({
+    from: { type: layer },
+    allow: getLowerLayers(layer).map((allowedType) => ({
+      to: { type: allowedType },
+    })),
+  }))
+
+const slicelessLayerRules = [
+  {
+    from: { type: 'shared' },
+    allow: [{ to: { type: 'shared' } }],
+  },
+  {
+    from: { type: 'app' },
+    allow: [{ to: { type: 'app' } }],
+  },
+]
+
+const getGodModeRules = () =>
+  fsdLayers.map((layer) => ({
+    from: { type: `gm_${layer}` },
+    allow: [layer, ...getLowerLayers(layer)].map((allowedType) => ({
+      to: { type: allowedType },
+    })),
+  }))
+
+const boundariesElements = [
+  ...fsdLayers.map((layer) => ({
+    type: layer,
+    pattern: `${layer}/!(_*){,/*}`,
+    mode: 'folder',
+    capture: ['slices'],
+  })),
+  ...fsdLayers.map((layer) => ({
+    type: `gm_${layer}`,
+    pattern: `${layer}/_*`,
+    mode: 'folder',
+    capture: ['slices'],
+  })),
+]
 
 const normalizeCompatConfig = (config) => {
   const ecmaVersion = config.languageOptions?.ecmaVersion
@@ -45,9 +94,28 @@ export default defineConfig([
     },
   },
   ...compat
-    .extends(
-      '@feature-sliced/eslint-config/rules/public-api',
-      '@feature-sliced/eslint-config/rules/layers-slices',
-    )
+    .extends('@feature-sliced/eslint-config/rules/public-api')
     .map(normalizeCompatConfig),
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    plugins: {
+      boundaries: boundariesPlugin,
+    },
+    settings: {
+      'boundaries/dependency-nodes': ['import'],
+      'boundaries/elements': boundariesElements,
+    },
+    rules: {
+      'boundaries/element-types': 'off',
+      'boundaries/dependencies': [
+        2,
+        {
+          default: 'disallow',
+          message:
+            '"{{from.type}}" is not allowed to import "{{to.type}}" | See rules: https://feature-sliced.design/docs/reference/layers/overview ',
+          rules: [...getNotSharedLayersRules(), ...slicelessLayerRules, ...getGodModeRules()],
+        },
+      ],
+    },
+  },
 ])
