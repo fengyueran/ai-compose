@@ -511,8 +511,31 @@ export function McpPanel({ messageApi }: McpPanelProps) {
                   ? "添加自定义 MCP"
                   : selectedMcpServer?.name}
               </h2>
-              <p className="panel__subtitle">
-                配置并启用 MCP 服务器以扩充模型上下文能力。
+              <p className="panel__subtitle" style={{ display: "inline-flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                <span>配置并启用 MCP 服务器以扩充模型上下文能力。</span>
+                {selectedMcpServerId !== "__new__" && selectedMcpServer?.source === "user" && (
+                  <Tooltip
+                    content="工作台的修改（加入、移除、删除、编辑等）均为临时保存，需点击右侧预览区的“应用配置”按钮后才真正写入到本地配置文件。"
+                    placement="top"
+                    styles={{ overlay: { zIndex: 1400 } }}
+                  >
+                    <span style={{
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      width: "16px",
+                      height: "16px",
+                      borderRadius: "50%",
+                      background: "rgba(255, 140, 0, 0.08)",
+                      color: "var(--accent)",
+                      fontSize: "10px",
+                      lineHeight: 1
+                    }}>
+                      💡
+                    </span>
+                  </Tooltip>
+                )}
               </p>
             </div>
             {selectedMcpServerId !== "__new__" && selectedMcpServer && (
@@ -561,11 +584,7 @@ export function McpPanel({ messageApi }: McpPanelProps) {
               </p>
             )}
 
-            {selectedMcpServerId !== "__new__" && selectedMcpServer?.source === "user" && (
-              <p style={{ margin: "-8px 0 16px 0", fontSize: "12px", color: "var(--text-faint)", background: "rgba(255, 140, 0, 0.04)", border: "1px dashed rgba(255, 140, 0, 0.15)", padding: "8px 12px", borderRadius: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
-                💡 <strong>小提示：</strong> 工作台的修改（加入、移除、删除、编辑等）均为临时保存，需点击右侧预览区的<strong>“应用配置”</strong>按钮后才真正写入到本地配置文件。
-              </p>
-            )}
+
 
             <div className="mcp-form" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
               <div className="mcp-form__field" style={{ display: "flex", flexDirection: "column", gap: "6px" }}>

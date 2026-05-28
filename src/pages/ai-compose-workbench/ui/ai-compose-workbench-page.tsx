@@ -2,6 +2,7 @@ import { Message } from "@xinghunm/compass-ui";
 import { useEffect, useRef } from "react";
 
 import {
+  loadEditorHooksStates,
   loadEditorTargetStates,
   loadEditorMcpStates,
   loadEditorSkillsStates,
@@ -14,6 +15,7 @@ import {
 } from "../../../shared";
 import { PromptPanel } from "../../../widgets/prompt-panel";
 import { McpPanel } from "../../../widgets/mcp-panel";
+import { HooksPanel } from "../../../widgets/hooks-panel";
 import { SkillsPanel } from "../../../widgets/skills-panel";
 import {
   Brand,
@@ -33,6 +35,7 @@ import {
 const configurationDomains = [
   { name: "Prompt", isAvailable: true },
   { name: "MCP", isAvailable: true },
+  { name: "Hooks", isAvailable: true },
   { name: "Skills", isAvailable: true },
   { name: "Profiles", isAvailable: false },
 ] as const;
@@ -51,6 +54,7 @@ export function AiComposeWorkbenchPage() {
     activeEditorId,
     hydratePromptEditorStates,
     hydrateMcpEditorStates,
+    hydrateHooksEditorStates,
     hydrateSkillsEditorStates,
     setEditorHydrationPending,
     setApplyFeedback,
@@ -74,9 +78,10 @@ export function AiComposeWorkbenchPage() {
       }
 
       try {
-        const [nextPromptStates, nextMcpStates, nextSkillsStates] = await Promise.all([
+        const [nextPromptStates, nextMcpStates, nextHooksStates, nextSkillsStates] = await Promise.all([
           loadEditorTargetStates(),
           loadEditorMcpStates(),
+          loadEditorHooksStates(),
           loadEditorSkillsStates(),
         ]);
 
@@ -86,6 +91,7 @@ export function AiComposeWorkbenchPage() {
 
         hydratePromptEditorStates(nextPromptStates);
         hydrateMcpEditorStates(nextMcpStates);
+        hydrateHooksEditorStates(nextHooksStates);
         hydrateSkillsEditorStates(nextSkillsStates);
         setApplyFeedback({
           status: "idle",
@@ -118,6 +124,7 @@ export function AiComposeWorkbenchPage() {
   }, [
     hydratePromptEditorStates,
     hydrateMcpEditorStates,
+    hydrateHooksEditorStates,
     hydrateSkillsEditorStates,
     setApplyFeedback,
     setEditorHydrationPending,
@@ -220,6 +227,8 @@ export function AiComposeWorkbenchPage() {
             <PromptPanel messageApi={messageApi} />
           ) : activeDomain === "MCP" ? (
             <McpPanel messageApi={messageApi} />
+          ) : activeDomain === "Hooks" ? (
+            <HooksPanel messageApi={messageApi} />
           ) : (
             <SkillsPanel messageApi={messageApi} />
           )}

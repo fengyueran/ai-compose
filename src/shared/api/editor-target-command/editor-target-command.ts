@@ -15,6 +15,34 @@ export type EditorTargetState = {
   managedMcpServers?: Record<string, unknown>
 }
 
+export type HookTrigger =
+  | 'before-run'
+  | 'after-run'
+  | 'after-failure'
+  | 'before-commit'
+
+export type HookFailurePolicy = 'block' | 'warn'
+
+export type HookCommand = {
+  id: string
+  command: string
+}
+
+export type HookDefinition = {
+  id: string
+  name: string
+  trigger: HookTrigger
+  failurePolicy: HookFailurePolicy
+  commands: HookCommand[]
+  enabledEditors: Record<EditorId, boolean>
+}
+
+export type HooksConfigState = {
+  hooks: HookDefinition[]
+  targetPaths: Record<EditorId, string>
+  validationErrors: string[]
+}
+
 export type ApplyPromptResult = {
   action: 'removed' | 'unchanged' | 'updated'
   editorId: EditorId
@@ -66,6 +94,17 @@ export type ApplyMcpResult = {
   updatedAt: string
 }
 
+export type ApplyHooksPayload = {
+  hooks: HookDefinition[]
+}
+
+export type ApplyHooksResult = {
+  action: 'removed' | 'unchanged' | 'updated'
+  editorId: EditorId
+  targetPath: string
+  updatedAt: string
+}
+
 export async function applyMcpToEditorTarget(
   payload: ApplyMcpPayload,
 ): Promise<ApplyMcpResult> {
@@ -76,6 +115,18 @@ export async function loadEditorMcpStates(): Promise<
   Record<EditorId, EditorTargetState>
 > {
   return invoke<Record<EditorId, EditorTargetState>>('load_editor_mcp_states')
+}
+
+export async function loadEditorHooksStates(): Promise<
+  HooksConfigState
+> {
+  return invoke<HooksConfigState>('load_editor_hooks_states')
+}
+
+export async function applyHooksToEditorTarget(
+  payload: ApplyHooksPayload,
+): Promise<ApplyHooksResult> {
+  return invoke<ApplyHooksResult>('apply_hooks_to_editor_target', { payload })
 }
 
 export type SkillInfo = {

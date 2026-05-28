@@ -53,4 +53,109 @@ describe('useAiComposeStore', () => {
     expect(currentSkills.some((skill) => skill.id === 'ui-ux-pro-max')).toBe(true)
     expect(currentSkills.every((skill) => skill.isBuiltin)).toBe(true)
   })
+
+  test('addHook creates a shared hook entry and tracks editor toggles per hook', () => {
+    useAiComposeStore.setState({
+      hooksState: {
+        hooks: [
+          {
+            id: 'shared-hook',
+            name: '格式化',
+            trigger: 'after-run',
+            failurePolicy: 'warn',
+            commands: [{ id: 'cmd-1', command: 'prettier --write {{changed_files}}' }],
+            enabledEditors: {
+              antigravity: false,
+              codex: true,
+              cursor: false,
+            },
+          },
+        ],
+        selectedHookId: 'shared-hook',
+        targetPaths: {
+          antigravity: '/Users/test/.gemini/settings.json',
+          codex: '/Users/test/.codex/hooks.json',
+          cursor: '/Users/test/.cursor/hooks.json',
+        },
+        validationErrors: [],
+      },
+      hooksEditorStates: {
+        antigravity: { enabled: false },
+        codex: { enabled: true },
+        cursor: { enabled: false },
+      },
+    })
+
+    const store = useAiComposeStore.getState()
+    store.selectDomain('Hooks')
+    store.addHook()
+    const createdHookId = useAiComposeStore.getState().hooksState.selectedHookId
+    store.toggleHookEditor(createdHookId, 'cursor')
+
+    const nextState = useAiComposeStore.getState()
+    expect(nextState.activeDomain).toBe('Hooks')
+    expect(nextState.editorStates).toEqual(nextState.hooksEditorStates)
+    expect(nextState.hooksState.hooks).toHaveLength(2)
+    expect(
+      nextState.hooksState.hooks.find((hook) => hook.id === createdHookId)?.enabledEditors.cursor,
+    ).toBe(true)
+    expect(
+      nextState.hooksState.hooks.find((hook) => hook.id === 'shared-hook')?.enabledEditors.codex,
+    ).toBe(true)
+  })
+
+  test('deleteHook removes the specified hook from the store', () => {
+    useAiComposeStore.setState({
+      hooksState: {
+        hooks: [
+          {
+            id: 'hook-to-delete',
+            name: '要删除的 Hook',
+            trigger: 'after-run',
+            failurePolicy: 'warn',
+            commands: [{ id: 'cmd-1', command: 'echo "hello"' }],
+            enabledEditors: {
+              antigravity: false,
+              codex: true,
+              cursor: false,
+            },
+          },
+          {
+            id: 'hook-to-keep',
+            name: '保留的 Hook',
+            trigger: 'before-run',
+            failurePolicy: 'block',
+            commands: [{ id: 'cmd-2', command: 'echo "world"' }],
+            enabledEditors: {
+              antigravity: true,
+              codex: false,
+              cursor: false,
+            },
+          },
+        ],
+        selectedHookId: 'hook-to-delete',
+        targetPaths: {
+          antigravity: '/Users/test/.gemini/settings.json',
+          codex: '/Users/test/.codex/hooks.json',
+          cursor: '/Users/test/.cursor/hooks.json',
+        },
+        validationErrors: [],
+      },
+      hooksEditorStates: {
+        antigravity: { enabled: true },
+        codex: { enabled: true },
+        cursor: { enabled: false },
+      },
+    })
+
+    const store = useAiComposeStore.getState()
+    store.deleteHook('hook-to-delete')
+
+    const nextState = useAiComposeStore.getState()
+    expect(nextState.hooksState.hooks).toHaveLength(1)
+    expect(nextState.hooksState.hooks[0].id).toBe('hook-to-keep')
+    expect(nextState.hooksState.selectedHookId).toBe('hook-to-keep')
+    expect(nextState.hooksEditorStates.antigravity.enabled).toBe(true)
+    expect(nextState.hooksEditorStates.codex.enabled).toBe(false)
+  })
 })

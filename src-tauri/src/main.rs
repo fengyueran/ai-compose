@@ -4,9 +4,11 @@ mod prompt;
 mod mcp;
 mod skills;
 mod system;
+mod hooks;
 
 use prompt::{apply_prompt_to_editor_target, load_editor_target_states};
 use mcp::{apply_mcp_to_editor_target, load_editor_mcp_states};
+use hooks::{apply_hooks_to_editor_target, load_editor_hooks_states};
 use skills::{
     load_physical_skills, load_editor_skills_states, load_editor_installed_skills,
     load_skills_from_dir, apply_skills_to_editor_target, unlink_skill_from_editor,
@@ -36,7 +38,9 @@ fn main() {
             reveal_local_path,
             update_skill,
             remove_skill,
-            select_directory
+            select_directory,
+            apply_hooks_to_editor_target,
+            load_editor_hooks_states
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

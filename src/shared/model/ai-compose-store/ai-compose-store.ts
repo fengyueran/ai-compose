@@ -1,6 +1,15 @@
 import { create } from 'zustand'
 
-import type { EditorId, EditorTargetState, SkillInfo, EditorSkillsState, EditorSkillsStates, SkillSource } from '../../api/editor-target-command'
+import type {
+  EditorId,
+  EditorTargetState,
+  HookDefinition,
+  HooksConfigState,
+  SkillInfo,
+  EditorSkillsState,
+  EditorSkillsStates,
+  SkillSource,
+} from '../../api/editor-target-command'
 import {
   type PromptFragment,
   presetPromptFragments,
@@ -80,15 +89,27 @@ type EditorState = {
   enabled: boolean
 }
 
+type HookSummaryState = EditorState
+
+type HooksDomainState = HooksConfigState & {
+  selectedHookId: string
+}
+
 type AiComposeState = {
-  activeDomain: 'Prompt' | 'MCP' | 'Skills'
+  activeDomain: 'Prompt' | 'MCP' | 'Hooks' | 'Skills'
   activeEditorId: EditorId
   applyStatus: ApplyStatus
   applyMessage: string
-  editorStates: Record<EditorId, EditorState> | Record<EditorId, EditorTargetState> | Record<EditorId, EditorSkillsState>
+  editorStates:
+    | Record<EditorId, EditorState>
+    | Record<EditorId, EditorTargetState>
+    | Record<EditorId, HookSummaryState>
+    | Record<EditorId, EditorSkillsState>
   promptEditorStates: Record<EditorId, EditorState>
   mcpEditorStates: Record<EditorId, EditorTargetState>
   mcpEnabledServerIdsByEditor: Record<EditorId, string[]>
+  hooksEditorStates: Record<EditorId, HookSummaryState>
+  hooksState: HooksDomainState
   skillsEditorStates: Record<EditorId, EditorSkillsState>
   isHydratingEditorStates: boolean
   lastAppliedAt: string | null
@@ -106,12 +127,20 @@ type AiComposeState = {
   skillSources: SkillSource[]
   selectedSkillSourceId: string
   
-  selectDomain: (domain: 'Prompt' | 'MCP' | 'Skills') => void
+  selectDomain: (domain: 'Prompt' | 'MCP' | 'Hooks' | 'Skills') => void
   hydratePromptEditorStates: (editorStates: Record<EditorId, EditorTargetState>) => void
   hydrateMcpEditorStates: (editorStates: Record<EditorId, EditorTargetState>) => void
+  hydrateHooksEditorStates: (editorStates: HooksConfigState) => void
   hydrateSkillsEditorStates: (editorStates: EditorSkillsStates) => void
   setEditorHydrationPending: (pending: boolean) => void
   selectEditor: (editorId: EditorId) => void
+  addHook: (hook?: Omit<HookDefinition, 'id'>) => void
+  deleteHook: (hookId: string) => void
+  selectHook: (hookId: string) => void
+  updateHook: (hookId: string, update: Partial<Omit<HookDefinition, 'id'>>) => void
+  updateHookCommand: (hookId: string, commandId: string, command: string) => void
+  addHookCommand: (hookId: string) => void
+  toggleHookEditor: (hookId: string, editorId: EditorId) => void
   selectFragment: (fragmentId: string) => void
   setEditorEnabled: (editorId: EditorId, enabled: boolean) => void
   toggleFragment: (fragmentId: string) => void
@@ -164,6 +193,55 @@ const initialMcpEnabledServerIdsByEditor = {
   cursor: presetMcpServers.filter((server) => server.enabled).map((server) => server.id),
 }
 
+const initialHooksEditorStates = {
+  antigravity: { enabled: false },
+  codex: { enabled: false },
+  cursor: { enabled: false },
+}
+
+const initialHooksState: HooksDomainState = {
+  hooks: [],
+  selectedHookId: '',
+  targetPaths: {
+    antigravity: '',
+    codex: '',
+    cursor: '',
+  },
+  validationErrors: [],
+}
+
+const buildHookSummaryStates = (
+  hooks: HookDefinition[],
+): Record<EditorId, HookSummaryState> => ({
+  antigravity: {
+    enabled: hooks.some((hook) => hook.enabledEditors.antigravity),
+  },
+  codex: {
+    enabled: hooks.some((hook) => hook.enabledEditors.codex),
+  },
+  cursor: {
+    enabled: hooks.some((hook) => hook.enabledEditors.cursor),
+  },
+})
+
+const createDefaultHook = (index: number): HookDefinition => ({
+  id: `hook-${index}`,
+  name: `新 Hook ${index}`,
+  trigger: 'after-run',
+  failurePolicy: 'warn',
+  commands: [
+    {
+      id: `hook-${index}-command-1`,
+      command: '',
+    },
+  ],
+  enabledEditors: {
+    antigravity: false,
+    codex: true,
+    cursor: false,
+  },
+})
+
 const initialSkillsEditorStates = {
   antigravity: { enabled: false, targetPath: '', enabledSkills: [] },
   codex: { enabled: false, targetPath: '', enabledSkills: [] },
@@ -215,6 +293,8 @@ export const useAiComposeStore = create<AiComposeState>(
     promptEditorStates: initialEditorStates,
     mcpEditorStates: initialMcpEditorStates,
     mcpEnabledServerIdsByEditor: initialMcpEnabledServerIdsByEditor,
+    hooksEditorStates: initialHooksEditorStates,
+    hooksState: initialHooksState,
     skillsEditorStates: initialSkillsEditorStates,
     isHydratingEditorStates: true,
     lastAppliedAt: null,
@@ -233,15 +313,18 @@ export const useAiComposeStore = create<AiComposeState>(
     selectedSkillSourceId: 'all',
     
     selectDomain: (domain) => {
-      const { promptEditorStates, mcpEditorStates, skillsEditorStates } = get()
+      const { promptEditorStates, mcpEditorStates, hooksEditorStates, skillsEditorStates } = get()
 
       set({
         activeDomain: domain,
-        editorStates: domain === 'Prompt' 
-          ? promptEditorStates 
-          : domain === 'MCP' 
-          ? mcpEditorStates 
-          : skillsEditorStates,
+        editorStates:
+          domain === 'Prompt'
+            ? promptEditorStates
+            : domain === 'MCP'
+              ? mcpEditorStates
+              : domain === 'Hooks'
+                ? hooksEditorStates
+                : skillsEditorStates,
       })
     },
     
@@ -293,6 +376,25 @@ export const useAiComposeStore = create<AiComposeState>(
       }))
     },
 
+    hydrateHooksEditorStates: (editorStates) => {
+      const nextHooksSummary = buildHookSummaryStates(editorStates.hooks)
+      const nextSelectedHookId = editorStates.hooks.some(
+        (hook) => hook.id === get().hooksState.selectedHookId,
+      )
+        ? get().hooksState.selectedHookId
+        : editorStates.hooks[0]?.id ?? ''
+
+      set((state) => ({
+        hooksEditorStates: nextHooksSummary,
+        hooksState: {
+          ...editorStates,
+          selectedHookId: nextSelectedHookId,
+        },
+        editorStates: state.activeDomain === 'Hooks' ? nextHooksSummary : state.editorStates,
+        isHydratingEditorStates: false,
+      }))
+    },
+
     hydrateSkillsEditorStates: (editorStates) => {
       const nextSkillsStates = {
         antigravity: { ...editorStates.antigravity },
@@ -314,6 +416,138 @@ export const useAiComposeStore = create<AiComposeState>(
       set({
         activeEditorId: editorId,
       })
+    },
+
+    addHook: (hook) => {
+      const { hooksState } = get()
+      let nextHook: HookDefinition
+      if (hook && typeof hook === 'object' && 'name' in hook) {
+        const newId = `hook-${Math.random().toString(36).substring(2, 11)}`
+        nextHook = {
+          ...hook,
+          id: newId,
+        }
+      } else {
+        const nextIndex = hooksState.hooks.length + 1
+        nextHook = createDefaultHook(nextIndex)
+      }
+      const nextHooks = [...hooksState.hooks, nextHook]
+      const nextHooksSummary = buildHookSummaryStates(nextHooks)
+
+      set((state) => ({
+        hooksState: {
+          ...hooksState,
+          hooks: nextHooks,
+          selectedHookId: nextHook.id,
+        },
+        hooksEditorStates: nextHooksSummary,
+        editorStates: state.activeDomain === 'Hooks' ? nextHooksSummary : state.editorStates,
+      }))
+    },
+
+    deleteHook: (hookId) => {
+      const { hooksState } = get()
+      const nextHooks = hooksState.hooks.filter((h) => h.id !== hookId)
+      let nextSelectedId = hooksState.selectedHookId
+      if (hooksState.selectedHookId === hookId) {
+        nextSelectedId = nextHooks[0]?.id ?? ''
+      }
+      const nextHooksSummary = buildHookSummaryStates(nextHooks)
+
+      set((state) => ({
+        hooksState: {
+          ...hooksState,
+          hooks: nextHooks,
+          selectedHookId: nextSelectedId,
+        },
+        hooksEditorStates: nextHooksSummary,
+        editorStates: state.activeDomain === 'Hooks' ? nextHooksSummary : state.editorStates,
+      }))
+    },
+
+    selectHook: (hookId) => {
+      set((state) => ({
+        hooksState: {
+          ...state.hooksState,
+          selectedHookId: hookId,
+        },
+      }))
+    },
+
+    updateHook: (hookId, update) => {
+      set((state) => ({
+        hooksState: {
+          ...state.hooksState,
+          hooks: state.hooksState.hooks.map((hook) =>
+            hook.id === hookId ? { ...hook, ...update } : hook,
+          ),
+        },
+      }))
+    },
+
+    updateHookCommand: (hookId, commandId, command) => {
+      set((state) => ({
+        hooksState: {
+          ...state.hooksState,
+          hooks: state.hooksState.hooks.map((hook) =>
+            hook.id === hookId
+              ? {
+                  ...hook,
+                  commands: hook.commands.map((item) =>
+                    item.id === commandId ? { ...item, command } : item,
+                  ),
+                }
+              : hook,
+          ),
+        },
+      }))
+    },
+
+    addHookCommand: (hookId) => {
+      set((state) => ({
+        hooksState: {
+          ...state.hooksState,
+          hooks: state.hooksState.hooks.map((hook) =>
+            hook.id === hookId
+              ? {
+                  ...hook,
+                  commands: [
+                    ...hook.commands,
+                    {
+                      id: `${hook.id}-command-${hook.commands.length + 1}`,
+                      command: '',
+                    },
+                  ],
+                }
+              : hook,
+          ),
+        },
+      }))
+    },
+
+    toggleHookEditor: (hookId, editorId) => {
+      const { hooksState } = get()
+      const nextHooks = hooksState.hooks.map((hook) =>
+        hook.id === hookId
+          ? {
+              ...hook,
+              enabledEditors: {
+                ...hook.enabledEditors,
+                [editorId]: !hook.enabledEditors[editorId],
+              },
+            }
+          : hook,
+      )
+      const nextHooksSummary = buildHookSummaryStates(nextHooks)
+
+      set((state) => ({
+        hooksState: {
+          ...hooksState,
+          hooks: nextHooks,
+        },
+        hooksEditorStates: nextHooksSummary,
+        editorStates: state.activeDomain === 'Hooks' ? nextHooksSummary : state.editorStates,
+      }))
     },
     
     selectFragment: (fragmentId) => {
@@ -342,6 +576,24 @@ export const useAiComposeStore = create<AiComposeState>(
         set({
           mcpEditorStates: nextMcpStates,
           editorStates: nextMcpStates,
+        })
+      } else if (activeDomain === 'Hooks') {
+        const { hooksState } = get()
+        const nextHooks = hooksState.hooks.map((hook) => ({
+          ...hook,
+          enabledEditors: {
+            ...hook.enabledEditors,
+            [editorId]: enabled,
+          },
+        }))
+        const nextHooksStates = buildHookSummaryStates(nextHooks)
+        set({
+          hooksEditorStates: nextHooksStates,
+          hooksState: {
+            ...hooksState,
+            hooks: nextHooks,
+          },
+          editorStates: nextHooksStates,
         })
       } else {
         const nextSkillsStates = {
