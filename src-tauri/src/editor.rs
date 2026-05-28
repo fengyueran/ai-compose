@@ -34,7 +34,7 @@ pub fn resolve_editor_mcp_path(editor_id: EditorId) -> Result<PathBuf, String> {
 pub fn resolve_editor_hooks_path(editor_id: EditorId) -> Result<PathBuf, String> {
     let home = get_home_dir()?;
     match editor_id {
-        EditorId::Antigravity => Ok(home.join(".gemini").join("antigravity").join("hooks.json")),
+        EditorId::Antigravity => Ok(home.join(".gemini").join("config").join("hooks.json")),
         EditorId::Codex => Ok(home.join(".codex").join("hooks.json")),
         EditorId::Cursor => Ok(home.join(".cursor").join("hooks.json")),
     }
