@@ -87,21 +87,28 @@ export function HooksPanel({ messageApi }: HooksPanelProps) {
         const eventName = triggerToEvent[hook.trigger] || 'PostToolUse'
         const commands = hook.commands.map((command) => command.command).filter(Boolean)
         
-        return commands.map((cmd) => {
-          const lines = [
-            `[[hooks.${eventName}]]`,
-            `# name = ${JSON.stringify(hook.name)}`,
-          ]
-          if (eventName === 'PreToolUse' || eventName === 'PostToolUse') {
-            lines.push(`matcher = "apply_patch|Edit|Write"`)
-          }
-          lines.push(
-            `\n[[hooks.${eventName}.hooks]]`,
+        if (commands.length === 0) return ''
+
+        const headerLines = [
+          `[[hooks.${eventName}]]`,
+          `# name = ${JSON.stringify(hook.name)}`,
+        ]
+        if (eventName === 'PreToolUse' || eventName === 'PostToolUse') {
+          headerLines.push(`matcher = "apply_patch|Edit|Write"`)
+        }
+
+        const hooksLines = commands.map((cmd) => {
+          const formattedCmd = cmd.includes("'")
+            ? JSON.stringify(cmd)
+            : `'${cmd}'`
+          return [
+            `[[hooks.${eventName}.hooks]]`,
             `type = "command"`,
-            `command = ${JSON.stringify(cmd)}`
-          )
-          return lines.join('\n')
+            `command = ${formattedCmd}`
+          ].join('\n')
         }).join('\n\n')
+
+        return `${headerLines.join('\n')}\n\n${hooksLines}`
       })
       .filter(Boolean)
       .join('\n\n')
