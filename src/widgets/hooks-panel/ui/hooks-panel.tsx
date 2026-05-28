@@ -70,11 +70,7 @@ export function HooksPanel({ messageApi }: HooksPanelProps) {
     [previewHooks],
   )
 
-  const generatedHooksToml = useMemo(() => {
-    if (previewHooks.length === 0) {
-      return '# 还没有启用任何 Hook'
-    }
-
+  const generatedCodexHooksJson = useMemo(() => {
     const triggerToEvent: Record<HookTrigger, string> = {
       'before-run': 'PreToolUse',
       'after-run': 'PostToolUse',
@@ -82,36 +78,33 @@ export function HooksPanel({ messageApi }: HooksPanelProps) {
       'before-commit': 'Stop',
     }
 
-    return previewHooks
-      .map((hook) => {
-        const eventName = triggerToEvent[hook.trigger] || 'PostToolUse'
-        const commands = hook.commands.map((command) => command.command).filter(Boolean)
-        
-        if (commands.length === 0) return ''
+    const codexHooks: Record<string, any> = {}
 
-        const headerLines = [
-          `[[hooks.${eventName}]]`,
-          `# name = ${JSON.stringify(hook.name)}`,
-        ]
-        if (eventName === 'PreToolUse' || eventName === 'PostToolUse') {
-          headerLines.push(`matcher = "apply_patch|Edit|Write"`)
-        }
+    previewHooks.forEach((hook) => {
+      const eventName = triggerToEvent[hook.trigger] || 'PostToolUse'
+      const commands = hook.commands.map((cmd) => cmd.command).filter(Boolean)
+      if (commands.length === 0) return
 
-        const hooksLines = commands.map((cmd) => {
-          const formattedCmd = cmd.includes("'")
-            ? JSON.stringify(cmd)
-            : `'${cmd}'`
-          return [
-            `[[hooks.${eventName}.hooks]]`,
-            `type = "command"`,
-            `command = ${formattedCmd}`
-          ].join('\n')
-        }).join('\n\n')
+      if (!codexHooks[eventName]) {
+        codexHooks[eventName] = []
+      }
 
-        return `${headerLines.join('\n')}\n\n${hooksLines}`
+      const matcher = (eventName === 'PreToolUse' || eventName === 'PostToolUse')
+        ? 'apply_patch|Edit|Write'
+        : '*'
+
+      const handlers = commands.map((cmd) => ({
+        type: 'command',
+        command: cmd,
+      }))
+
+      codexHooks[eventName].push({
+        matcher,
+        hooks: handlers,
       })
-      .filter(Boolean)
-      .join('\n\n')
+    })
+
+    return JSON.stringify({ hooks: codexHooks }, null, 2)
   }, [previewHooks])
 
   // 表单本地状态
@@ -594,7 +587,7 @@ export function HooksPanel({ messageApi }: HooksPanelProps) {
                 最终 Hooks 配置预览
               </h2>
               <p className="panel__subtitle">
-                可按编辑器切换预览不同的最终配置结果，Codex 使用 TOML，其他编辑器使用 JSON。
+                可按编辑器切换预览不同的最终配置结果。
               </p>
             </div>
             <div className="hooks-preview__switcher" style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "8px" }}>
@@ -631,7 +624,7 @@ export function HooksPanel({ messageApi }: HooksPanelProps) {
               </p>
             ) : (
               <pre id="hooks-preview-code" className="hooks-preview__code" style={{ marginTop: 0 }}>
-                <code>{previewEditorId === 'codex' ? generatedHooksToml : generatedHooksJson}</code>
+                <code>{previewEditorId === 'codex' ? generatedCodexHooksJson : generatedHooksJson}</code>
               </pre>
             )}
           </div>
