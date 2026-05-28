@@ -52,15 +52,26 @@ describe('App MCP domain', () => {
     expect(screen.getByText(/\[mcp_servers\.memory\]/)).toBeInTheDocument()
   })
 
-  test('switches MCP preview format when selecting another editor inside the domain', async () => {
+  test('switches preview output with editor tabs inside the MCP domain', async () => {
     render(<App />)
 
     await userEvent.click(screen.getByRole('button', { name: 'MCP' }))
 
     const previewPanel = screen.getByText('最终 MCP 配置预览').closest('section')!
-    await userEvent.click(within(previewPanel).getByRole('button', { name: /Cursor/ }))
+    const previewTabs = within(previewPanel).getByRole('tablist', {
+      name: 'MCP 预览编辑器切换',
+    })
 
-    expect(screen.getByText(/最终 MCP 配置/)).toBeInTheDocument()
+    const codexTab = within(previewTabs).getByRole('tab', { name: 'Codex' })
+    const cursorTab = within(previewTabs).getByRole('tab', { name: 'Cursor' })
+
+    expect(codexTab).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByText(/\[mcp_servers\]/)).toBeInTheDocument()
+
+    await userEvent.click(cursorTab)
+
+    expect(cursorTab).toHaveAttribute('aria-selected', 'true')
+    expect(codexTab).toHaveAttribute('aria-selected', 'false')
     expect(screen.getByText(/"mcpServers"/)).toBeInTheDocument()
   })
 

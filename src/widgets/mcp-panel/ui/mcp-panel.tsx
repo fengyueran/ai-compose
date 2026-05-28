@@ -46,21 +46,22 @@ export function McpPanel({ messageApi }: McpPanelProps) {
     addMcpServer,
     updateMcpServer,
     deleteMcpServer,
-    selectEditor,
   } = useAiComposeStore();
+
+  const [previewEditorId, setPreviewEditorId] = useState<EditorId>(activeEditorId);
 
   const selectedMcpServer =
     mcpServers.find((server) => server.id === selectedMcpServerId) ??
     mcpServers[0];
 
-  const activeEnabledMcpIds = useMemo(
-    () => mcpEnabledServerIdsByEditor[activeEditorId] ?? [],
-    [mcpEnabledServerIdsByEditor, activeEditorId],
+  const previewEnabledMcpIds = useMemo(
+    () => mcpEnabledServerIdsByEditor[previewEditorId] ?? [],
+    [mcpEnabledServerIdsByEditor, previewEditorId],
   );
 
-  const enabledMcp = useMemo(
-    () => mcpServers.filter((server) => activeEnabledMcpIds.includes(server.id)),
-    [mcpServers, activeEnabledMcpIds],
+  const previewEnabledMcp = useMemo(
+    () => mcpServers.filter((server) => previewEnabledMcpIds.includes(server.id)),
+    [mcpServers, previewEnabledMcpIds],
   );
 
   const generatedMcpJson = useMemo(() => {
@@ -74,7 +75,7 @@ export function McpPanel({ messageApi }: McpPanelProps) {
         env?: Record<string, string>;
       }
     > = {};
-    enabledMcp.forEach((server) => {
+    previewEnabledMcp.forEach((server) => {
       if (server.transportType === "http") {
         mcpServersObj[server.name] = {
           type: server.type || "streamable_http",
@@ -96,13 +97,13 @@ export function McpPanel({ messageApi }: McpPanelProps) {
       }
     });
     return JSON.stringify({ mcpServers: mcpServersObj }, null, 2);
-  }, [enabledMcp]);
+  }, [previewEnabledMcp]);
 
   const generatedMcpToml = useMemo(() => {
     let tomlStr = "";
-    if (enabledMcp.length > 0) {
+    if (previewEnabledMcp.length > 0) {
       tomlStr += "[mcp_servers]\n";
-      enabledMcp.forEach((server) => {
+      previewEnabledMcp.forEach((server) => {
         tomlStr += `\n[mcp_servers.${server.name}]\n`;
         if (server.transportType === "http") {
           tomlStr += `type = "${server.type || "streamable_http"}"\n`;
@@ -126,7 +127,7 @@ export function McpPanel({ messageApi }: McpPanelProps) {
       tomlStr += "# 还没有启用任何 MCP 服务";
     }
     return tomlStr.trim();
-  }, [enabledMcp]);
+  }, [previewEnabledMcp]);
 
   const [pendingMcpToggleKey, setPendingMcpToggleKey] = useState<string | null>(null);
 
@@ -784,47 +785,84 @@ export function McpPanel({ messageApi }: McpPanelProps) {
           className="panel preview-card"
           aria-labelledby="preview-title"
         >
-          <div className="panel__header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
+          <div className="panel__header" style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: "14px" }}>
             <div>
               <h2 className="panel__title" id="preview-title">
                 最终 MCP 配置预览
               </h2>
               <p className="panel__subtitle">
-                右侧始终展示当前启用 MCP 服务的最终 {activeEditorId === "codex" ? "TOML" : "JSON"} 配置。
+                可按编辑器切换预览不同的最终配置结果，Codex 使用 TOML，其他编辑器使用 JSON。
               </p>
             </div>
-            <div className="preview-card__editor-toggles">
-              {editorIds.map((editorId) => {
-                return (
-                  <Tooltip
-                    key={`preview-toggle-${editorId}`}
-                    content={editorMeta[editorId].title}
-                    placement="top"
-                    styles={{ overlay: { zIndex: 1400 } }}
-                  >
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "flex-start",
+                gap: "8px",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: "12px",
+                  color: "var(--text-faint)",
+                  fontWeight: 500,
+                }}
+              >
+                当前预览
+              </span>
+              <div
+                role="tablist"
+                aria-label="MCP 预览编辑器切换"
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  justifyContent: "flex-start",
+                  gap: "8px",
+                }}
+              >
+                {editorIds.map((editorId) => {
+                  const isSelected = previewEditorId === editorId;
+                  return (
                     <button
-                      aria-label={editorMeta[editorId].title}
-                      className={`editor-icon-toggle${activeEditorId === editorId ? " editor-icon-toggle--active" : ""}`}
-                      onClick={() => {
-                        selectEditor(editorId);
-                      }}
+                      key={`preview-tab-${editorId}`}
+                      role="tab"
+                      aria-selected={isSelected}
+                      aria-controls="mcp-preview-code"
                       type="button"
+                      onClick={() => setPreviewEditorId(editorId)}
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: "999px",
+                        border: isSelected
+                          ? "1px solid rgba(197, 93, 51, 0.28)"
+                          : "1px solid rgba(82, 63, 41, 0.1)",
+                        background: isSelected
+                          ? "rgba(255, 247, 240, 0.96)"
+                          : "rgba(255, 255, 255, 0.5)",
+                        color: isSelected ? "var(--accent-strong)" : "var(--text-soft)",
+                        fontSize: "12px",
+                        fontWeight: isSelected ? 600 : 500,
+                        cursor: "pointer",
+                        transition: "all 180ms ease",
+                      }}
                     >
-                      <EditorToggleIcon editorId={editorId} />
+                      {editorMeta[editorId].title}
                     </button>
-                  </Tooltip>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           </div>
 
           <div className="preview-card__body" style={{ padding: "0 16px 16px 16px" }}>
-            {enabledMcp.length === 0 ? (
+            {previewEnabledMcp.length === 0 ? (
               <p className="preview-card__empty">
-                还没有启用任何 MCP 服务。请先从中间工作区选择要纳入的配置。
+                {editorMeta[previewEditorId].title} 当前还没有启用任何 MCP 服务。请先在中间工作区开启后再查看。
               </p>
             ) : (
               <pre
+                id="mcp-preview-code"
                 style={{
                   background: "rgba(0, 0, 0, 0.2)",
                   padding: "12px",
@@ -837,7 +875,7 @@ export function McpPanel({ messageApi }: McpPanelProps) {
                   lineHeight: 1.5,
                 }}
               >
-                <code>{activeEditorId === "codex" ? generatedMcpToml : generatedMcpJson}</code>
+                <code>{previewEditorId === "codex" ? generatedMcpToml : generatedMcpJson}</code>
               </pre>
             )}
           </div>
