@@ -10,6 +10,8 @@ import {
 } from "../../../shared";
 
 export const PromptPanelRoot = styled.div`
+  display: contents;
+
   ${workbenchStyles}
   ${panelStyles}
   ${chipStyles}

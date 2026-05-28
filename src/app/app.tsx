@@ -1,5 +1,5 @@
-import { PromptWorkbenchPage } from '../pages/prompt-workbench'
+import { AiComposeWorkbenchPage } from '../pages/ai-compose-workbench'
 
 export function App() {
-  return <PromptWorkbenchPage />
+  return <AiComposeWorkbenchPage />
 }

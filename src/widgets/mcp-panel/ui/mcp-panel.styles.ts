@@ -11,6 +11,8 @@ import {
 } from "../../../shared";
 
 export const McpPanelRoot = styled.div`
+  display: contents;
+
   ${workbenchStyles}
   ${panelStyles}
   ${actionButtonStyles}

@@ -31,7 +31,7 @@ import {
   StatusChip,
   StatusChipLabel,
   WorkspaceGrid,
-} from "./prompt-workbench.styles";
+} from "./ai-compose-workbench-page.styles";
 
 const configurationDomains = [
   { name: "Prompt", isAvailable: true },
@@ -40,7 +40,7 @@ const configurationDomains = [
   { name: "Profiles", isAvailable: false },
 ] as const;
 
-export function PromptWorkbenchPage() {
+export function AiComposeWorkbenchPage() {
   const [messageApi, messageContextHolder] = Message.useMessage();
   const messageApiRef = useRef(messageApi);
 
