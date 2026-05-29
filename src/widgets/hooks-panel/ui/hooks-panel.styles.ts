@@ -117,6 +117,15 @@ export const HooksPanelRoot = styled.div`
     font-size: 0.9rem;
   }
 
+  .hooks-input:disabled,
+  .hooks-select:disabled,
+  .hooks-textarea:disabled {
+    background: rgba(0, 0, 0, 0.05);
+    color: var(--text-faint);
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+
   .hooks-textarea {
     min-height: 92px;
     resize: vertical;
