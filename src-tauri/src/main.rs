@@ -48,6 +48,7 @@ fn main() {
             remove_skill,
             select_directory,
             apply_hooks_to_editor_target,
+            load_editor_hooks_states,
             load_editor_accounts,
             save_current_editor_account,
             switch_editor_account,
