@@ -93,6 +93,22 @@ fn resolve_auth_file_path(
     }
 }
 
+#[derive(Deserialize)]
+struct CodexAuthTokens {
+    account_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct CodexAuthFile {
+    tokens: Option<CodexAuthTokens>,
+}
+
+fn get_codex_account_id(path: &Path) -> Option<String> {
+    let content = std::fs::read_to_string(path).ok()?;
+    let auth: CodexAuthFile = serde_json::from_str(&content).ok()?;
+    auth.tokens.and_then(|t| t.account_id)
+}
+
 // 内部实现，接受 custom_home 方便 TDD
 pub fn load_accounts_impl(
     editor_id: EditorId,
@@ -105,20 +121,90 @@ pub fn load_accounts_impl(
         return Ok(Vec::new());
     }
 
-    // 读取活跃账号标记（格式: "name:size"），用文件大小做快速核验
-    // 若当前凭证文件大小与记录不符，说明用户已在编辑器里换了账号，标记失效
-    let active_name: Option<String> = (|| -> Option<String> {
-        let marker_content = std::fs::read_to_string(active_marker_path(parent_dir, &prefix)).ok()?;
-        let marker_content = marker_content.trim();
-        let (name, saved_size_str) = marker_content.split_once(':')?;
-        let saved_size: u64 = saved_size_str.parse().ok()?;
-        let current_size = std::fs::metadata(&auth_file).ok()?.len();
-        if current_size == saved_size {
-            Some(name.to_string())
-        } else {
-            None // 大小不符，用户已换账号，标记作废
+    let marker_path = active_marker_path(parent_dir, &prefix);
+    let mut active_name: Option<String> = None;
+
+    if marker_path.exists() {
+        if let Ok(marker_content) = std::fs::read_to_string(&marker_path) {
+            let marker_content = marker_content.trim();
+            if let Some((name, saved_size_str)) = marker_content.split_once(':') {
+                if let Ok(saved_size) = saved_size_str.parse::<u64>() {
+                    let current_size = std::fs::metadata(&auth_file).map(|m| m.len()).unwrap_or(0);
+                    if editor_id == EditorId::Cursor {
+                        // 对于 Cursor，不进行大小校验，只要标记存在，就信任标记账号
+                        // 这样能有效避免因 Cursor 运行时频繁写入 state.vscdb 导致激活态自动失效
+                        active_name = Some(name.to_string());
+                    } else if current_size == saved_size {
+                        active_name = Some(name.to_string());
+                    } else {
+                        // 对于 Codex，如果大小不一致，我们解析 account_id 进行深度校验
+                        // 这样即使 Token 刷新导致大小改变，只要账号一致依然保持激活
+                        let backup_file = parent_dir.join(format!("{}-{}.{}", prefix, name, ext));
+                        let current_id = get_codex_account_id(&auth_file);
+                        let backup_id = get_codex_account_id(&backup_file);
+                        if current_id.is_some() && current_id == backup_id {
+                            active_name = Some(name.to_string());
+                            // 顺便把新的大小写回标记文件，加速下一次 load
+                            let _ = std::fs::write(&marker_path, format!("{}:{}", name, current_size));
+                        }
+                    }
+                }
+            }
         }
-    })();
+    }
+
+    // Fallback 机制：如果仍然没有识别出激活账号，且当前凭证文件存在
+    if active_name.is_none() && auth_file.exists() {
+        if let Ok(entries) = std::fs::read_dir(parent_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if !path.is_file() {
+                    continue;
+                }
+                let file_name = path.file_name().unwrap_or_default().to_string_lossy();
+                if file_name.starts_with(&format!("{}-", prefix)) && file_name.ends_with(&format!(".{}", ext)) {
+                    let name_part = &file_name[prefix.len() + 1..file_name.len() - ext.len() - 1];
+                    if !is_safe_account_name(name_part) {
+                        continue;
+                    }
+
+                    let current_size = std::fs::metadata(&auth_file).map(|m| m.len()).unwrap_or(0);
+                    let backup_size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+
+                    let mut matched = false;
+                    if editor_id == EditorId::Codex {
+                        // Codex 深度匹配：先比对大小和哈希，如果对不上，再比对 account_id
+                        if current_size == backup_size {
+                            if let (Ok(c1), Ok(c2)) = (std::fs::read(&auth_file), std::fs::read(&path)) {
+                                matched = c1 == c2;
+                            }
+                        }
+                        if !matched {
+                            let current_id = get_codex_account_id(&auth_file);
+                            let backup_id = get_codex_account_id(&path);
+                            if current_id.is_some() && current_id == backup_id {
+                                matched = true;
+                            }
+                        }
+                    } else if editor_id == EditorId::Cursor {
+                        // Cursor 快速匹配：如果大小和内容哈希一致
+                        if current_size == backup_size {
+                            if let (Ok(c1), Ok(c2)) = (std::fs::read(&auth_file), std::fs::read(&path)) {
+                                matched = c1 == c2;
+                            }
+                        }
+                    }
+
+                    if matched {
+                        active_name = Some(name_part.to_string());
+                        // 写入标记文件以供后续快速使用
+                        let _ = std::fs::write(&marker_path, format!("{}:{}", name_part, current_size));
+                        break;
+                    }
+                }
+            }
+        }
+    }
 
     let mut accounts = Vec::new();
     let entries = std::fs::read_dir(parent_dir)
@@ -444,4 +530,59 @@ mod tests {
 
         fs::remove_dir_all(root).unwrap();
     }
+
+    #[test]
+    fn test_codex_active_fallback_and_token_refresh() {
+        let root = unique_test_dir("codex-fallback");
+        let codex_dir = root.join(".codex");
+        fs::create_dir_all(&codex_dir).unwrap();
+
+        let auth_path = codex_dir.join("auth.json");
+        let work_path = codex_dir.join("auth-work.json");
+
+        // 1. 初始化账号信息（相同的 account_id）
+        let initial_auth = "{\"tokens\":{\"account_id\":\"user_123\"}}";
+        fs::write(&auth_path, initial_auth).unwrap();
+        fs::write(&work_path, initial_auth).unwrap();
+
+        // 2. 在没有 .auth.active 标记文件时加载，应该通过 Fallback 识别出 work 为激活
+        let accounts = load_accounts_impl(EditorId::Codex, Some(&root)).unwrap();
+        assert_eq!(accounts.len(), 1);
+        assert_eq!(accounts[0].name, "work");
+        assert!(accounts[0].is_active);
+
+        // 此时标记文件应该已被 Fallback 机制自动创建
+        let marker_path = codex_dir.join(".auth.active");
+        assert!(marker_path.exists());
+        let marker_content = fs::read_to_string(&marker_path).unwrap();
+        assert!(marker_content.starts_with("work:"));
+
+        // 3. 模拟 Token 刷新，导致内容和文件大小都变了，但 account_id 保持不变
+        let refreshed_auth = "{\"tokens\":{\"account_id\":\"user_123\",\"access_token\":\"new_refreshed_token_xyz_longer_content\"}}";
+        fs::write(&auth_path, refreshed_auth).unwrap();
+
+        // 4. 加载账号，即使大小和哈希变了，由于 account_id 相同，依然判定为激活
+        let accounts = load_accounts_impl(EditorId::Codex, Some(&root)).unwrap();
+        assert_eq!(accounts.len(), 1);
+        assert_eq!(accounts[0].name, "work");
+        assert!(accounts[0].is_active);
+
+        // 并且标记文件里的大小应该已被自动更新为当前最新大小
+        let new_size = fs::metadata(&auth_path).unwrap().len();
+        let marker_content = fs::read_to_string(&marker_path).unwrap();
+        assert_eq!(marker_content, format!("work:{}", new_size));
+
+        // 5. 模拟用户真正换了账号（登录了新账号，account_id 改变）
+        let user2_auth = "{\"tokens\":{\"account_id\":\"user_456\"}}";
+        fs::write(&auth_path, user2_auth).unwrap();
+
+        // 6. 加载账号，此时应该不再是 work 激活了
+        let accounts = load_accounts_impl(EditorId::Codex, Some(&root)).unwrap();
+        assert_eq!(accounts.len(), 1);
+        assert_eq!(accounts[0].name, "work");
+        assert!(!accounts[0].is_active);
+
+        fs::remove_dir_all(root).unwrap();
+    }
 }
+
