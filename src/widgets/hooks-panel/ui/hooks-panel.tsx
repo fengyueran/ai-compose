@@ -60,11 +60,12 @@ function createHookFormState(
   } | null,
 ): HookFormState {
   if (selectedHook && selectedHookId !== '__new__') {
+    const mode = selectedHook.mode || 'raw';
     return {
       sourceId: selectedHookId,
       name: selectedHook.name || '',
-      trigger: selectedHook.trigger || 'after-run',
-      mode: selectedHook.mode || 'raw',
+      trigger: mode === 'format-template' ? 'before-commit' : (selectedHook.trigger || 'after-run'),
+      mode,
       formatCommand: selectedHook.formatCommand || '',
       commands: selectedHook.commands || [],
     };
@@ -599,7 +600,7 @@ export function HooksPanel({ messageApi }: HooksPanelProps) {
                           mode: event.target.value as HookMode,
                           trigger:
                             event.target.value === 'format-template'
-                              ? 'after-run'
+                              ? 'before-commit'
                               : formState.trigger,
                         })
                       }
