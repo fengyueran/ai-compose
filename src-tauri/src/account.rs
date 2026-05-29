@@ -304,6 +304,23 @@ pub fn switch_account_impl(
         return Err(format!("未找到名为 '{}' 的账号凭证备份。", name));
     }
 
+    // 在覆盖前，若当前存在活跃账号标记，自动将当前正在被替换的原凭据文件静默同步归档回其对应的备份中
+    // 这样能够保证当前账号的最新凭证（如自动刷新后的 Token 或 Cursor 聊天记录等）在切走时不丢失，防止切回时由于使用过期/已使用过的 Token 导致失效
+    let marker_path = active_marker_path(parent_dir, &prefix);
+    if marker_path.exists() && auth_file.exists() {
+        if let Ok(marker_content) = std::fs::read_to_string(&marker_path) {
+            let marker_content = marker_content.trim();
+            if let Some((active_name, _)) = marker_content.split_once(':') {
+                if is_safe_account_name(active_name) && active_name != name {
+                    let active_backup = parent_dir.join(format!("{}-{}.{}", prefix, active_name, ext));
+                    if active_backup.exists() {
+                        let _ = std::fs::copy(&auth_file, &active_backup);
+                    }
+                }
+            }
+        }
+    }
+
     // 覆盖目标原文件
     std::fs::copy(&src_file, &auth_file)
         .map_err(|err| format!("恢复账号凭证失败: {}", err))?;
@@ -481,10 +498,17 @@ mod tests {
         assert!(!work_acct.is_active);
         assert!(pers_acct.is_active);
 
+        // 8.5 模拟 personal 在运行期间刷新了 Token 导致内容变动
+        fs::write(&auth_path, "token-personal-refreshed-999").unwrap();
+
         // 9. 切换回 "work"
         switch_account_impl(EditorId::Codex, "work".to_string(), Some(&root)).unwrap();
         let current_token = fs::read_to_string(&auth_path).unwrap();
         assert_eq!(current_token, "token-work-123");
+
+        // 验证 personal 的备份文件自动静默同步归档了刷新后的 Token
+        let personal_backup_content = fs::read_to_string(codex_dir.join("auth-personal.json")).unwrap();
+        assert_eq!(personal_backup_content, "token-personal-refreshed-999");
 
         // 10. 验证切换后列表里 "work" 重新变成活跃
         let accounts = load_accounts_impl(EditorId::Codex, Some(&root)).unwrap();
