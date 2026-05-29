@@ -60,12 +60,11 @@ function createHookFormState(
   } | null,
 ): HookFormState {
   if (selectedHook && selectedHookId !== '__new__') {
-    const mode = selectedHook.mode || 'raw';
     return {
       sourceId: selectedHookId,
       name: selectedHook.name || '',
-      trigger: mode === 'format-template' ? 'before-commit' : (selectedHook.trigger || 'after-run'),
-      mode,
+      trigger: selectedHook.trigger || 'after-run',
+      mode: selectedHook.mode || 'raw',
       formatCommand: selectedHook.formatCommand || '',
       commands: selectedHook.commands || [],
     };
@@ -124,8 +123,7 @@ export function HooksPanel({ messageApi }: HooksPanelProps) {
         ? {
             ...hook,
             name: formName,
-            trigger:
-              formMode === 'format-template' ? 'before-commit' : formTrigger,
+            trigger: formTrigger,
             mode: formMode,
             formatCommand:
               formMode === 'format-template' ? formFormatCommand : undefined,
@@ -235,7 +233,7 @@ export function HooksPanel({ messageApi }: HooksPanelProps) {
     if (hooksState.selectedHookId === '__new__') {
       const newHookPayload = {
         name: formName.trim(),
-        trigger: formMode === 'format-template' ? 'before-commit' : formTrigger,
+        trigger: formTrigger,
         mode: formMode,
         formatCommand:
           formMode === 'format-template' ? trimmedFormatCommand : undefined,
@@ -281,7 +279,7 @@ export function HooksPanel({ messageApi }: HooksPanelProps) {
 
       updateHook(selectedHook.id, {
         name: formName.trim(),
-        trigger: formMode === 'format-template' ? 'before-commit' : formTrigger,
+        trigger: formTrigger,
         mode: formMode,
         formatCommand:
           formMode === 'format-template' ? trimmedFormatCommand : undefined,
@@ -616,7 +614,6 @@ export function HooksPanel({ messageApi }: HooksPanelProps) {
                     <span className="hooks-field__label">触发点</span>
                     <select
                       className="hooks-select"
-                      disabled={formMode === 'format-template'}
                       onChange={(event) =>
                         setDraftFormState({
                           ...formState,
