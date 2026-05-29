@@ -16,7 +16,10 @@ use skills::{
     link_skill_to_editor, load_single_skill_command, add_skills_repository,
     update_skill, remove_skill,
 };
-use system::{open_external_url, open_local_path, reveal_local_path, select_directory};
+use system::{
+    open_external_url, open_local_path, reveal_local_path, select_directory,
+    export_configuration, import_configuration,
+};
 use account::{
     load_editor_accounts, save_current_editor_account,
     switch_editor_account, delete_editor_account,
@@ -48,7 +51,9 @@ fn main() {
             load_editor_accounts,
             save_current_editor_account,
             switch_editor_account,
-            delete_editor_account
+            delete_editor_account,
+            export_configuration,
+            import_configuration
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

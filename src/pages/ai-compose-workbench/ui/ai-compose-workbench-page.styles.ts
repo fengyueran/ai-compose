@@ -1,4 +1,4 @@
-import styled from "@emotion/styled";
+import styled from '@emotion/styled';
 
 export const PageShell = styled.div`
   min-height: 100dvh;
@@ -68,7 +68,7 @@ export const Brand = styled.div`
 export const BrandTitle = styled.h1`
   margin: 0;
   font-family:
-    "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif;
+    'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
   font-size: clamp(1.8rem, 3vw, 2.9rem);
   line-height: 0.96;
   letter-spacing: -0.04em;
@@ -136,22 +136,21 @@ export const SideNavItem = styled.button<{
   min-height: 48px;
   padding: 0 14px;
   border: 1px solid
-    ${({ isActive }) =>
-      isActive ? "rgba(197, 93, 51, 0.18)" : "transparent"};
+    ${({ isActive }) => (isActive ? 'rgba(197, 93, 51, 0.18)' : 'transparent')};
   border-radius: var(--radius-md);
   background: ${({ isActive, isDisabled }) =>
     isActive
-      ? "var(--accent-soft)"
+      ? 'var(--accent-soft)'
       : isDisabled
-        ? "rgba(255, 255, 255, 0.3)"
-        : "transparent"};
+        ? 'rgba(255, 255, 255, 0.3)'
+        : 'transparent'};
   color: ${({ isActive, isDisabled }) =>
     isActive
-      ? "var(--accent-strong)"
+      ? 'var(--accent-strong)'
       : isDisabled
-        ? "var(--text-faint)"
-        : "var(--text-main)"};
-  cursor: ${({ isDisabled }) => (isDisabled ? "not-allowed" : "pointer")};
+        ? 'var(--text-faint)'
+        : 'var(--text-main)'};
+  cursor: ${({ isDisabled }) => (isDisabled ? 'not-allowed' : 'pointer')};
   transition:
     background-color 180ms ease,
     border-color 180ms ease,
@@ -161,16 +160,16 @@ export const SideNavItem = styled.button<{
   &:hover {
     border-color: ${({ isDisabled, isActive }) =>
       isDisabled
-        ? "transparent"
+        ? 'transparent'
         : isActive
-          ? "rgba(197, 93, 51, 0.18)"
-          : "var(--panel-border)"};
+          ? 'rgba(197, 93, 51, 0.18)'
+          : 'var(--panel-border)'};
     background: ${({ isDisabled, isActive }) =>
       isDisabled
-        ? "rgba(255, 255, 255, 0.3)"
+        ? 'rgba(255, 255, 255, 0.3)'
         : isActive
-          ? "var(--accent-soft)"
-          : "rgba(255, 255, 255, 0.48)"};
+          ? 'var(--accent-soft)'
+          : 'rgba(255, 255, 255, 0.48)'};
   }
 
   &:focus-visible {
@@ -182,4 +181,48 @@ export const SideNavItem = styled.button<{
 export const DisabledTag = styled.span`
   font-size: 0.78rem;
   color: var(--text-faint);
+`;
+
+export const ActionContainer = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  @media (max-width: 960px) {
+    justify-content: flex-end;
+    margin-top: 8px;
+  }
+`;
+
+export const ActionBtn = styled.button`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 0 16px;
+  font-size: 0.88rem;
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--text-main);
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  transition: all 180ms ease;
+
+  &:hover {
+    background: #ffffff;
+    border-color: var(--accent-strong);
+    color: var(--accent-strong);
+    box-shadow: 0 4px 12px rgba(197, 93, 51, 0.08);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent-strong);
+    outline-offset: 1px;
+  }
+
+  &:active {
+    transform: scale(0.98);
+  }
 `;

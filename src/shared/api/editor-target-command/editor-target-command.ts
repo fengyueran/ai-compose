@@ -331,3 +331,11 @@ export function deleteEditorAccount(
 ): Promise<void> {
   return invoke<void>('delete_editor_account', { editorId, name });
 }
+
+export function exportConfiguration(content: string): Promise<void> {
+  return invoke<void>('export_configuration', { content });
+}
+
+export function importConfiguration(): Promise<string> {
+  return invoke<string>('import_configuration');
+}

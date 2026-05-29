@@ -124,3 +124,34 @@ pub fn select_directory() -> Result<String, String> {
         Err("当前系统不支持原生文件夹选择器，请手动输入路径。".to_string())
     }
 }
+
+#[tauri::command]
+pub fn export_configuration(content: String) -> Result<(), String> {
+    let file_path = rfd::FileDialog::new()
+        .add_filter("JSON Configuration", &["json"])
+        .set_file_name("ai-compose-config.json")
+        .save_file();
+    
+    if let Some(path) = file_path {
+        std::fs::write(&path, content)
+            .map_err(|e| format!("写入配置文件失败：{e}"))?;
+        Ok(())
+    } else {
+        Err("用户取消了保存文件".to_string())
+    }
+}
+
+#[tauri::command]
+pub fn import_configuration() -> Result<String, String> {
+    let file_path = rfd::FileDialog::new()
+        .add_filter("JSON Configuration", &["json"])
+        .pick_file();
+    
+    if let Some(path) = file_path {
+        let content = std::fs::read_to_string(&path)
+            .map_err(|e| format!("读取配置文件失败：{e}"))?;
+        Ok(content)
+    } else {
+        Err("用户取消了选择文件".to_string())
+    }
+}
