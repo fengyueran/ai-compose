@@ -31,6 +31,7 @@ vi.mock('../shared/api/editor-target-command', async () => {
     ...actual,
     loadEditorInstalledSkills: vi.fn(),
     loadEditorMcpStates: vi.fn(),
+    loadEditorHooksStates: vi.fn(),
     loadEditorSkillsStates: vi.fn(),
     loadEditorTargetStates: vi.fn(),
     loadPhysicalSkills: vi.fn(),

@@ -11,7 +11,19 @@ import {
 } from "../../../shared";
 
 export const McpPanelRoot = styled.div`
-  display: contents;
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(340px, 0.9fr);
+  gap: 18px;
+  align-items: stretch;
+  height: 100%;
+  min-height: 0;
+  flex: 1;
+
+  @media (max-width: 1280px) {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+    overflow-y: auto;
+  }
 
   ${workbenchStyles}
   ${panelStyles}

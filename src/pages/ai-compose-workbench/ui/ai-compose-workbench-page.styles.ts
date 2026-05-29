@@ -74,23 +74,17 @@ export const BrandTitle = styled.h1`
   letter-spacing: -0.04em;
 `;
 
-export const WorkspaceGrid = styled.div<{ isSkillsDomain: boolean }>`
+export const WorkspaceGrid = styled.div<{ isSkillsDomain?: boolean }>`
   display: grid;
   flex: 1;
-  grid-template-columns: ${({ isSkillsDomain }) =>
-    isSkillsDomain
-      ? "260px minmax(0, 1fr)"
-      : "260px minmax(0, 1.4fr) minmax(340px, 0.9fr)"};
+  grid-template-columns: 260px minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   gap: 18px;
   align-items: stretch;
   min-height: 0;
 
   @media (max-width: 1280px) {
-    grid-template-columns: ${({ isSkillsDomain }) =>
-      isSkillsDomain
-        ? "220px minmax(0, 1fr)"
-        : "220px minmax(0, 1fr)"};
+    grid-template-columns: 220px minmax(0, 1fr);
   }
 
   @media (max-width: 960px) {
