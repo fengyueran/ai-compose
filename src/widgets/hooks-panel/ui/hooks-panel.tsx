@@ -64,7 +64,10 @@ function createHookFormState(
     return {
       sourceId: selectedHookId,
       name: selectedHook.name || '',
-      trigger: mode === 'format-template' ? 'before-commit' : (selectedHook.trigger || 'after-run'),
+      trigger:
+        mode === 'format-template'
+          ? 'before-commit'
+          : selectedHook.trigger || 'after-run',
       mode,
       formatCommand: selectedHook.formatCommand || '',
       commands: selectedHook.commands || [],
@@ -150,14 +153,12 @@ export function HooksPanel({ messageApi }: HooksPanelProps) {
   );
 
   const generatedPreviewJson = useMemo(() => {
-    let rawJson = '';
-    if (previewEditorId === 'codex') {
-      rawJson = buildCodexHooksPreview(previewHooks);
-    } else if (previewEditorId === 'cursor') {
-      rawJson = buildCursorHooksPreview(previewHooks);
-    } else {
-      rawJson = buildAntigravityHooksPreview(previewHooks);
-    }
+    const rawJson =
+      previewEditorId === 'codex'
+        ? buildCodexHooksPreview(previewHooks)
+        : previewEditorId === 'cursor'
+          ? buildCursorHooksPreview(previewHooks)
+          : buildAntigravityHooksPreview(previewHooks);
 
     return showRawPreview ? rawJson : beautifyPreviewJson(rawJson);
   }, [previewEditorId, previewHooks, showRawPreview]);
