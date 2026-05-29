@@ -108,7 +108,7 @@ type HooksDomainState = HooksConfigState & {
 };
 
 type AiComposeState = {
-  activeDomain: 'Prompt' | 'MCP' | 'Hooks' | 'Skills';
+  activeDomain: 'Prompt' | 'MCP' | 'Hooks' | 'Skills' | 'Profiles';
   activeEditorId: EditorId;
   applyStatus: ApplyStatus;
   applyMessage: string;
@@ -139,7 +139,7 @@ type AiComposeState = {
   skillSources: SkillSource[];
   selectedSkillSourceId: string;
 
-  selectDomain: (domain: 'Prompt' | 'MCP' | 'Hooks' | 'Skills') => void;
+  selectDomain: (domain: 'Prompt' | 'MCP' | 'Hooks' | 'Skills' | 'Profiles') => void;
   hydratePromptEditorStates: (
     editorStates: Record<EditorId, EditorTargetState>,
   ) => void;
@@ -363,6 +363,7 @@ export const useAiComposeStore = create<AiComposeState>((set, get) => ({
       mcpEditorStates,
       hooksEditorStates,
       skillsEditorStates,
+      editorStates,
     } = get();
 
     set({
@@ -374,7 +375,9 @@ export const useAiComposeStore = create<AiComposeState>((set, get) => ({
             ? mcpEditorStates
             : domain === 'Hooks'
               ? hooksEditorStates
-              : skillsEditorStates,
+              : domain === 'Skills'
+                ? skillsEditorStates
+                : editorStates, // Profiles: keep existing editorStates
     });
   },
 

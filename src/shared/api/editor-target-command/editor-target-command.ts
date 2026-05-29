@@ -298,3 +298,36 @@ export function normalizeRepoSource(repo: string): string {
   }
   return pathWithoutSuffix;
 }
+
+export interface EditorAccountInfo {
+  name: string;
+  isActive: boolean;
+  lastModified: number;
+}
+
+export function loadEditorAccounts(
+  editorId: EditorId,
+): Promise<EditorAccountInfo[]> {
+  return invoke<EditorAccountInfo[]>('load_editor_accounts', { editorId });
+}
+
+export function saveCurrentEditorAccount(
+  editorId: EditorId,
+  name: string,
+): Promise<void> {
+  return invoke<void>('save_current_editor_account', { editorId, name });
+}
+
+export function switchEditorAccount(
+  editorId: EditorId,
+  name: string,
+): Promise<void> {
+  return invoke<void>('switch_editor_account', { editorId, name });
+}
+
+export function deleteEditorAccount(
+  editorId: EditorId,
+  name: string,
+): Promise<void> {
+  return invoke<void>('delete_editor_account', { editorId, name });
+}

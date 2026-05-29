@@ -1,5 +1,5 @@
-import { Message } from "@xinghunm/compass-ui";
-import { useEffect, useRef } from "react";
+import { Message } from '@xinghunm/compass-ui';
+import { useEffect, useRef } from 'react';
 
 import {
   loadEditorHooksStates,
@@ -12,11 +12,12 @@ import {
   isTauriRuntime,
   type SkillInfo,
   useAiComposeStore,
-} from "../../../shared";
-import { PromptPanel } from "../../../widgets/prompt-panel";
-import { McpPanel } from "../../../widgets/mcp-panel";
-import { HooksPanel } from "../../../widgets/hooks-panel";
-import { SkillsPanel } from "../../../widgets/skills-panel";
+} from '../../../shared';
+import { PromptPanel } from '../../../widgets/prompt-panel';
+import { McpPanel } from '../../../widgets/mcp-panel';
+import { HooksPanel } from '../../../widgets/hooks-panel';
+import { SkillsPanel } from '../../../widgets/skills-panel';
+import { ProfilesPanel } from '../../../widgets/profiles-panel';
 import {
   Brand,
   BrandTitle,
@@ -30,15 +31,17 @@ import {
   SideNavPanel,
   SideNavSection,
   WorkspaceGrid,
-} from "./ai-compose-workbench-page.styles";
+} from './ai-compose-workbench-page.styles';
 
-const configurationDomains = [
-  { name: "Prompt", isAvailable: true },
-  { name: "MCP", isAvailable: true },
-  { name: "Hooks", isAvailable: true },
-  { name: "Skills", isAvailable: true },
-  { name: "Profiles", isAvailable: false },
-] as const;
+type DomainName = 'Prompt' | 'MCP' | 'Hooks' | 'Skills' | 'Profiles';
+
+const configurationDomains: { name: DomainName; isAvailable: boolean }[] = [
+  { name: 'Prompt', isAvailable: true },
+  { name: 'MCP', isAvailable: true },
+  { name: 'Hooks', isAvailable: true },
+  { name: 'Skills', isAvailable: true },
+  { name: 'Profiles', isAvailable: true },
+];
 
 export function AiComposeWorkbenchPage() {
   const [messageApi, messageContextHolder] = Message.useMessage();
@@ -69,16 +72,21 @@ export function AiComposeWorkbenchPage() {
       if (!isTauriRuntime()) {
         setEditorHydrationPending(false);
         setApplyFeedback({
-          status: "idle",
+          status: 'idle',
           message:
-            "当前不在 Tauri 桌面宿主中运行。请使用 `pnpm dev:desktop` 启动后再读取真实的编辑器配置状态。",
+            '当前不在 Tauri 桌面宿主中运行。请使用 `pnpm dev:desktop` 启动后再读取真实的编辑器配置状态。',
           lastAppliedAt: null,
         });
         return;
       }
 
       try {
-        const [nextPromptStates, nextMcpStates, nextHooksStates, nextSkillsStates] = await Promise.all([
+        const [
+          nextPromptStates,
+          nextMcpStates,
+          nextHooksStates,
+          nextSkillsStates,
+        ] = await Promise.all([
           loadEditorTargetStates(),
           loadEditorMcpStates(),
           loadEditorHooksStates(),
@@ -94,9 +102,9 @@ export function AiComposeWorkbenchPage() {
         hydrateHooksEditorStates(nextHooksStates);
         hydrateSkillsEditorStates(nextSkillsStates);
         setApplyFeedback({
-          status: "idle",
+          status: 'idle',
           message:
-            "已从本地编辑器目标文件同步 AI-COMPOSE 受管状态。切换开关会立即写入或清除对应配置。",
+            '已从本地编辑器目标文件同步 AI-COMPOSE 受管状态。切换开关会立即写入或清除对应配置。',
           lastAppliedAt: null,
         });
       } catch (error) {
@@ -106,11 +114,11 @@ export function AiComposeWorkbenchPage() {
 
         setEditorHydrationPending(false);
         setApplyFeedback({
-          status: "error",
+          status: 'error',
           message:
             error instanceof Error
               ? error.message
-              : "读取本地编辑器配置状态时发生未知错误。",
+              : '读取本地编辑器配置状态时发生未知错误。',
           lastAppliedAt: null,
         });
       }
@@ -134,7 +142,7 @@ export function AiComposeWorkbenchPage() {
     let isSubscribed = true;
 
     async function syncCurrentEditorSkills() {
-      if (activeDomain !== "Skills") {
+      if (activeDomain !== 'Skills') {
         return;
       }
 
@@ -148,12 +156,15 @@ export function AiComposeWorkbenchPage() {
           loadPhysicalSkills(),
         ]);
 
-        const localSources = skillSources.filter((s) => s.type === "local");
+        const localSources = skillSources.filter((s) => s.type === 'local');
         const localSkillsPromises = localSources.map(async (src) => {
           try {
             return await loadSkillsFromDir(src.value);
           } catch (e) {
-            console.error(`Failed to load skills from local source ${src.value}`, e);
+            console.error(
+              `Failed to load skills from local source ${src.value}`,
+              e,
+            );
             return [];
           }
         });
@@ -177,7 +188,7 @@ export function AiComposeWorkbenchPage() {
         messageApiRef.current.error(
           error instanceof Error
             ? error.message
-            : "读取当前编辑器技能列表时发生未知错误。",
+            : '读取当前编辑器技能列表时发生未知错误。',
         );
       }
     }
@@ -199,7 +210,7 @@ export function AiComposeWorkbenchPage() {
           </Brand>
         </GlobalBar>
 
-        <WorkspaceGrid isSkillsDomain={activeDomain === "Skills"}>
+        <WorkspaceGrid isSkillsDomain={activeDomain === 'Skills'}>
           <SideNavPanel aria-label="工作台导航">
             <SideNavSection>
               <SideNavLabel>配置域</SideNavLabel>
@@ -210,7 +221,9 @@ export function AiComposeWorkbenchPage() {
                     disabled={!domain.isAvailable}
                     isActive={activeDomain === domain.name}
                     isDisabled={!domain.isAvailable}
-                    onClick={() => domain.isAvailable && selectDomain(domain.name)}
+                    onClick={() =>
+                      domain.isAvailable && selectDomain(domain.name)
+                    }
                     type="button"
                   >
                     <span>{domain.name}</span>
@@ -223,14 +236,16 @@ export function AiComposeWorkbenchPage() {
             </SideNavSection>
           </SideNavPanel>
 
-          {activeDomain === "Prompt" ? (
+          {activeDomain === 'Prompt' ? (
             <PromptPanel messageApi={messageApi} />
-          ) : activeDomain === "MCP" ? (
+          ) : activeDomain === 'MCP' ? (
             <McpPanel messageApi={messageApi} />
-          ) : activeDomain === "Hooks" ? (
+          ) : activeDomain === 'Hooks' ? (
             <HooksPanel messageApi={messageApi} />
-          ) : (
+          ) : activeDomain === 'Skills' ? (
             <SkillsPanel messageApi={messageApi} />
+          ) : (
+            <ProfilesPanel messageApi={messageApi} />
           )}
         </WorkspaceGrid>
       </PageFrame>

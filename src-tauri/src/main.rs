@@ -5,6 +5,7 @@ mod mcp;
 mod skills;
 mod system;
 mod hooks;
+mod account;
 
 use prompt::{apply_prompt_to_editor_target, load_editor_target_states};
 use mcp::{apply_mcp_to_editor_target, load_editor_mcp_states};
@@ -16,6 +17,10 @@ use skills::{
     update_skill, remove_skill,
 };
 use system::{open_external_url, open_local_path, reveal_local_path, select_directory};
+use account::{
+    load_editor_accounts, save_current_editor_account,
+    switch_editor_account, delete_editor_account,
+};
 
 fn main() {
     tauri::Builder::default()
@@ -40,7 +45,10 @@ fn main() {
             remove_skill,
             select_directory,
             apply_hooks_to_editor_target,
-            load_editor_hooks_states
+            load_editor_accounts,
+            save_current_editor_account,
+            switch_editor_account,
+            delete_editor_account
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
