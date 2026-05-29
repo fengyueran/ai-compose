@@ -10,10 +10,8 @@ import {
   loadPhysicalSkills,
   loadSkillsFromDir,
   isTauriRuntime,
-  type EditorId,
   type SkillInfo,
   useAiComposeStore,
-  EditorToggleIcon,
 } from '../../../shared';
 import { PromptPanel } from '../../../widgets/prompt-panel';
 import { McpPanel } from '../../../widgets/mcp-panel';
@@ -45,11 +43,6 @@ const configurationDomains: { name: DomainName; isAvailable: boolean }[] = [
   { name: 'Profiles', isAvailable: true },
 ];
 
-const profilesEditors: { id: EditorId; label: string }[] = [
-  { id: 'codex', label: 'Codex' },
-  { id: 'cursor', label: 'Cursor' },
-];
-
 export function AiComposeWorkbenchPage() {
   const [messageApi, messageContextHolder] = Message.useMessage();
   const messageApiRef = useRef(messageApi);
@@ -62,7 +55,6 @@ export function AiComposeWorkbenchPage() {
     activeDomain,
     selectDomain,
     activeEditorId,
-    selectEditor,
     hydratePromptEditorStates,
     hydrateMcpEditorStates,
     hydrateHooksEditorStates,
@@ -216,53 +208,6 @@ export function AiComposeWorkbenchPage() {
           <Brand>
             <BrandTitle>AI Compose</BrandTitle>
           </Brand>
-          {activeDomain === 'Profiles' && (
-            <div
-              role="tablist"
-              aria-label="选择编辑器"
-              style={{
-                display: 'flex',
-                gap: '6px',
-                alignItems: 'center',
-              }}
-            >
-              {profilesEditors.map(({ id, label }) => (
-                <button
-                  key={id}
-                  id={`editor-tab-${id}`}
-                  role="tab"
-                  type="button"
-                  aria-selected={activeEditorId === id}
-                  onClick={() => selectEditor(id)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '7px',
-                    padding: '6px 14px 6px 10px',
-                    borderRadius: '8px',
-                    border: activeEditorId === id
-                      ? '1px solid rgba(197,93,51,0.22)'
-                      : '1px solid transparent',
-                    background: activeEditorId === id
-                      ? 'var(--accent-soft, rgba(197,93,51,0.08))'
-                      : 'transparent',
-                    color: activeEditorId === id
-                      ? 'var(--accent-strong, #c55d33)'
-                      : 'var(--text-soft)',
-                    fontWeight: activeEditorId === id ? 600 : 400,
-                    fontSize: '0.88rem',
-                    cursor: 'pointer',
-                    transition: 'all 180ms ease',
-                  }}
-                >
-                  <span style={{ width: 20, height: 20, flexShrink: 0 }}>
-                    <EditorToggleIcon editorId={id} />
-                  </span>
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
         </GlobalBar>
 
         <WorkspaceGrid isSkillsDomain={activeDomain === 'Skills'}>
