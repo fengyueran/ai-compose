@@ -31,27 +31,6 @@ export function ProfilesPanel({ messageApi }: ProfilesPanelProps) {
     <ProfilesPanelRoot>
       <div className="profiles-container">
         <aside className="profiles-sidebar" aria-label="Profiles 子导航">
-          <div className="sidebar-editor-tabs" role="tablist" aria-label="选择编辑器">
-            {supportedEditors.map(({ id, label }) => (
-              <button
-                key={id}
-                id={`editor-tab-${id}`}
-                role="tab"
-                type="button"
-                aria-selected={displayEditorId === id}
-                className={`sidebar-editor-tab${displayEditorId === id ? " sidebar-editor-tab--active" : ""}`}
-                onClick={() => selectEditor(id)}
-              >
-                <span className="sidebar-editor-tab__icon">
-                  <EditorToggleIcon editorId={id} />
-                </span>
-                {label}
-              </button>
-            ))}
-          </div>
-
-          <div className="sidebar-divider" />
-
           <button
             type="button"
             className={`sidebar-item${activeTab === "accounts" ? " sidebar-item--active" : ""}`}
@@ -61,6 +40,28 @@ export function ProfilesPanel({ messageApi }: ProfilesPanelProps) {
           </button>
         </aside>
         <main className="profiles-content">
+          <div
+            className="content-editor-tabs"
+            role="tablist"
+            aria-label="选择编辑器"
+          >
+            {supportedEditors.map(({ id, label }) => (
+              <button
+                key={id}
+                id={`editor-tab-${id}`}
+                role="tab"
+                type="button"
+                aria-selected={displayEditorId === id}
+                className={`content-editor-tab${displayEditorId === id ? " content-editor-tab--active" : ""}`}
+                onClick={() => selectEditor(id)}
+              >
+                <span className="content-editor-tab__icon">
+                  <EditorToggleIcon editorId={id} />
+                </span>
+                {label}
+              </button>
+            ))}
+          </div>
           {activeTab === "accounts" && (
             <AccountSwitcher
               editorId={displayEditorId}
