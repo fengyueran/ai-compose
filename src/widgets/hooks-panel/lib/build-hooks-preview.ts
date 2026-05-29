@@ -45,7 +45,7 @@ function encodeHexUtf8(value: string) {
 export function buildFormatCurrentFileTemplateCommand(formatCommand: string) {
   const encodedFormatCommand = encodeHexUtf8(formatCommand)
 
-  return `bash -c 'template=$(echo "${encodedFormatCommand}" | xxd -r -p); files=$(git status --porcelain | awk "{print \\$2}"); if [ -n "$files" ]; then for f in $files; do if [ -f "$f" ]; then if [[ "$template" == *"{{current_file}}"* ]]; then cmd="\${template//\\\\{\\\\{current_file\\\\}\\\\}/\$f}"; else cmd="\$template \$f"; fi; eval "\$cmd"; fi; done; fi; echo "{\\"continue\\": true}"'`
+  return `bash -c 'cwd="\${CURSOR_PROJECT_DIR:-\$CLAUDE_PROJECT_DIR}"; if [ -z "\$cwd" ] && [ ! -t 0 ]; then json=\$(cat); cwd=\$(echo "\$json" | grep -oE "\\"workspace_roots\\"\\\\s*:\\\\s*\\\\[\\\\s*\\"[^\\"]+\\"" | sed "s/.*\\"\\\\(.*\\\\)\\".*/\\\\1/"); if [ -z "\$cwd" ]; then cwd=\$(echo "\$json" | grep -oE "\\"cwd\\"\\\\s*:\\\\s*\\"[^\\"]+\\"" | sed "s/.*\\"\\\\(.*\\\\)\\".*/\\\\1/"); fi; fi; if [ -z "\$cwd" ]; then cwd="."; fi; cd "\$cwd" || exit 1; template=\$(echo "${encodedFormatCommand}" | xxd -r -p); files=\$(git status --porcelain | awk "{print \\$2}"); if [ -n "\$files" ]; then for f in $files; do if [ -f "\$f" ]; then if [[ "\$template" == *"${formatCurrentFilePlaceholder}"* ]]; then cmd="\${template//\\\\{\\\\{current_file\\\\}\\\\}/\$f}"; else cmd="\$template \$f"; fi; eval "\$cmd"; fi; done; fi; echo "{\\"continue\\": true}"'`
 }
 
 function resolveHookCommands(hook: HookDefinition) {
@@ -174,7 +174,7 @@ export function buildCodexHooksPreview(hooks: HookDefinition[]) {
 export function restoreAdaptiveCommand(command: string): string {
   if (
     typeof command === 'string' &&
-    command.startsWith("bash -c 'template=$(echo \"") &&
+    command.includes('template=$(echo "') &&
     command.includes('" | xxd -r -p);')
   ) {
     const match = command.match(/template=\$\(echo "([a-fA-F0-9]+)" \| xxd/)
