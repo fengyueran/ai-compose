@@ -162,10 +162,14 @@ export function buildCodexHooksPreview(hooks: HookDefinition[]) {
       codexHooks[eventName] = []
     }
 
-    codexHooks[eventName].push({
-      matcher: eventName === 'Stop' ? '*' : codexToolMatcher,
-      hooks: handlers,
-    })
+    if (eventName === 'Stop') {
+      codexHooks[eventName].push(...handlers)
+    } else {
+      codexHooks[eventName].push({
+        matcher: codexToolMatcher,
+        hooks: handlers,
+      })
+    }
   })
 
   return JSON.stringify({ hooks: codexHooks }, null, 2)

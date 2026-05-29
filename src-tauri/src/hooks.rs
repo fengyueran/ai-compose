@@ -95,7 +95,7 @@ pub struct CodexHooksState {
     pub post_tool_use: Option<Vec<CodexMatcherGroup>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "Stop")]
-    pub stop: Option<Vec<CodexMatcherGroup>>,
+    pub stop: Option<Vec<CodexHandler>>,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -208,10 +208,7 @@ pub async fn apply_hooks_to_editor_target(
                                 });
                             }
                             HookTrigger::BeforeCommit => {
-                                stop.push(CodexMatcherGroup {
-                                    matcher: "*".to_string(),
-                                    hooks: handlers,
-                                });
+                                stop.extend(handlers);
                             }
                         }
                     }

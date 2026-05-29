@@ -119,7 +119,7 @@ describe('build-hooks-preview', () => {
     const beautified = beautifyPreviewJson(preview)
     const parsed = JSON.parse(beautified)
 
-    expect(parsed.hooks.Stop[0].hooks[0].command).toBe(
+    expect(parsed.hooks.Stop[0].command).toBe(
       'npx prettier --write {{current_file}} /* ⚡️ 编译后的多编辑器自适应命令 */'
     )
   })
