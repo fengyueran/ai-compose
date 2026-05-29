@@ -31,7 +31,7 @@ const triggerOptions = [
   { value: 'before-run', label: '执行前' },
   { value: 'after-run', label: '执行后' },
   { value: 'after-failure', label: '失败后' },
-  { value: 'before-commit', label: '提交前' },
+  { value: 'before-commit', label: '对话结束 (Stop)' },
 ] as const;
 
 const editorIds = Object.keys(editorMeta) as EditorId[];
@@ -60,11 +60,12 @@ function createHookFormState(
   } | null,
 ): HookFormState {
   if (selectedHook && selectedHookId !== '__new__') {
+    const mode = selectedHook.mode || 'raw';
     return {
       sourceId: selectedHookId,
       name: selectedHook.name || '',
-      trigger: selectedHook.trigger || 'after-run',
-      mode: selectedHook.mode || 'raw',
+      trigger: mode === 'format-template' ? 'before-commit' : (selectedHook.trigger || 'after-run'),
+      mode,
       formatCommand: selectedHook.formatCommand || '',
       commands: selectedHook.commands || [],
     };
@@ -123,7 +124,8 @@ export function HooksPanel({ messageApi }: HooksPanelProps) {
         ? {
             ...hook,
             name: formName,
-            trigger: formTrigger,
+            trigger:
+              formMode === 'format-template' ? 'before-commit' : formTrigger,
             mode: formMode,
             formatCommand:
               formMode === 'format-template' ? formFormatCommand : undefined,
@@ -233,7 +235,7 @@ export function HooksPanel({ messageApi }: HooksPanelProps) {
     if (hooksState.selectedHookId === '__new__') {
       const newHookPayload = {
         name: formName.trim(),
-        trigger: formTrigger,
+        trigger: formMode === 'format-template' ? 'before-commit' : formTrigger,
         mode: formMode,
         formatCommand:
           formMode === 'format-template' ? trimmedFormatCommand : undefined,
@@ -279,7 +281,7 @@ export function HooksPanel({ messageApi }: HooksPanelProps) {
 
       updateHook(selectedHook.id, {
         name: formName.trim(),
-        trigger: formTrigger,
+        trigger: formMode === 'format-template' ? 'before-commit' : formTrigger,
         mode: formMode,
         formatCommand:
           formMode === 'format-template' ? trimmedFormatCommand : undefined,
@@ -614,6 +616,7 @@ export function HooksPanel({ messageApi }: HooksPanelProps) {
                     <span className="hooks-field__label">触发点</span>
                     <select
                       className="hooks-select"
+                      disabled={formMode === 'format-template'}
                       onChange={(event) =>
                         setDraftFormState({
                           ...formState,
