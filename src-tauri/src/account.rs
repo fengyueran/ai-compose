@@ -144,6 +144,8 @@ pub fn load_accounts_impl(
                         let backup_id = get_codex_account_id(&backup_file);
                         if current_id.is_some() && current_id == backup_id {
                             active_name = Some(name.to_string());
+                            // 自动静默同步：把最新凭证写回备份文件，防止切回时由于使用过期 Token 导致失效
+                            let _ = std::fs::copy(&auth_file, &backup_file);
                             // 顺便把新的大小写回标记文件，加速下一次 load
                             let _ = std::fs::write(&marker_path, format!("{}:{}", name, current_size));
                         }
@@ -184,6 +186,8 @@ pub fn load_accounts_impl(
                             let backup_id = get_codex_account_id(&path);
                             if current_id.is_some() && current_id == backup_id {
                                 matched = true;
+                                // 自动静默同步：把最新凭证写回备份文件
+                                let _ = std::fs::copy(&auth_file, &path);
                             }
                         }
                     } else if editor_id == EditorId::Cursor {
@@ -566,6 +570,10 @@ mod tests {
         assert_eq!(accounts.len(), 1);
         assert_eq!(accounts[0].name, "work");
         assert!(accounts[0].is_active);
+
+        // 验证备份文件 auth-work.json 是否也已经被自动同步更新为最新的内容
+        let backed_up_content = fs::read_to_string(&work_path).unwrap();
+        assert_eq!(backed_up_content, refreshed_auth);
 
         // 并且标记文件里的大小应该已被自动更新为当前最新大小
         let new_size = fs::metadata(&auth_path).unwrap().len();
