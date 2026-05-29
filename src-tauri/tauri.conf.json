@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Prompt Workbench",
+  "productName": "AI Compose",
   "version": "0.1.0",
   "identifier": "com.xinghunm.ai-compose",
   "build": {
