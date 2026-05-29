@@ -40,6 +40,11 @@ fn is_safe_account_name(name: &str) -> bool {
     name.chars().all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '@' | '.'))
 }
 
+// 辅助函数：活跃账号标记文件路径（极小文件，只存账号名）
+fn active_marker_path(parent_dir: &Path, prefix: &str) -> PathBuf {
+    parent_dir.join(format!(".{}.active", prefix))
+}
+
 // 辅助函数：解析凭证文件物理路径
 fn resolve_auth_file_path(
     editor_id: EditorId,
@@ -100,19 +105,20 @@ pub fn load_accounts_impl(
         return Ok(Vec::new());
     }
 
-    // 计算当前激活凭据文件的内容哈希
-    let active_hash = if auth_file.exists() {
-        std::fs::read(&auth_file)
-            .map(|data| {
-                use std::hash::{Hash, Hasher};
-                let mut hasher = std::collections::hash_map::DefaultHasher::new();
-                data.hash(&mut hasher);
-                hasher.finish()
-            })
-            .ok()
-    } else {
-        None
-    };
+    // 读取活跃账号标记（格式: "name:size"），用文件大小做快速核验
+    // 若当前凭证文件大小与记录不符，说明用户已在编辑器里换了账号，标记失效
+    let active_name: Option<String> = (|| -> Option<String> {
+        let marker_content = std::fs::read_to_string(active_marker_path(parent_dir, &prefix)).ok()?;
+        let marker_content = marker_content.trim();
+        let (name, saved_size_str) = marker_content.split_once(':')?;
+        let saved_size: u64 = saved_size_str.parse().ok()?;
+        let current_size = std::fs::metadata(&auth_file).ok()?.len();
+        if current_size == saved_size {
+            Some(name.to_string())
+        } else {
+            None // 大小不符，用户已换账号，标记作废
+        }
+    })();
 
     let mut accounts = Vec::new();
     let entries = std::fs::read_dir(parent_dir)
@@ -143,19 +149,7 @@ pub fn load_accounts_impl(
                 .unwrap_or_default()
                 .as_secs();
 
-            // 如果内容哈希一致，说明为当前活跃的账号
-            let is_active = if let Some(a_hash) = active_hash {
-                std::fs::read(&path)
-                    .map(|data| {
-                        use std::hash::{Hash, Hasher};
-                        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-                        data.hash(&mut hasher);
-                        hasher.finish() == a_hash
-                    })
-                    .unwrap_or(false)
-            } else {
-                false
-            };
+            let is_active = active_name.as_deref() == Some(name_part);
 
             accounts.push(EditorAccountInfo {
                 name: name_part.to_string(),
@@ -184,15 +178,23 @@ pub fn save_current_account_impl(
     }
 
     let parent_dir = auth_file.parent().ok_or_else(|| "无法获取凭证文件目录。".to_string())?;
-    // 确保备份目录一定存在
     if !parent_dir.exists() {
         std::fs::create_dir_all(parent_dir).map_err(|e| format!("创建配置目录失败: {}", e))?;
     }
-    
+
     let dest_file = parent_dir.join(format!("{}-{}.{}", prefix, name, ext));
     std::fs::copy(&auth_file, &dest_file)
-        .map(|_| ())
-        .map_err(|err| format!("备份账号凭证失败: {}", err))
+        .map_err(|err| format!("备份账号凭证失败: {}", err))?;
+
+    // 写入活跃账号标记："name:size" 格式，用文件大小做快速核验
+    let auth_size = std::fs::metadata(&auth_file)
+        .map(|m| m.len())
+        .unwrap_or(0);
+    std::fs::write(
+        active_marker_path(parent_dir, &prefix),
+        format!("{}:{}", name, auth_size).as_bytes(),
+    )
+    .map_err(|err| format!("写入活跃账号标记失败: {}", err))
 }
 
 pub fn switch_account_impl(
@@ -214,8 +216,17 @@ pub fn switch_account_impl(
 
     // 覆盖目标原文件
     std::fs::copy(&src_file, &auth_file)
-        .map(|_| ())
         .map_err(|err| format!("恢复账号凭证失败: {}", err))?;
+
+    // 更新活跃账号标记："name:size" 格式
+    let switched_size = std::fs::metadata(&auth_file)
+        .map(|m| m.len())
+        .unwrap_or(0);
+    std::fs::write(
+        active_marker_path(parent_dir, &prefix),
+        format!("{}:{}", name, switched_size).as_bytes(),
+    )
+    .map_err(|err| format!("更新活跃账号标记失败: {}", err))?;
 
     // 特殊处理 Cursor：自动清理缓存文件
     if editor_id == EditorId::Cursor {
@@ -223,15 +234,9 @@ pub fn switch_account_impl(
         let shm_file = parent_dir.join("state.vscdb-shm");
         let journal_file = parent_dir.join("state.vscdb-journal");
 
-        if wal_file.exists() {
-            let _ = std::fs::remove_file(wal_file);
-        }
-        if shm_file.exists() {
-            let _ = std::fs::remove_file(shm_file);
-        }
-        if journal_file.exists() {
-            let _ = std::fs::remove_file(journal_file);
-        }
+        if wal_file.exists() { let _ = std::fs::remove_file(wal_file); }
+        if shm_file.exists() { let _ = std::fs::remove_file(shm_file); }
+        if journal_file.exists() { let _ = std::fs::remove_file(journal_file); }
     }
 
     Ok(())
@@ -248,11 +253,20 @@ pub fn delete_account_impl(
 
     let (auth_file, prefix, ext) = resolve_auth_file_path(editor_id, custom_home)?;
     let parent_dir = auth_file.parent().ok_or_else(|| "无法获取凭证文件目录。".to_string())?;
+    let _ = auth_file; // 仅用于 resolve，删除操作不涉及原文件
     let target_file = parent_dir.join(format!("{}-{}.{}", prefix, name, ext));
 
     if target_file.exists() {
-        std::fs::remove_file(target_file)
+        std::fs::remove_file(&target_file)
             .map_err(|err| format!("删除备份失败: {}", err))?;
+    }
+
+    // 若删除的是当前活跃账号，清除标记
+    let marker = active_marker_path(parent_dir, &prefix);
+    if let Ok(current) = std::fs::read_to_string(&marker) {
+        if current.trim().split_once(':').map(|(n, _)| n).unwrap_or(current.trim()) == name {
+            let _ = std::fs::remove_file(&marker);
+        }
     }
 
     Ok(())
