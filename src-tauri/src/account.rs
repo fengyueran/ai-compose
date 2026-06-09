@@ -109,6 +109,130 @@ fn get_codex_account_id(path: &Path) -> Option<String> {
     auth.tokens.and_then(|t| t.account_id)
 }
 
+fn read_token_and_email_from_db(db_path: &Path) -> Result<(String, String), String> {
+    if !db_path.exists() {
+        return Err("状态数据库不存在，请先在 Cursor 中登录账号。".to_string());
+    }
+
+    let conn = rusqlite::Connection::open_with_flags(
+        db_path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_URI,
+    )
+    .map_err(|e| format!("打开状态数据库失败: {}", e))?;
+
+    let mut stmt = conn
+        .prepare("SELECT value FROM ItemTable WHERE key = ?")
+        .map_err(|e| format!("准备 SQL 失败: {}", e))?;
+
+    let token: String = stmt
+        .query_row(["cursorAuth/accessToken"], |row| row.get(0))
+        .map_err(|_| "未在数据库中找到 accessToken，请先在 Cursor 中登录账号。".to_string())?;
+
+    // cachedEmail 可能会不存在，允许 fallback
+    let email: String = stmt
+        .query_row(["cursorAuth/cachedEmail"], |row| row.get(0))
+        .unwrap_or_else(|_| "Unknown".to_string());
+
+    Ok((token, email))
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct CursorUsageInfo {
+    pub email: String,
+    pub billing_cycle_end: u64,
+    pub total_percent_used: f64,
+    pub limit: u64,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(untagged)]
+enum StringOrNumber {
+    String(String),
+    Number(u64),
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ApiPlanUsage {
+    limit: u64,
+    total_percent_used: f64,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ApiUsageResponse {
+    billing_cycle_end: Option<StringOrNumber>,
+    plan_usage: Option<ApiPlanUsage>,
+}
+
+#[tauri::command]
+pub async fn fetch_cursor_account_usage(
+    name: Option<String>,
+) -> Result<CursorUsageInfo, String> {
+    fetch_usage_impl(name, None).await
+}
+
+pub async fn fetch_usage_impl(
+    name: Option<String>,
+    custom_home: Option<&Path>,
+) -> Result<CursorUsageInfo, String> {
+    let (auth_file, prefix, ext) = resolve_auth_file_path(EditorId::Cursor, custom_home)?;
+    let parent_dir = auth_file.parent().ok_or_else(|| "无法获取凭证文件目录。".to_string())?;
+
+    let db_path = if let Some(ref n) = name {
+        if !is_safe_account_name(n) {
+            return Err("非法账号名称，仅允许使用字母、数字、下划线及短横线。".to_string());
+        }
+        parent_dir.join(format!("{}-{}.{}", prefix, n, ext))
+    } else {
+        auth_file
+    };
+
+    let (token, email) = read_token_and_email_from_db(&db_path)?;
+
+    let client = reqwest::Client::new();
+    let res = client
+        .post("https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage")
+        .header("Authorization", format!("Bearer {}", token))
+        .header("Content-Type", "application/json")
+        .header("Connect-Protocol-Version", "1")
+        .body("{}")
+        .send()
+        .await
+        .map_err(|e| format!("请求 Cursor API 失败: {}", e))?;
+
+    if !res.status().is_success() {
+        let status = res.status();
+        let err_text = res.text().await.unwrap_or_default();
+        return Err(format!("Cursor API 错误 ({}): {}", status, err_text));
+    }
+
+    let api_res = res
+        .json::<ApiUsageResponse>()
+        .await
+        .map_err(|e| format!("解析 API 响应失败: {}", e))?;
+
+    let billing_cycle_end = match api_res.billing_cycle_end {
+        Some(StringOrNumber::String(s)) => s.parse::<u64>().unwrap_or(0),
+        Some(StringOrNumber::Number(n)) => n,
+        None => 0,
+    };
+
+    let (limit, total_percent_used) = if let Some(usage) = api_res.plan_usage {
+        (usage.limit, usage.total_percent_used)
+    } else {
+        (0, 0.0)
+    };
+
+    Ok(CursorUsageInfo {
+        email,
+        billing_cycle_end,
+        total_percent_used,
+        limit,
+    })
+}
+
 // 内部实现，接受 custom_home 方便 TDD
 pub fn load_accounts_impl(
     editor_id: EditorId,
@@ -615,6 +739,59 @@ mod tests {
         assert!(!accounts[0].is_active);
 
         fs::remove_dir_all(root).unwrap();
+    }
+
+    fn create_mock_vscdb(path: &Path, token: &str, email: &str) {
+        let conn = rusqlite::Connection::open(path).unwrap();
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS ItemTable (key TEXT PRIMARY KEY, value TEXT)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?, ?)",
+            ["cursorAuth/accessToken", token],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?, ?)",
+            ["cursorAuth/cachedEmail", email],
+        )
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_read_token_and_email_from_db() {
+        let root = unique_test_dir("mock-vscdb");
+        std::fs::create_dir_all(&root).unwrap();
+        let db_path = root.join("state.vscdb");
+        create_mock_vscdb(&db_path, "mock-token-xyz", "test-email@domain.com");
+
+        let (token, email) = read_token_and_email_from_db(&db_path).unwrap();
+        assert_eq!(token, "mock-token-xyz");
+        assert_eq!(email, "test-email@domain.com");
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_fetch_usage_api_unauthorized() {
+        let root = unique_test_dir("mock-vscdb-api");
+        let cursor_dir = root.join("Cursor").join("User").join("globalStorage");
+        std::fs::create_dir_all(&cursor_dir).unwrap();
+        let db_path = cursor_dir.join("state.vscdb");
+        create_mock_vscdb(&db_path, "invalid-mock-token", "test@domain.com");
+
+        let result = fetch_usage_impl(None, Some(&root)).await;
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err();
+        assert!(
+            err_msg.contains("401")
+                || err_msg.contains("Unauthorized")
+                || err_msg.contains("请求 Cursor API 失败")
+        );
+
+        std::fs::remove_dir_all(root).unwrap();
     }
 }
 

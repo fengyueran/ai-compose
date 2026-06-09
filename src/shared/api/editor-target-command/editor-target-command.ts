@@ -332,6 +332,19 @@ export function deleteEditorAccount(
   return invoke<void>('delete_editor_account', { editorId, name });
 }
 
+export interface CursorUsageInfo {
+  email: string;
+  billingCycleEnd: number;
+  totalPercentUsed: number;
+  limit: number;
+}
+
+export function fetchCursorAccountUsage(
+  name?: string,
+): Promise<CursorUsageInfo> {
+  return invoke<CursorUsageInfo>('fetch_cursor_account_usage', { name });
+}
+
 export function exportConfiguration(content: string): Promise<void> {
   return invoke<void>('export_configuration', { content });
 }

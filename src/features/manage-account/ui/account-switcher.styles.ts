@@ -1,4 +1,4 @@
-import styled from "@emotion/styled";
+import styled from '@emotion/styled';
 
 export const AccountSwitcherWrapper = styled.div`
   display: flex;
@@ -121,6 +121,117 @@ export const AccountSwitcherWrapper = styled.div`
   .account-item__time {
     font-size: 0.75rem;
     color: var(--text-faint);
+  }
+
+  .account-item__usage-zone {
+    margin: 4px 0;
+    min-width: 260px;
+  }
+
+  .account-item__usage-skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 2px 0;
+
+    .skeleton-line {
+      height: 12px;
+      background: linear-gradient(
+        90deg,
+        var(--bg-item, #fcfcfc) 25%,
+        var(--panel-border, rgba(0, 0, 0, 0.08)) 37%,
+        var(--bg-item, #fcfcfc) 63%
+      );
+      background-size: 400% 100%;
+      animation: shimmer 1.4s ease infinite;
+      border-radius: 4px;
+    }
+
+    .skeleton-email {
+      width: 70%;
+    }
+
+    .skeleton-progress {
+      height: 6px;
+      width: 90%;
+    }
+
+    .skeleton-meta {
+      width: 40%;
+      height: 10px;
+    }
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: 100% 50%;
+    }
+    100% {
+      background-position: 0 50%;
+    }
+  }
+
+  .account-item__usage-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background: var(--bg-panel-secondary, rgba(0, 0, 0, 0.02));
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--panel-border, rgba(0, 0, 0, 0.04));
+  }
+
+  .account-item__usage-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .account-item__usage-email {
+    font-size: 0.75rem;
+    color: var(--text-soft, #666666);
+    font-weight: 500;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+    max-width: 150px;
+  }
+
+  .account-item__usage-reset {
+    font-size: 0.7rem;
+    color: var(--accent-strong, #ff8c00);
+    background: rgba(255, 140, 0, 0.08);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .account-item__usage-progress-container {
+    height: 5px;
+    background: var(--panel-border, rgba(0, 0, 0, 0.08));
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .account-item__usage-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #ff8c00, #ffb300);
+    border-radius: 3px;
+    transition: width 0.4s ease-out;
+  }
+
+  .account-item__usage-status {
+    font-size: 0.7rem;
+    color: var(--text-soft, #888888);
+    font-weight: 500;
+  }
+
+  .account-item__usage-error {
+    font-size: 0.75rem;
+    color: var(--text-faint, #999999);
+    font-style: italic;
   }
 
   .account-item__actions {
