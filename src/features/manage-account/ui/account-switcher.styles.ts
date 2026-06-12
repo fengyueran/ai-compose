@@ -125,7 +125,7 @@ export const AccountSwitcherWrapper = styled.div`
 
   .account-item__usage-zone {
     margin: 4px 0;
-    min-width: 260px;
+    min-width: 340px;
   }
 
   .account-item__usage-skeleton {
@@ -232,6 +232,72 @@ export const AccountSwitcherWrapper = styled.div`
     font-size: 0.75rem;
     color: var(--text-faint, #999999);
     font-style: italic;
+  }
+
+  .account-item__codex-rows {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  .account-item__codex-row {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    background: var(--bg-panel-secondary, rgba(0, 0, 0, 0.01));
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--panel-border, rgba(0, 0, 0, 0.03));
+    flex: 1 1 150px;
+  }
+
+  .account-item__codex-row-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.7rem;
+    color: var(--text-soft, #666666);
+  }
+
+  .account-item__codex-row-label {
+    font-weight: 600;
+    color: var(--text-main, #333333);
+  }
+
+  .account-item__codex-row-reset {
+    color: var(--accent-strong, #ff8c00);
+    background: rgba(255, 140, 0, 0.08);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-weight: 500;
+  }
+
+  .account-item__codex-progress-container {
+    height: 4px;
+    background: var(--panel-border, rgba(0, 0, 0, 0.08));
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .account-item__codex-progress-bar {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.4s ease-out;
+  }
+
+  .account-item__codex-progress-bar--primary {
+    background: linear-gradient(90deg, #ff8c00, #ffb300);
+  }
+
+  .account-item__codex-progress-bar--secondary {
+    background: linear-gradient(90deg, #2196f3, #00bcd4);
+  }
+
+  .account-item__codex-row-status {
+    font-size: 0.65rem;
+    color: var(--text-soft, #888888);
+    font-weight: 500;
   }
 
   .account-item__actions {

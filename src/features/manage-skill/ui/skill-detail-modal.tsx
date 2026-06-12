@@ -1,5 +1,5 @@
-import { Modal, Button, Tooltip, Message } from "@xinghunm/compass-ui";
-import { useMemo, useState } from "react";
+import { Modal, Button, Tooltip, Message } from '@xinghunm/compass-ui';
+import { useMemo, useState } from 'react';
 import {
   addSkillsRepository,
   linkSkillToEditor,
@@ -17,8 +17,8 @@ import {
   openSkillLocalPath,
   revealSkillLocalPath,
   EditorToggleIcon,
-} from "../../../shared";
-import { SkillDetailModalContent } from "./skill-detail-modal.styles";
+} from '../../../shared';
+import { SkillDetailModalContent } from './skill-detail-modal.styles';
 
 const editorMeta: Record<
   EditorId,
@@ -27,13 +27,13 @@ const editorMeta: Record<
   }
 > = {
   antigravity: {
-    title: "Antigravity",
+    title: 'Antigravity',
   },
   codex: {
-    title: "Codex",
+    title: 'Codex',
   },
   cursor: {
-    title: "Cursor",
+    title: 'Cursor',
   },
 };
 
@@ -47,18 +47,23 @@ interface SkillDetailModalProps {
   skillSources: SkillSource[];
   activeEditorId: EditorId;
   messageApi: ReturnType<typeof Message.useMessage>[0];
-  hydrateSkillsEditorStates: (states: Record<EditorId, EditorSkillsState>) => void;
+  hydrateSkillsEditorStates: (
+    states: Record<EditorId, EditorSkillsState>,
+  ) => void;
   replaceSkill: (skill: SkillInfo) => void;
   refreshCurrentEditorSkills: (editorId: EditorId) => Promise<unknown>;
   isSkillLinkedToEditor: (editorId: EditorId, skillId: string) => boolean;
   isSkillToggleReadOnly: (skill: SkillInfo) => boolean;
-  handleSkillEditorToggle: (skill: SkillInfo, editorId: EditorId) => Promise<void>;
+  handleSkillEditorToggle: (
+    skill: SkillInfo,
+    editorId: EditorId,
+  ) => Promise<void>;
 }
 
 // Local helper mirroring isPresetSkillMatch behavior.
 function isPresetSkillMatchLocal(presetId: string, skillId: string): boolean {
-  const normPreset = presetId.toLowerCase().replace(/\.md$/, "");
-  const normSkill = skillId.toLowerCase().replace(/\.md$/, "");
+  const normPreset = presetId.toLowerCase().replace(/\.md$/, '');
+  const normSkill = skillId.toLowerCase().replace(/\.md$/, '');
   return normPreset === normSkill;
 }
 
@@ -81,19 +86,25 @@ export function SkillDetailModal({
   const [isRemovingSkill, setIsRemovingSkill] = useState(false);
   const [isUpdatingSkill, setIsUpdatingSkill] = useState(false);
 
-  const selectedSkillPhysicalPath = selectedSkill?.isBuiltin && !selectedSkill.installed
-    ? ""
-    : (selectedSkill?.path || "");
+  const selectedSkillPhysicalPath =
+    selectedSkill?.isBuiltin && !selectedSkill.installed
+      ? ''
+      : selectedSkill?.path || '';
 
   const selectedSkillLinkedTargets = useMemo(() => {
-    if (!selectedSkill || (selectedSkill.isBuiltin && !selectedSkill.installed)) {
+    if (
+      !selectedSkill ||
+      (selectedSkill.isBuiltin && !selectedSkill.installed)
+    ) {
       return [];
     }
 
     return editorIds
       .map((editorId) => {
-        const targetPath = skillsEditorStates[editorId]?.targetPath ?? "";
-        const isLinked = (skillsEditorStates[editorId]?.enabledSkills ?? []).includes(selectedSkill.id);
+        const targetPath = skillsEditorStates[editorId]?.targetPath ?? '';
+        const isLinked = (
+          skillsEditorStates[editorId]?.enabledSkills ?? []
+        ).includes(selectedSkill.id);
 
         if (!targetPath || !isLinked) {
           return null;
@@ -104,18 +115,22 @@ export function SkillDetailModal({
           path: `${targetPath}/${selectedSkill.id}`,
         };
       })
-      .filter((item): item is { editorId: EditorId; path: string } => Boolean(item));
+      .filter((item): item is { editorId: EditorId; path: string } =>
+        Boolean(item),
+      );
   }, [selectedSkill, skillsEditorStates]);
 
-  const isSelectedSkillCliManaged = selectedSkill?.sourceKind === "cli";
+  const isSelectedSkillCliManaged = selectedSkill?.sourceKind === 'cli';
   const isSelectedSkillLinked = selectedSkill
-    ? (skillsEditorStates[activeEditorId]?.enabledSkills ?? []).includes(selectedSkill.id)
+    ? (skillsEditorStates[activeEditorId]?.enabledSkills ?? []).includes(
+        selectedSkill.id,
+      )
     : false;
 
   const canInstallSelectedSkill = Boolean(
     selectedSkill &&
     !isSelectedSkillLinked &&
-    (isSelectedSkillCliManaged || selectedSkill.isBuiltin)
+    (isSelectedSkillCliManaged || selectedSkill.isBuiltin),
   );
 
   const shouldShowSelectedSkillSourceBadge = Boolean(selectedSkill);
@@ -130,20 +145,30 @@ export function SkillDetailModal({
       footer={null}
       width={720}
     >
-      <SkillDetailModalContent className={`skills-detail-pane${
-        isRemovingSkill || isUpdatingSkill || isAddingSkillsRepo
-          ? " skills-detail-pane--loading"
-          : ""
-      }`}>
-        <div className="skills-detail-pane__header" style={{ borderBottom: "none", padding: "0 0 16px 0" }}>
+      <SkillDetailModalContent
+        className={`skills-detail-pane${
+          isRemovingSkill || isUpdatingSkill || isAddingSkillsRepo
+            ? ' skills-detail-pane--loading'
+            : ''
+        }`}
+      >
+        <div
+          className="skills-detail-pane__header"
+          style={{ borderBottom: 'none', padding: '0 0 16px 0' }}
+        >
           <div>
             {shouldShowSelectedSkillSourceBadge && (
-              <span className={`skill-source-badge ${getSkillSourceBadgeMeta(selectedSkill, skillSources).className}`}>
+              <span
+                className={`skill-source-badge ${getSkillSourceBadgeMeta(selectedSkill, skillSources).className}`}
+              >
                 {getSkillSourceBadgeMeta(selectedSkill, skillSources).text}
               </span>
             )}
-            <p className="skills-detail-pane__description" style={{ marginTop: "12px" }}>
-              {selectedSkill.description || "无描述"}
+            <p
+              className="skills-detail-pane__description"
+              style={{ marginTop: '12px' }}
+            >
+              {selectedSkill.description || '无描述'}
             </p>
             <div className="skills-detail-switches">
               <span className="skills-detail-switches__hint">
@@ -151,9 +176,12 @@ export function SkillDetailModal({
               </span>
               <div className="editor-icon-toggle-group editor-icon-toggle-group--skill-detail">
                 {editorIds.map((editorId) => {
-                  const isLinked = isSkillLinkedToEditor(editorId, selectedSkill.id);
+                  const isLinked = isSkillLinkedToEditor(
+                    editorId,
+                    selectedSkill.id,
+                  );
                   const isReadOnly = isSkillToggleReadOnly(selectedSkill);
-                  const tooltipContent = `${editorMeta[editorId].title}${isLinked ? " 已链接" : " 未链接"}`;
+                  const tooltipContent = `${editorMeta[editorId].title}${isLinked ? ' 已链接' : ' 未链接'}`;
 
                   return (
                     <Tooltip
@@ -165,11 +193,16 @@ export function SkillDetailModal({
                       <button
                         type="button"
                         className={`editor-icon-toggle${
-                          isLinked ? " editor-icon-toggle--enabled" : ""
-                        }${isReadOnly ? " editor-icon-toggle--readonly" : ""}`}
+                          isLinked ? ' editor-icon-toggle--enabled' : ''
+                        }${isReadOnly ? ' editor-icon-toggle--readonly' : ''}`}
                         aria-label={tooltipContent}
                         aria-pressed={isLinked}
-                        disabled={isReadOnly || isAddingSkillsRepo || isRemovingSkill || isUpdatingSkill}
+                        disabled={
+                          isReadOnly ||
+                          isAddingSkillsRepo ||
+                          isRemovingSkill ||
+                          isUpdatingSkill
+                        }
                         onClick={() => {
                           void handleSkillEditorToggle(selectedSkill, editorId);
                         }}
@@ -186,7 +219,7 @@ export function SkillDetailModal({
             {canInstallSelectedSkill ? (
               <Button
                 type="button"
-                className={`fragment-action-btn${isAddingSkillsRepo ? " fragment-action-btn--loading" : ""}`}
+                className={`fragment-action-btn${isAddingSkillsRepo ? ' fragment-action-btn--loading' : ''}`}
                 disabled={isAddingSkillsRepo}
                 loading={isAddingSkillsRepo}
                 onClick={async () => {
@@ -199,10 +232,18 @@ export function SkillDetailModal({
                     let skillPath = selectedSkill.path;
                     if (needsInstall) {
                       if (!selectedSkill.repoSource) {
-                        throw new Error("缺少可安装的技能来源。");
+                        throw new Error('缺少可安装的技能来源。');
                       }
                       const timeoutPromise = new Promise<never>((_, reject) =>
-                        setTimeout(() => reject(new Error("安装超时（超过 90 秒），请检查网络或稍后重试。")), INSTALL_TIMEOUT_MS)
+                        setTimeout(
+                          () =>
+                            reject(
+                              new Error(
+                                '安装超时（超过 90 秒），请检查网络或稍后重试。',
+                              ),
+                            ),
+                          INSTALL_TIMEOUT_MS,
+                        ),
                       );
                       const installedSkills = await Promise.race([
                         addSkillsRepository(selectedSkill.repoSource),
@@ -212,7 +253,9 @@ export function SkillDetailModal({
                         isPresetSkillMatchLocal(skill.id, skillId),
                       );
                       if (!installedSkill) {
-                        throw new Error(`安装完成后未找到技能 ${skillName} 的物理路径。`);
+                        throw new Error(
+                          `安装完成后未找到技能 ${skillName} 的物理路径。`,
+                        );
                       }
                       skillPath = installedSkill.path;
                     }
@@ -231,7 +274,8 @@ export function SkillDetailModal({
                         : `已将技能 ${skillName} 链接到 ${editorMeta[activeEditorId].title}。`,
                     );
                   } catch (err) {
-                    const errMsg = err instanceof Error ? err.message : String(err);
+                    const errMsg =
+                      err instanceof Error ? err.message : String(err);
                     messageApi.error(`安装技能 ${skillName} 失败: ${errMsg}`);
                   } finally {
                     setIsAddingSkillsRepo(false);
@@ -244,14 +288,21 @@ export function SkillDetailModal({
               <>
                 <Button
                   type="button"
-                  className={`fragment-action-btn${isRemovingSkill ? " fragment-action-btn--loading" : ""}`}
-                  disabled={isUpdatingSkill || isAddingSkillsRepo || !isSelectedSkillCliManaged || !isSelectedSkillLinked}
+                  className={`fragment-action-btn${isRemovingSkill ? ' fragment-action-btn--loading' : ''}`}
+                  disabled={
+                    isUpdatingSkill ||
+                    isAddingSkillsRepo ||
+                    !isSelectedSkillCliManaged ||
+                    !isSelectedSkillLinked
+                  }
                   loading={isRemovingSkill}
-                  title={!isSelectedSkillCliManaged
-                    ? "当前技能不支持取消链接。"
-                    : !isSelectedSkillLinked
-                      ? `当前 ${editorMeta[activeEditorId].title} 未链接此 Skill。`
-                      : `取消 ${editorMeta[activeEditorId].title} 中此 Skill 的软链接。`}
+                  title={
+                    !isSelectedSkillCliManaged
+                      ? '当前技能不支持取消链接。'
+                      : !isSelectedSkillLinked
+                        ? `当前 ${editorMeta[activeEditorId].title} 未链接此 Skill。`
+                        : `取消 ${editorMeta[activeEditorId].title} 中此 Skill 的软链接。`
+                  }
                   onClick={async () => {
                     const skillId = selectedSkill.id;
                     const skillName = selectedSkill.name;
@@ -265,10 +316,15 @@ export function SkillDetailModal({
                       hydrateSkillsEditorStates(nextSkillsStates);
                       await refreshCurrentEditorSkills(activeEditorId);
                       onCancel();
-                      messageApi.success(`已取消技能 ${skillName} 在 ${editorMeta[activeEditorId].title} 中的链接。`);
+                      messageApi.success(
+                        `已取消技能 ${skillName} 在 ${editorMeta[activeEditorId].title} 中的链接。`,
+                      );
                     } catch (err) {
-                      const errMsg = err instanceof Error ? err.message : String(err);
-                      messageApi.error(`取消技能 ${skillName} 链接失败: ${errMsg}`);
+                      const errMsg =
+                        err instanceof Error ? err.message : String(err);
+                      messageApi.error(
+                        `取消技能 ${skillName} 链接失败: ${errMsg}`,
+                      );
                     } finally {
                       setIsRemovingSkill(false);
                     }
@@ -278,10 +334,18 @@ export function SkillDetailModal({
                 </Button>
                 <Button
                   type="button"
-                  className={`fragment-action-btn${isUpdatingSkill ? " fragment-action-btn--loading" : ""}`}
-                  disabled={isRemovingSkill || isAddingSkillsRepo || !isSelectedSkillCliManaged}
+                  className={`fragment-action-btn${isUpdatingSkill ? ' fragment-action-btn--loading' : ''}`}
+                  disabled={
+                    isRemovingSkill ||
+                    isAddingSkillsRepo ||
+                    !isSelectedSkillCliManaged
+                  }
                   loading={isUpdatingSkill}
-                  title={!isSelectedSkillCliManaged ? "当前技能不支持在这里更新。" : undefined}
+                  title={
+                    !isSelectedSkillCliManaged
+                      ? '当前技能不支持在这里更新。'
+                      : undefined
+                  }
                   onClick={async () => {
                     const skillId = selectedSkill.id;
                     const skillPath = selectedSkill.path;
@@ -295,10 +359,15 @@ export function SkillDetailModal({
                         sourceKind: skillSourceKind,
                       });
                       replaceSkill(refreshedSkill);
-                      messageApi.success(`技能 ${selectedSkill.name} 更新成功！`);
+                      messageApi.success(
+                        `技能 ${selectedSkill.name} 更新成功！`,
+                      );
                     } catch (err) {
-                      const errMsg = err instanceof Error ? err.message : String(err);
-                      messageApi.error(`更新技能 ${selectedSkill.name} 失败: ${errMsg}`);
+                      const errMsg =
+                        err instanceof Error ? err.message : String(err);
+                      messageApi.error(
+                        `更新技能 ${selectedSkill.name} 失败: ${errMsg}`,
+                      );
                     } finally {
                       setIsUpdatingSkill(false);
                     }
@@ -311,35 +380,51 @@ export function SkillDetailModal({
           </div>
         </div>
 
-        <div className="skills-detail-pane__body" style={{ borderTop: "1px solid var(--panel-border)", paddingTop: "16px" }}>
+        <div
+          className="skills-detail-pane__body"
+          style={{
+            borderTop: '1px solid var(--panel-border)',
+            paddingTop: '16px',
+          }}
+        >
           <p className="skills-detail-pane__path">
             <strong>来源类型：</strong>
             {selectedSkill.isBuiltin
-              ? (selectedSkill.installed
-                ? "官方 Skills（已安装）"
-                : "官方 Skills（未安装，请先安装）")
-              : selectedSkill.sourceKind === "cli"
-                ? (selectedSkill.repoSource
+              ? selectedSkill.installed
+                ? '官方 Skills（已安装）'
+                : '官方 Skills（未安装，请先安装）'
+              : selectedSkill.sourceKind === 'cli'
+                ? selectedSkill.repoSource
                   ? `第三方 Skills（来自 ${selectedSkill.repoSource}）`
-                  : "第三方 Skills（来源仓库未知）")
-                : "本地 Skills（来自本地目录）"}
+                  : '第三方 Skills（来源仓库未知）'
+                : '本地 Skills（来自本地目录）'}
           </p>
           <p className="skills-detail-pane__path">
             <strong>来源仓库：</strong>
             {selectedSkill.repoSource ? (
               <a
                 className="skills-detail-pane__link"
-                href={getSkillRepoUrl(selectedSkill.repoSource)}
+                href={getSkillRepoUrl(
+                  selectedSkill.repoSource,
+                  selectedSkill.repoSkillPath,
+                )}
                 onClick={(event) => {
                   event.preventDefault();
-                  void openSkillRepoUrl(getSkillRepoUrl(selectedSkill.repoSource!));
+                  void openSkillRepoUrl(
+                    getSkillRepoUrl(
+                      selectedSkill.repoSource!,
+                      selectedSkill.repoSkillPath,
+                    ),
+                  );
                 }}
                 rel="noreferrer"
                 target="_blank"
               >
                 {selectedSkill.repoSource}
               </a>
-            ) : "无"}
+            ) : (
+              '无'
+            )}
           </p>
           <p className="skills-detail-pane__path">
             <strong>物理来源路径：</strong>
@@ -353,14 +438,19 @@ export function SkillDetailModal({
               >
                 {selectedSkillPhysicalPath}
               </button>
-            ) : "未安装，暂无物理路径"}
+            ) : (
+              '未安装，暂无物理路径'
+            )}
           </p>
           <div className="skills-detail-pane__path">
             <strong>目标软链接：</strong>
             {selectedSkillLinkedTargets.length > 0 ? (
               <div className="skills-detail-pane__multi-paths">
                 {selectedSkillLinkedTargets.map(({ editorId, path }) => (
-                  <div key={`${selectedSkill.id}-${editorId}`} className="skills-detail-pane__multi-path-row">
+                  <div
+                    key={`${selectedSkill.id}-${editorId}`}
+                    className="skills-detail-pane__multi-path-row"
+                  >
                     <span className="skills-detail-pane__multi-path-label">
                       {editorMeta[editorId].title}:
                     </span>
@@ -376,10 +466,15 @@ export function SkillDetailModal({
                   </div>
                 ))}
               </div>
-            ) : "当前未链接到任何编辑器"}
+            ) : (
+              '当前未链接到任何编辑器'
+            )}
           </div>
-          <pre className="skills-detail-pane__markdown" style={{ marginTop: "16px" }}>
-            <code>{selectedSkill.content || "(SKILL.md 内容为空)"}</code>
+          <pre
+            className="skills-detail-pane__markdown"
+            style={{ marginTop: '16px' }}
+          >
+            <code>{selectedSkill.content || '(SKILL.md 内容为空)'}</code>
           </pre>
         </div>
       </SkillDetailModalContent>

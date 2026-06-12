@@ -21,6 +21,14 @@ pub struct SkillInfo {
     pub source_kind: SkillSourceKind,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub repo_source: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repo_skill_path: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CliSkillRepoMetadata {
+    pub repo_source: String,
+    pub repo_skill_path: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
@@ -118,6 +126,59 @@ pub fn load_skills_cli_lock_ids() -> std::collections::HashSet<String> {
         .unwrap_or_default()
 }
 
+fn split_repo_source(repo: &str) -> Option<(String, Option<String>)> {
+    let normalized = normalize_repo_source(repo)?;
+    let parts = normalized.split('/').collect::<Vec<_>>();
+    if parts.len() < 2 {
+        return None;
+    }
+
+    let repo_root = format!("{}/{}", parts[0], parts[1]);
+    let subpath = if parts.len() > 2 {
+        Some(parts[2..].join("/"))
+    } else {
+        None
+    };
+
+    Some((repo_root, subpath))
+}
+
+fn normalize_repo_skill_directory(skill_path: &str) -> String {
+    skill_path
+        .trim_end_matches('/')
+        .strip_suffix("/SKILL.md")
+        .or_else(|| skill_path.strip_suffix("SKILL.md"))
+        .unwrap_or(skill_path)
+        .trim_end_matches('/')
+        .to_string()
+}
+
+pub(crate) fn repo_request_matches_skill(
+    requested_repo: &str,
+    installed_repo: &str,
+    installed_skill_path: Option<&str>,
+) -> bool {
+    let Some((requested_root, requested_subpath)) = split_repo_source(requested_repo) else {
+        return false;
+    };
+
+    if installed_repo != requested_root {
+        return false;
+    }
+
+    let Some(requested_subpath) = requested_subpath else {
+        return true;
+    };
+
+    let Some(installed_skill_path) = installed_skill_path else {
+        return false;
+    };
+    let installed_directory = normalize_repo_skill_directory(installed_skill_path);
+
+    installed_directory == requested_subpath
+        || installed_directory.starts_with(&format!("{requested_subpath}/"))
+}
+
 pub fn load_skills_cli_ids_by_repo(repo: &str) -> std::collections::HashSet<String> {
     let Some(lock_json) = load_skills_cli_lock_json() else {
         return std::collections::HashSet::new();
@@ -131,7 +192,8 @@ pub fn load_skills_cli_ids_by_repo(repo: &str) -> std::collections::HashSet<Stri
                 .iter()
                 .filter_map(|(skill_id, entry)| {
                     let source = entry.get("source").and_then(|value| value.as_str())?;
-                    if source == repo {
+                    let skill_path = entry.get("skillPath").and_then(|value| value.as_str());
+                    if repo_request_matches_skill(repo, source, skill_path) {
                         Some(skill_id.clone())
                     } else {
                         None
@@ -142,7 +204,7 @@ pub fn load_skills_cli_ids_by_repo(repo: &str) -> std::collections::HashSet<Stri
         .unwrap_or_default()
 }
 
-pub fn load_skills_cli_repo_sources() -> std::collections::HashMap<String, String> {
+pub fn load_skills_cli_repo_sources() -> std::collections::HashMap<String, CliSkillRepoMetadata> {
     let Some(lock_json) = load_skills_cli_lock_json() else {
         return std::collections::HashMap::new();
     };
@@ -155,7 +217,17 @@ pub fn load_skills_cli_repo_sources() -> std::collections::HashMap<String, Strin
                 .iter()
                 .filter_map(|(skill_id, entry)| {
                     let source = entry.get("source").and_then(|value| value.as_str())?;
-                    Some((skill_id.clone(), source.to_string()))
+                    let skill_path = entry
+                        .get("skillPath")
+                        .and_then(|value| value.as_str())
+                        .map(|value| value.to_string());
+                    Some((
+                        skill_id.clone(),
+                        CliSkillRepoMetadata {
+                            repo_source: source.to_string(),
+                            repo_skill_path: skill_path,
+                        },
+                    ))
                 })
                 .collect()
         })
@@ -179,6 +251,7 @@ pub fn load_single_skill(
     id: &str,
     source_kind: SkillSourceKind,
     repo_source: Option<String>,
+    repo_skill_path: Option<String>,
 ) -> Option<SkillInfo> {
     let skill_md_path = path.join("SKILL.md");
     if !skill_md_path.exists() {
@@ -222,6 +295,7 @@ pub fn load_single_skill(
         path: path.display().to_string(),
         source_kind,
         repo_source,
+        repo_skill_path,
     })
 }
 
@@ -256,7 +330,7 @@ pub fn extract_skill_source_entries(value: &serde_json::Value) -> Vec<(String, P
 pub fn collect_skills_from_directory(
     directory: &Path,
     managed_skill_ids: &std::collections::HashSet<String>,
-    repo_sources: &std::collections::HashMap<String, String>,
+    repo_sources: &std::collections::HashMap<String, CliSkillRepoMetadata>,
 ) -> Vec<SkillInfo> {
     let mut skills = Vec::new();
     let mut loaded_ids = std::collections::HashSet::new();
@@ -296,12 +370,26 @@ pub fn collect_skills_from_directory(
         };
 
         let source_kind = classify_cli_skill_source(&source_path, &skill_id, managed_skill_ids);
-        let repo_source = if source_kind == SkillSourceKind::Cli {
-            repo_sources.get(&skill_id).cloned()
+        let (repo_source, repo_skill_path) = if source_kind == SkillSourceKind::Cli {
+            repo_sources
+                .get(&skill_id)
+                .map(|metadata| {
+                    (
+                        Some(metadata.repo_source.clone()),
+                        metadata.repo_skill_path.clone(),
+                    )
+                })
+                .unwrap_or((None, None))
         } else {
-            None
+            (None, None)
         };
-        if let Some(skill) = load_single_skill(&source_path, &skill_id, source_kind, repo_source) {
+        if let Some(skill) = load_single_skill(
+            &source_path,
+            &skill_id,
+            source_kind,
+            repo_source,
+            repo_skill_path,
+        ) {
             if loaded_ids.insert(skill.id.clone()) {
                 skills.push(skill);
             }
@@ -588,16 +676,25 @@ pub async fn link_skill_to_editor(payload: LinkSkillPayload) -> Result<ApplySkil
 
 #[tauri::command]
 pub async fn load_single_skill_command(payload: LoadSingleSkillPayload) -> Result<SkillInfo, String> {
-    let repo_source = if payload.source_kind == SkillSourceKind::Cli {
-        load_skills_cli_repo_sources().get(&payload.id).cloned()
+    let (repo_source, repo_skill_path) = if payload.source_kind == SkillSourceKind::Cli {
+        load_skills_cli_repo_sources()
+            .get(&payload.id)
+            .map(|metadata| {
+                (
+                    Some(metadata.repo_source.clone()),
+                    metadata.repo_skill_path.clone(),
+                )
+            })
+            .unwrap_or((None, None))
     } else {
-        None
+        (None, None)
     };
     load_single_skill(
         Path::new(&payload.path),
         &payload.id,
         payload.source_kind,
         repo_source,
+        repo_skill_path,
     )
     .ok_or_else(|| format!("无法读取技能 {} 的最新内容。", payload.id))
 }
@@ -621,7 +718,7 @@ pub async fn load_skills_from_dir(path: String) -> Result<Vec<SkillInfo>, String
 pub async fn add_skills_repository(repo: String) -> Result<Vec<SkillInfo>, String> {
     let Some(repo_trimmed) = normalize_repo_source(&repo) else {
         return Err(
-            "仓库源必须使用 owner/repo 格式，或提供对应的 GitHub 仓库链接；且只能包含字母、数字、点、下划线和短横线。"
+            "仓库源必须使用 owner/repo 或 owner/repo/path 格式，或提供对应的 GitHub 仓库/目录链接；且只能包含字母、数字、点、下划线和短横线。"
                 .to_string(),
         );
     };

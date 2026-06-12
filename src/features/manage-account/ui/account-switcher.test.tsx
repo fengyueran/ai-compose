@@ -13,7 +13,7 @@ vi.mock('../../../shared', async () => {
     saveCurrentEditorAccount: vi.fn(),
     switchEditorAccount: vi.fn(),
     deleteEditorAccount: vi.fn(),
-    fetchCursorAccountUsage: vi.fn(),
+    fetchEditorAccountUsage: vi.fn(),
   };
 });
 
@@ -30,12 +30,30 @@ describe('AccountSwitcher Component', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(api.fetchCursorAccountUsage).mockResolvedValue({
-      email: 'test@domain.com',
-      billingCycleEnd: 1781330313000,
-      totalPercentUsed: 42.5,
-      limit: 2000,
-    });
+    vi.mocked(api.fetchEditorAccountUsage).mockImplementation(
+      async (editorId) => {
+        if (editorId === 'cursor') {
+          return {
+            email: 'test@domain.com',
+            billingCycleEnd: 1781330313000,
+            totalPercentUsed: 42.5,
+            limit: 2000,
+          };
+        } else {
+          return {
+            email: 'codex@domain.com',
+            codexUsage: {
+              primaryUsedPercent: 60.0,
+              primaryResetAt: 1781330313000,
+              primaryWindowLabel: '5h',
+              secondaryUsedPercent: 30.0,
+              secondaryResetAt: 1781330313000,
+              secondaryWindowLabel: 'Weekly',
+            },
+          };
+        }
+      },
+    );
   });
 
   test('renders empty state and allows saving new account', async () => {
@@ -140,5 +158,63 @@ describe('AccountSwitcher Component', () => {
     expect(mockMessageApi.success).toHaveBeenCalledWith(
       '已删除账号备份: personal',
     );
+  });
+
+  test('renders usage rows for codex accounts', async () => {
+    const mockAccounts: api.EditorAccountInfo[] = [
+      { name: 'codex-work', isActive: true, lastModified: 1716889900 },
+    ];
+    vi.mocked(api.loadEditorAccounts).mockResolvedValue(mockAccounts);
+
+    render(
+      <AccountSwitcher
+        editorId="codex"
+        editorName="Codex"
+        messageApi={mockMessageApi}
+      />,
+    );
+
+    // 等待列表加载和使用额度渲染
+    await waitFor(() => {
+      expect(screen.getByText('codex-work')).toBeInTheDocument();
+      expect(screen.getByText('codex@domain.com')).toBeInTheDocument();
+      expect(screen.getByText('5h 额度')).toBeInTheDocument();
+      expect(screen.getByText('Weekly 额度')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText(/已用 60.0%/)).toBeInTheDocument();
+    expect(screen.getByText(/已用 30.0%/)).toBeInTheDocument();
+  });
+
+  test('renders usage rows for codex free accounts (single window)', async () => {
+    const mockAccounts: api.EditorAccountInfo[] = [
+      { name: 'codex-free', isActive: true, lastModified: 1716889900 },
+    ];
+    vi.mocked(api.loadEditorAccounts).mockResolvedValue(mockAccounts);
+    vi.mocked(api.fetchEditorAccountUsage).mockResolvedValue({
+      email: 'free-user@domain.com',
+      codexUsage: {
+        primaryUsedPercent: 43.0,
+        primaryResetAt: 1781330313000,
+        primaryWindowLabel: 'Monthly',
+      },
+    });
+
+    render(
+      <AccountSwitcher
+        editorId="codex"
+        editorName="Codex"
+        messageApi={mockMessageApi}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('codex-free')).toBeInTheDocument();
+      expect(screen.getByText('free-user@domain.com')).toBeInTheDocument();
+      expect(screen.getByText('Monthly 额度')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText('Weekly 额度')).not.toBeInTheDocument();
+    expect(screen.getByText(/已用 43.0%/)).toBeInTheDocument();
   });
 });

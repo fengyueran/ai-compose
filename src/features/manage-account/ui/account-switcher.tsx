@@ -3,12 +3,12 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   type EditorId,
   type EditorAccountInfo,
-  type CursorUsageInfo,
+  type EditorUsageInfo,
   loadEditorAccounts,
   saveCurrentEditorAccount,
   switchEditorAccount,
   deleteEditorAccount,
-  fetchCursorAccountUsage,
+  fetchEditorAccountUsage,
 } from '../../../shared';
 import { AccountSwitcherWrapper } from './account-switcher.styles';
 
@@ -29,14 +29,14 @@ export function AccountSwitcher({
   const [saving, setSaving] = useState(false);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
 
-  const [usages, setUsages] = useState<Record<string, CursorUsageInfo | null>>(
+  const [usages, setUsages] = useState<Record<string, EditorUsageInfo | null>>(
     {},
   );
   const [usageLoading, setUsageLoading] = useState<Record<string, boolean>>({});
 
   const loadUsages = useCallback(
     async (list: EditorAccountInfo[]) => {
-      if (editorId !== 'cursor') return;
+      if (editorId !== 'cursor' && editorId !== 'codex') return;
 
       const tasks = list.map(async (acct) => {
         const queryName = acct.isActive ? undefined : acct.name;
@@ -44,7 +44,7 @@ export function AccountSwitcher({
 
         setUsageLoading((prev) => ({ ...prev, [cacheKey]: true }));
         try {
-          const info = await fetchCursorAccountUsage(queryName);
+          const info = await fetchEditorAccountUsage(editorId, queryName);
           setUsages((prev) => ({ ...prev, [cacheKey]: info }));
         } catch (err) {
           console.warn(`Failed to fetch usage for ${acct.name}:`, err);
@@ -68,7 +68,7 @@ export function AccountSwitcher({
     try {
       const data = await loadEditorAccounts(editorId);
       setAccounts(data);
-      if (editorId === 'cursor') {
+      if (editorId === 'cursor' || editorId === 'codex') {
         void loadUsages(data);
       }
     } catch (err) {
@@ -217,7 +217,7 @@ export function AccountSwitcher({
                     <span className="account-item__active-badge">当前激活</span>
                   )}
                 </div>
-                {editorId === 'cursor' && (
+                {(editorId === 'cursor' || editorId === 'codex') && (
                   <div className="account-item__usage-zone">
                     {usageLoading[acct.name] ? (
                       <div className="account-item__usage-skeleton">
@@ -228,39 +228,167 @@ export function AccountSwitcher({
                     ) : usages[acct.name] ? (
                       (() => {
                         const usage = usages[acct.name]!;
-                        return (
-                          <div className="account-item__usage-detail">
-                            <div className="account-item__usage-meta">
-                              <span
-                                className="account-item__usage-email"
-                                title={usage.email}
-                              >
-                                {usage.email}
-                              </span>
-                              <span className="account-item__usage-reset">
-                                {new Date(
-                                  usage.billingCycleEnd,
-                                ).toLocaleDateString()}{' '}
-                                重置
-                              </span>
+                        if (editorId === 'cursor') {
+                          const percent = usage.totalPercentUsed ?? 0;
+                          const resetStr = usage.billingCycleEnd
+                            ? new Date(
+                                usage.billingCycleEnd,
+                              ).toLocaleDateString()
+                            : '--';
+                          return (
+                            <div className="account-item__usage-detail">
+                              <div className="account-item__usage-meta">
+                                <span
+                                  className="account-item__usage-email"
+                                  title={usage.email}
+                                >
+                                  {usage.email}
+                                </span>
+                                <span className="account-item__usage-reset">
+                                  {resetStr} 重置
+                                </span>
+                              </div>
+                              <div className="account-item__usage-progress-container">
+                                <div
+                                  className="account-item__usage-progress-bar"
+                                  style={{
+                                    width: `${Math.min(100, percent)}%`,
+                                  }}
+                                />
+                              </div>
+                              <div className="account-item__usage-status">
+                                已用 {percent.toFixed(1)}% (
+                                {percent >= 100
+                                  ? '额度用尽'
+                                  : `剩余 ${(100 - percent).toFixed(1)}%`}
+                                )
+                              </div>
                             </div>
-                            <div className="account-item__usage-progress-container">
+                          );
+                        } else {
+                          const codexUsage = usage.codexUsage;
+                          if (!codexUsage) {
+                            return (
+                              <div className="account-item__usage-error">
+                                额度数据解析失败
+                              </div>
+                            );
+                          }
+
+                          const formatResetTime = (
+                            ms: number | null | undefined,
+                            label: string | null | undefined,
+                          ) => {
+                            if (ms == null || label == null) return '--';
+                            const isShort =
+                              label.toLowerCase().includes('h') &&
+                              !label.toLowerCase().includes('month');
+                            try {
+                              if (isShort) {
+                                return new Date(ms).toLocaleTimeString([], {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  hour12: false,
+                                });
+                              }
+                              return new Date(ms).toLocaleDateString([], {
+                                month: 'short',
+                                day: 'numeric',
+                              });
+                            } catch {
+                              return '--';
+                            }
+                          };
+
+                          return (
+                            <div className="account-item__usage-detail">
                               <div
-                                className="account-item__usage-progress-bar"
-                                style={{
-                                  width: `${Math.min(100, usage.totalPercentUsed)}%`,
-                                }}
-                              />
+                                className="account-item__usage-meta"
+                                style={{ marginBottom: '2px' }}
+                              >
+                                <span
+                                  className="account-item__usage-email"
+                                  title={usage.email}
+                                >
+                                  {usage.email}
+                                </span>
+                              </div>
+                              <div className="account-item__codex-rows">
+                                <div className="account-item__codex-row">
+                                  <div className="account-item__codex-row-header">
+                                    <span className="account-item__codex-row-label">
+                                      {codexUsage.primaryWindowLabel} 额度
+                                    </span>
+                                    <span className="account-item__codex-row-reset">
+                                      {formatResetTime(
+                                        codexUsage.primaryResetAt,
+                                        codexUsage.primaryWindowLabel,
+                                      )}{' '}
+                                      重置
+                                    </span>
+                                  </div>
+                                  <div className="account-item__codex-progress-container">
+                                    <div
+                                      className="account-item__codex-progress-bar account-item__codex-progress-bar--primary"
+                                      style={{
+                                        width: `${Math.min(100, codexUsage.primaryUsedPercent ?? 0)}%`,
+                                      }}
+                                    />
+                                  </div>
+                                  <div className="account-item__codex-row-status">
+                                    已用{' '}
+                                    {(
+                                      codexUsage.primaryUsedPercent ?? 0
+                                    ).toFixed(1)}
+                                    % (
+                                    {(codexUsage.primaryUsedPercent ?? 0) >= 100
+                                      ? '已受限'
+                                      : `剩余 ${(100 - (codexUsage.primaryUsedPercent ?? 0)).toFixed(1)}%`}
+                                    )
+                                  </div>
+                                </div>
+                                {codexUsage.secondaryUsedPercent != null &&
+                                  codexUsage.secondaryResetAt != null &&
+                                  codexUsage.secondaryWindowLabel != null && (
+                                    <div className="account-item__codex-row">
+                                      <div className="account-item__codex-row-header">
+                                        <span className="account-item__codex-row-label">
+                                          {codexUsage.secondaryWindowLabel} 额度
+                                        </span>
+                                        <span className="account-item__codex-row-reset">
+                                          {formatResetTime(
+                                            codexUsage.secondaryResetAt,
+                                            codexUsage.secondaryWindowLabel,
+                                          )}{' '}
+                                          重置
+                                        </span>
+                                      </div>
+                                      <div className="account-item__codex-progress-container">
+                                        <div
+                                          className="account-item__codex-progress-bar account-item__codex-progress-bar--secondary"
+                                          style={{
+                                            width: `${Math.min(100, codexUsage.secondaryUsedPercent ?? 0)}%`,
+                                          }}
+                                        />
+                                      </div>
+                                      <div className="account-item__codex-row-status">
+                                        &nbsp;已用{' '}
+                                        {(
+                                          codexUsage.secondaryUsedPercent ?? 0
+                                        ).toFixed(1)}
+                                        % (
+                                        {(codexUsage.secondaryUsedPercent ??
+                                          0) >= 100
+                                          ? '已受限'
+                                          : `剩余 ${(100 - (codexUsage.secondaryUsedPercent ?? 0)).toFixed(1)}%`}
+                                        )
+                                      </div>
+                                    </div>
+                                  )}
+                              </div>
                             </div>
-                            <div className="account-item__usage-status">
-                              已用 {usage.totalPercentUsed.toFixed(1)}% (
-                              {usage.totalPercentUsed >= 100
-                                ? '额度用尽'
-                                : `剩余 ${(100 - usage.totalPercentUsed).toFixed(1)}%`}
-                              )
-                            </div>
-                          </div>
-                        );
+                          );
+                        }
                       })()
                     ) : (
                       <div className="account-item__usage-error">
