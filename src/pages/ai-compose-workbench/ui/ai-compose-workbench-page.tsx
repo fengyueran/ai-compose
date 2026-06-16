@@ -12,6 +12,8 @@ import {
   isTauriRuntime,
   type SkillInfo,
   useAiComposeStore,
+  exportConfiguration,
+  importConfiguration,
 } from '../../../shared';
 import { PromptPanel } from '../../../widgets/prompt-panel';
 import { McpPanel } from '../../../widgets/mcp-panel';
@@ -31,6 +33,8 @@ import {
   SideNavPanel,
   SideNavSection,
   WorkspaceGrid,
+  ActionContainer,
+  ActionBtn,
 } from './ai-compose-workbench-page.styles';
 
 type DomainName = 'Prompt' | 'MCP' | 'Hooks' | 'Skills' | 'Profiles';
@@ -63,7 +67,89 @@ export function AiComposeWorkbenchPage() {
     setApplyFeedback,
     setSkillsList,
     skillSources,
+    hooksState,
+    importConfigurationAction,
   } = useAiComposeStore();
+
+  const handleExportConfig = async () => {
+    if (!isTauriRuntime()) {
+      messageApiRef.current.warning(
+        '当前环境不支持导出配置！请在桌面端中运行。',
+      );
+      return;
+    }
+
+    try {
+      const customMcp = localStorage.getItem('ai-compose:custom-mcp-servers');
+      const customSkill = localStorage.getItem(
+        'ai-compose:custom-skill-sources',
+      );
+      const customMcpServers = customMcp ? JSON.parse(customMcp) : [];
+      const customSkillSources = customSkill ? JSON.parse(customSkill) : [];
+      const hooks = hooksState.hooks;
+
+      const configData = {
+        version: '1.0.0',
+        customMcpServers,
+        customSkillSources,
+        hooks,
+      };
+
+      const jsonString = JSON.stringify(configData, null, 2);
+      await exportConfiguration(jsonString);
+      messageApiRef.current.success('配置导出成功！');
+    } catch (e) {
+      if (e === '用户取消了保存文件') {
+        return;
+      }
+      messageApiRef.current.error(`导出失败：${e}`);
+    }
+  };
+
+  const handleImportConfig = async () => {
+    if (!isTauriRuntime()) {
+      messageApiRef.current.warning(
+        '当前环境不支持导入配置！请在桌面端中运行。',
+      );
+      return;
+    }
+
+    try {
+      const content = await importConfiguration();
+      const configData = JSON.parse(content);
+
+      if (!configData || typeof configData !== 'object') {
+        throw new Error('无效的 JSON 配置文件。');
+      }
+
+      const { customMcpServers, customSkillSources, hooks } = configData;
+      if (
+        !Array.isArray(customMcpServers) ||
+        !Array.isArray(customSkillSources) ||
+        !Array.isArray(hooks)
+      ) {
+        throw new Error('配置文件格式不正确，缺少必要字段。');
+      }
+
+      await importConfigurationAction({
+        customMcpServers,
+        customSkillSources,
+        hooks,
+      });
+
+      messageApiRef.current.success('配置导入并生效成功！正在刷新页面。');
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    } catch (e) {
+      if (e === '用户取消了选择文件') {
+        return;
+      }
+      messageApiRef.current.error(
+        `导入失败：${e instanceof Error ? e.message : e}`,
+      );
+    }
+  };
 
   useEffect(() => {
     let isSubscribed = true;
@@ -208,6 +294,10 @@ export function AiComposeWorkbenchPage() {
           <Brand>
             <BrandTitle>AI Compose</BrandTitle>
           </Brand>
+          <ActionContainer>
+            <ActionBtn onClick={handleImportConfig}>导入配置</ActionBtn>
+            <ActionBtn onClick={handleExportConfig}>导出配置</ActionBtn>
+          </ActionContainer>
         </GlobalBar>
 
         <WorkspaceGrid isSkillsDomain={activeDomain === 'Skills'}>

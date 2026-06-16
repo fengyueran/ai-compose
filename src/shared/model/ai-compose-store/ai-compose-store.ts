@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { applyHooksToEditorTarget } from '../../api/editor-target-command';
 
 import type {
   EditorId,
@@ -139,7 +140,9 @@ type AiComposeState = {
   skillSources: SkillSource[];
   selectedSkillSourceId: string;
 
-  selectDomain: (domain: 'Prompt' | 'MCP' | 'Hooks' | 'Skills' | 'Profiles') => void;
+  selectDomain: (
+    domain: 'Prompt' | 'MCP' | 'Hooks' | 'Skills' | 'Profiles',
+  ) => void;
   hydratePromptEditorStates: (
     editorStates: Record<EditorId, EditorTargetState>,
   ) => void;
@@ -189,6 +192,11 @@ type AiComposeState = {
   addSkillSource: (source: Omit<SkillSource, 'id'>) => void;
   deleteSkillSource: (id: string) => void;
   selectSkillSource: (id: string) => void;
+  importConfigurationAction: (imported: {
+    customMcpServers: McpServer[];
+    customSkillSources: SkillSource[];
+    hooks: HookDefinition[];
+  }) => Promise<void>;
 };
 
 const defaultSelectedFragmentId = presetPromptFragments[0]?.id ?? '';
@@ -938,6 +946,58 @@ export const useAiComposeStore = create<AiComposeState>((set, get) => ({
 
   selectSkillSource: (id) => {
     set({ selectedSkillSourceId: id });
+  },
+
+  importConfigurationAction: async (imported) => {
+    const { customMcpServers, customSkillSources, hooks } = imported;
+
+    // 1. 保存自定义 MCP 服务器到 localStorage
+    saveCustomServersToStorage(customMcpServers);
+
+    // 2. 保存自定义技能来源到 localStorage
+    saveCustomSkillSourcesToStorage(customSkillSources);
+
+    // 3. 应用并持久化 Hooks 到编辑器
+    try {
+      await applyHooksToEditorTarget({ hooks });
+    } catch (e) {
+      console.error('Failed to apply imported hooks to editor targets', e);
+      throw new Error(`应用 Hooks 失败：${e}`, { cause: e });
+    }
+
+    // 4. 重构并刷新前端 Store
+    const allMcpServers = [...presetMcpServers, ...customMcpServers];
+    const allSkillSources: SkillSource[] = [
+      { id: 'all', type: 'all', name: '全部', value: '' },
+      { id: 'preset', type: 'preset', name: '官方预设', value: '' },
+      ...customSkillSources,
+    ];
+
+    set((state) => {
+      const nextMcpStates = state.mcpEditorStates;
+      const nextEnabledIdsByEditor = buildEnabledServerIdsByEditor(
+        nextMcpStates,
+        allMcpServers,
+      );
+
+      const nextHooksSummary = buildHookSummaryStates(hooks);
+
+      return {
+        mcpServers: allMcpServers,
+        skillSources: allSkillSources,
+        hooksState: {
+          ...state.hooksState,
+          hooks,
+          selectedHookId: hooks[0]?.id ?? '',
+        },
+        hooksEditorStates: nextHooksSummary,
+        mcpEnabledServerIdsByEditor: nextEnabledIdsByEditor,
+        editorStates:
+          state.activeDomain === 'Hooks'
+            ? nextHooksSummary
+            : state.editorStates,
+      };
+    });
   },
 }));
 

@@ -144,6 +144,7 @@ export type SkillInfo = {
   isBuiltin?: boolean;
   installed?: boolean;
   repoSource?: string;
+  repoSkillPath?: string;
 };
 
 export type EditorSkillsState = {
@@ -276,27 +277,35 @@ export function normalizeRepoSource(repo: string): string {
   // Remove trailing slashes.
   trimmed = trimmed.replace(/\/+$/, '');
 
-  // Remove the http/https scheme.
+  const hasHttpScheme = /^https?:\/\//.test(trimmed);
   const withoutScheme = trimmed.replace(/^https?:\/\//, '');
-  // Remove the www. prefix.
   const withoutWww = withoutScheme.replace(/^www\./, '');
-  // Remove the github.com/ prefix.
-  let githubPath = withoutWww.replace(/^github\.com\//, '');
+  const isGithubUrl = withoutWww.startsWith('github.com/');
+  let sourcePath = isGithubUrl
+    ? withoutWww.replace(/^github\.com\//, '')
+    : trimmed;
 
   // Strip query parameters and hash fragments.
-  githubPath = githubPath.split(/[?#]/)[0];
+  sourcePath = sourcePath.split(/[?#]/)[0];
 
   // Remove the .git suffix and any trailing slashes.
-  const pathWithoutSuffix = githubPath
+  const pathWithoutSuffix = sourcePath
     .replace(/\.git$/, '')
     .replace(/\/+$/, '');
 
-  // If the value is in owner/repo form, keep only the first two segments.
-  const parts = pathWithoutSuffix.split('/');
-  if (parts.length >= 2) {
-    return `${parts[0]}/${parts[1]}`;
+  if (hasHttpScheme && !isGithubUrl) {
+    return pathWithoutSuffix;
   }
-  return pathWithoutSuffix;
+
+  const parts = pathWithoutSuffix.split('/').filter(Boolean);
+  if (parts.length >= 4 && parts[2] === 'tree') {
+    if (parts.length === 4) {
+      return [parts[0], parts[1]].join('/');
+    }
+    return [parts[0], parts[1], ...parts.slice(4)].join('/');
+  }
+
+  return parts.length >= 2 ? parts.join('/') : pathWithoutSuffix;
 }
 
 export interface EditorAccountInfo {
@@ -330,4 +339,39 @@ export function deleteEditorAccount(
   name: string,
 ): Promise<void> {
   return invoke<void>('delete_editor_account', { editorId, name });
+}
+
+export interface CodexUsageInfo {
+  primaryUsedPercent: number;
+  primaryResetAt: number;
+  primaryWindowLabel: string;
+  secondaryUsedPercent?: number;
+  secondaryResetAt?: number;
+  secondaryWindowLabel?: string;
+}
+
+export interface EditorUsageInfo {
+  email: string;
+  billingCycleEnd?: number;
+  totalPercentUsed?: number;
+  limit?: number;
+  codexUsage?: CodexUsageInfo;
+}
+
+export function fetchEditorAccountUsage(
+  editorId: EditorId,
+  name?: string,
+): Promise<EditorUsageInfo> {
+  return invoke<EditorUsageInfo>('fetch_editor_account_usage', {
+    editorId,
+    name,
+  });
+}
+
+export function exportConfiguration(content: string): Promise<void> {
+  return invoke<void>('export_configuration', { content });
+}
+
+export function importConfiguration(): Promise<string> {
+  return invoke<string>('import_configuration');
 }

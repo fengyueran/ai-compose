@@ -96,6 +96,7 @@ fn resolve_auth_file_path(
 #[derive(Deserialize)]
 struct CodexAuthTokens {
     account_id: Option<String>,
+    access_token: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -107,6 +108,251 @@ fn get_codex_account_id(path: &Path) -> Option<String> {
     let content = std::fs::read_to_string(path).ok()?;
     let auth: CodexAuthFile = serde_json::from_str(&content).ok()?;
     auth.tokens.and_then(|t| t.account_id)
+}
+
+fn read_token_and_email_from_db(db_path: &Path) -> Result<(String, String), String> {
+    if !db_path.exists() {
+        return Err("状态数据库不存在，请先在 Cursor 中登录账号。".to_string());
+    }
+
+    let conn = rusqlite::Connection::open_with_flags(
+        db_path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_URI,
+    )
+    .map_err(|e| format!("打开状态数据库失败: {}", e))?;
+
+    let mut stmt = conn
+        .prepare("SELECT value FROM ItemTable WHERE key = ?")
+        .map_err(|e| format!("准备 SQL 失败: {}", e))?;
+
+    let token: String = stmt
+        .query_row(["cursorAuth/accessToken"], |row| row.get(0))
+        .map_err(|_| "未在数据库中找到 accessToken，请先在 Cursor 中登录账号。".to_string())?;
+
+    // cachedEmail 可能会不存在，允许 fallback
+    let email: String = stmt
+        .query_row(["cursorAuth/cachedEmail"], |row| row.get(0))
+        .unwrap_or_else(|_| "Unknown".to_string());
+
+    Ok((token, email))
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct EditorUsageInfo {
+    pub email: String,
+    // Cursor 专属
+    pub billing_cycle_end: Option<u64>,
+    pub total_percent_used: Option<f64>,
+    pub limit: Option<u64>,
+    // Codex 专属
+    pub codex_usage: Option<CodexUsageInfo>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexUsageInfo {
+    pub primary_used_percent: f64,
+    pub primary_reset_at: u64,
+    pub primary_window_label: String,
+    pub secondary_used_percent: Option<f64>,
+    pub secondary_reset_at: Option<u64>,
+    pub secondary_window_label: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(untagged)]
+enum StringOrNumber {
+    String(String),
+    Number(u64),
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ApiPlanUsage {
+    limit: u64,
+    total_percent_used: f64,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ApiUsageResponse {
+    billing_cycle_end: Option<StringOrNumber>,
+    plan_usage: Option<ApiPlanUsage>,
+}
+
+// Codex Rate Limit Models
+#[derive(serde::Deserialize)]
+struct ApiCodexWindow {
+    used_percent: f64,
+    limit_window_seconds: u64,
+    reset_at: u64,
+}
+
+#[derive(serde::Deserialize)]
+struct ApiCodexRateLimit {
+    primary_window: Option<ApiCodexWindow>,
+    secondary_window: Option<ApiCodexWindow>,
+}
+
+#[derive(serde::Deserialize)]
+struct ApiCodexResponse {
+    email: String,
+    rate_limit: Option<ApiCodexRateLimit>,
+}
+
+#[tauri::command]
+pub async fn fetch_editor_account_usage(
+    editor_id: EditorId,
+    name: Option<String>,
+) -> Result<EditorUsageInfo, String> {
+    fetch_usage_impl(editor_id, name, None).await
+}
+
+pub async fn fetch_usage_impl(
+    editor_id: EditorId,
+    name: Option<String>,
+    custom_home: Option<&Path>,
+) -> Result<EditorUsageInfo, String> {
+    let (auth_file, prefix, ext) = resolve_auth_file_path(editor_id, custom_home)?;
+    let parent_dir = auth_file.parent().ok_or_else(|| "无法获取凭证文件目录。".to_string())?;
+
+    let file_path = if let Some(ref n) = name {
+        if !is_safe_account_name(n) {
+            return Err("非法账号名称，仅允许使用字母、数字、下划线及短横线。".to_string());
+        }
+        parent_dir.join(format!("{}-{}.{}", prefix, n, ext))
+    } else {
+        auth_file
+    };
+
+    match editor_id {
+        EditorId::Cursor => {
+            let (token, email) = read_token_and_email_from_db(&file_path)?;
+
+            let client = reqwest::Client::new();
+            let res = client
+                .post("https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage")
+                .header("Authorization", format!("Bearer {}", token))
+                .header("Content-Type", "application/json")
+                .header("Connect-Protocol-Version", "1")
+                .body("{}")
+                .send()
+                .await
+                .map_err(|e| format!("请求 Cursor API 失败: {}", e))?;
+
+            if !res.status().is_success() {
+                let status = res.status();
+                let err_text = res.text().await.unwrap_or_default();
+                return Err(format!("Cursor API 错误 ({}): {}", status, err_text));
+            }
+
+            let api_res = res
+                .json::<ApiUsageResponse>()
+                .await
+                .map_err(|e| format!("解析 API 响应失败: {}", e))?;
+
+            let billing_cycle_end = match api_res.billing_cycle_end {
+                Some(StringOrNumber::String(s)) => s.parse::<u64>().unwrap_or(0),
+                Some(StringOrNumber::Number(n)) => n,
+                None => 0,
+            };
+
+            let (limit, total_percent_used) = if let Some(usage) = api_res.plan_usage {
+                (usage.limit, usage.total_percent_used)
+            } else {
+                (0, 0.0)
+            };
+
+            Ok(EditorUsageInfo {
+                email,
+                billing_cycle_end: Some(billing_cycle_end),
+                total_percent_used: Some(total_percent_used),
+                limit: Some(limit),
+                codex_usage: None,
+            })
+        }
+        EditorId::Codex => {
+            if !file_path.exists() {
+                return Err("凭证文件不存在，请先在编辑器中登录。".to_string());
+            }
+            let content = std::fs::read_to_string(&file_path)
+                .map_err(|e| format!("读取凭证文件失败: {}", e))?;
+            let auth: CodexAuthFile = serde_json::from_str(&content)
+                .map_err(|e| format!("解析凭证文件失败: {}", e))?;
+            let token = auth
+                .tokens
+                .and_then(|t| t.access_token)
+                .ok_or_else(|| "未在凭证文件中找到 access_token，请先在 Codex 中登录。".to_string())?;
+
+            let client = reqwest::Client::new();
+            let res = client
+                .get("https://chatgpt.com/backend-api/wham/usage")
+                .header("Authorization", format!("Bearer {}", token))
+                .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                .send()
+                .await
+                .map_err(|e| format!("请求 Codex API 失败: {}", e))?;
+
+            if !res.status().is_success() {
+                let status = res.status();
+                let err_text = res.text().await.unwrap_or_default();
+                return Err(format!("Codex API 错误 ({}): {}", status, err_text));
+            }
+
+            let api_res = res
+                .json::<ApiCodexResponse>()
+                .await
+                .map_err(|e| format!("解析 API 响应失败: {}", e))?;
+
+            let codex_usage = if let Some(limits) = api_res.rate_limit {
+                let primary = limits.primary_window.map(|w| {
+                    let label = if w.limit_window_seconds == 18000 {
+                        "5h".to_string()
+                    } else if w.limit_window_seconds == 2592000 {
+                        "Monthly".to_string()
+                    } else {
+                        format!("{}h", w.limit_window_seconds / 3600)
+                    };
+                    (w.used_percent, w.reset_at * 1000, label)
+                });
+                let secondary = limits.secondary_window.map(|w| {
+                    let label = if w.limit_window_seconds == 604800 {
+                        "Weekly".to_string()
+                    } else {
+                        format!("{}d", w.limit_window_seconds / 86400)
+                    };
+                    (w.used_percent, w.reset_at * 1000, label)
+                });
+
+                if let Some(p) = primary {
+                    Some(CodexUsageInfo {
+                        primary_used_percent: p.0,
+                        primary_reset_at: p.1,
+                        primary_window_label: p.2,
+                        secondary_used_percent: secondary.as_ref().map(|s| s.0),
+                        secondary_reset_at: secondary.as_ref().map(|s| s.1),
+                        secondary_window_label: secondary.as_ref().map(|s| s.2.clone()),
+                    })
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            let codex_usage = codex_usage.ok_or_else(|| "API 响应中缺少使用额度数据。".to_string())?;
+
+            Ok(EditorUsageInfo {
+                email: api_res.email,
+                billing_cycle_end: None,
+                total_percent_used: None,
+                limit: None,
+                codex_usage: Some(codex_usage),
+            })
+        }
+        EditorId::Antigravity => Err("Antigravity 不支持获取额度信息。".to_string()),
+    }
 }
 
 // 内部实现，接受 custom_home 方便 TDD
@@ -304,6 +550,23 @@ pub fn switch_account_impl(
         return Err(format!("未找到名为 '{}' 的账号凭证备份。", name));
     }
 
+    // 在覆盖前，若当前存在活跃账号标记，自动将当前正在被替换的原凭据文件静默同步归档回其对应的备份中
+    // 这样能够保证当前账号的最新凭证（如自动刷新后的 Token 或 Cursor 聊天记录等）在切走时不丢失，防止切回时由于使用过期/已使用过的 Token 导致失效
+    let marker_path = active_marker_path(parent_dir, &prefix);
+    if marker_path.exists() && auth_file.exists() {
+        if let Ok(marker_content) = std::fs::read_to_string(&marker_path) {
+            let marker_content = marker_content.trim();
+            if let Some((active_name, _)) = marker_content.split_once(':') {
+                if is_safe_account_name(active_name) && active_name != name {
+                    let active_backup = parent_dir.join(format!("{}-{}.{}", prefix, active_name, ext));
+                    if active_backup.exists() {
+                        let _ = std::fs::copy(&auth_file, &active_backup);
+                    }
+                }
+            }
+        }
+    }
+
     // 覆盖目标原文件
     std::fs::copy(&src_file, &auth_file)
         .map_err(|err| format!("恢复账号凭证失败: {}", err))?;
@@ -481,10 +744,17 @@ mod tests {
         assert!(!work_acct.is_active);
         assert!(pers_acct.is_active);
 
+        // 8.5 模拟 personal 在运行期间刷新了 Token 导致内容变动
+        fs::write(&auth_path, "token-personal-refreshed-999").unwrap();
+
         // 9. 切换回 "work"
         switch_account_impl(EditorId::Codex, "work".to_string(), Some(&root)).unwrap();
         let current_token = fs::read_to_string(&auth_path).unwrap();
         assert_eq!(current_token, "token-work-123");
+
+        // 验证 personal 的备份文件自动静默同步归档了刷新后的 Token
+        let personal_backup_content = fs::read_to_string(codex_dir.join("auth-personal.json")).unwrap();
+        assert_eq!(personal_backup_content, "token-personal-refreshed-999");
 
         // 10. 验证切换后列表里 "work" 重新变成活跃
         let accounts = load_accounts_impl(EditorId::Codex, Some(&root)).unwrap();
@@ -591,6 +861,81 @@ mod tests {
         assert!(!accounts[0].is_active);
 
         fs::remove_dir_all(root).unwrap();
+    }
+
+    fn create_mock_vscdb(path: &Path, token: &str, email: &str) {
+        let conn = rusqlite::Connection::open(path).unwrap();
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS ItemTable (key TEXT PRIMARY KEY, value TEXT)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?, ?)",
+            ["cursorAuth/accessToken", token],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?, ?)",
+            ["cursorAuth/cachedEmail", email],
+        )
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_read_token_and_email_from_db() {
+        let root = unique_test_dir("mock-vscdb");
+        std::fs::create_dir_all(&root).unwrap();
+        let db_path = root.join("state.vscdb");
+        create_mock_vscdb(&db_path, "mock-token-xyz", "test-email@domain.com");
+
+        let (token, email) = read_token_and_email_from_db(&db_path).unwrap();
+        assert_eq!(token, "mock-token-xyz");
+        assert_eq!(email, "test-email@domain.com");
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_fetch_usage_api_unauthorized() {
+        let root = unique_test_dir("mock-vscdb-api");
+        let cursor_dir = root.join("Cursor").join("User").join("globalStorage");
+        std::fs::create_dir_all(&cursor_dir).unwrap();
+        let db_path = cursor_dir.join("state.vscdb");
+        create_mock_vscdb(&db_path, "invalid-mock-token", "test@domain.com");
+
+        let result = fetch_usage_impl(EditorId::Cursor, None, Some(&root)).await;
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err();
+        assert!(
+            err_msg.contains("401")
+                || err_msg.contains("Unauthorized")
+                || err_msg.contains("请求 Cursor API 失败")
+        );
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_fetch_codex_usage_api_unauthorized() {
+        let root = unique_test_dir("mock-codex-api");
+        let codex_dir = root.join(".codex");
+        std::fs::create_dir_all(&codex_dir).unwrap();
+        let auth_path = codex_dir.join("auth.json");
+
+        let initial_auth = "{\"tokens\":{\"access_token\":\"invalid-codex-token\"}}";
+        std::fs::write(&auth_path, initial_auth).unwrap();
+
+        let result = fetch_usage_impl(EditorId::Codex, None, Some(&root)).await;
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err();
+        assert!(
+            err_msg.contains("401")
+                || err_msg.contains("Unauthorized")
+                || err_msg.contains("请求 Codex API 失败")
+        );
+
+        std::fs::remove_dir_all(root).unwrap();
     }
 }
 

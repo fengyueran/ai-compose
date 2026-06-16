@@ -16,10 +16,14 @@ use skills::{
     link_skill_to_editor, load_single_skill_command, add_skills_repository,
     update_skill, remove_skill,
 };
-use system::{open_external_url, open_local_path, reveal_local_path, select_directory};
+use system::{
+    open_external_url, open_local_path, reveal_local_path, select_directory,
+    export_configuration, import_configuration,
+};
 use account::{
     load_editor_accounts, save_current_editor_account,
     switch_editor_account, delete_editor_account,
+    fetch_editor_account_usage,
 };
 
 fn main() {
@@ -45,10 +49,14 @@ fn main() {
             remove_skill,
             select_directory,
             apply_hooks_to_editor_target,
+            load_editor_hooks_states,
             load_editor_accounts,
             save_current_editor_account,
             switch_editor_account,
-            delete_editor_account
+            delete_editor_account,
+            fetch_editor_account_usage,
+            export_configuration,
+            import_configuration
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -66,6 +74,7 @@ mod tests {
         build_editor_skills_state, load_single_skill, SkillSourceKind,
         extract_skill_source_entries, collect_skills_from_directory,
         is_skill_enabled, create_symlink, classify_cli_skill_source,
+        repo_request_matches_skill, CliSkillRepoMetadata,
     };
     use utils::{
         get_home_dir, is_safe_repo_source, is_safe_external_url,
@@ -152,6 +161,7 @@ mod tests {
             "react-development",
             SkillSourceKind::Cli,
             Some("fengyueran/skills".to_string()),
+            Some("skills/react-development/SKILL.md".to_string()),
         )
         .unwrap();
         assert_eq!(skill.id, "react-development");
@@ -160,6 +170,10 @@ mod tests {
         assert_eq!(skill.content, "# Usage\n\nUse it.");
         assert_eq!(skill.source_kind, SkillSourceKind::Cli);
         assert_eq!(skill.repo_source.as_deref(), Some("fengyueran/skills"));
+        assert_eq!(
+            skill.repo_skill_path.as_deref(),
+            Some("skills/react-development/SKILL.md")
+        );
 
         fs::remove_dir_all(root).unwrap();
     }
@@ -200,19 +214,37 @@ mod tests {
 
         let repo_sources = std::collections::HashMap::from([(
             "find-skills".to_string(),
-            "vercel-labs/skills".to_string(),
+            CliSkillRepoMetadata {
+                repo_source: "vercel-labs/skills".to_string(),
+                repo_skill_path: Some("skills/find-skills/SKILL.md".to_string()),
+            },
         )]);
         let skills =
             collect_skills_from_directory(&root.join("editor"), &managed_ids, &repo_sources);
         assert_eq!(skills.len(), 2);
         assert!(skills.iter().any(|skill| skill.id == "find-skills"
             && skill.source_kind == SkillSourceKind::Cli
-            && skill.repo_source.as_deref() == Some("vercel-labs/skills")));
+            && skill.repo_source.as_deref() == Some("vercel-labs/skills")
+            && skill.repo_skill_path.as_deref() == Some("skills/find-skills/SKILL.md")));
         assert!(skills.iter().any(|skill| skill.id == "local-skill"
             && skill.source_kind == SkillSourceKind::FallbackDirectory
             && skill.repo_source.is_none()));
 
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn test_repo_request_matches_subpath_scoped_skill() {
+        assert!(repo_request_matches_skill(
+            "github/awesome-copilot/skills/refactor",
+            "github/awesome-copilot",
+            Some("skills/refactor/SKILL.md"),
+        ));
+        assert!(!repo_request_matches_skill(
+            "github/awesome-copilot/skills/refactor",
+            "github/awesome-copilot",
+            Some("skills/review-and-refactor/SKILL.md"),
+        ));
     }
 
     #[test]
@@ -270,8 +302,16 @@ mod tests {
             Some("vercel-labs/agent-skills".to_string())
         );
         assert_eq!(
+            normalize_repo_source("https://github.com/github/awesome-copilot/tree/main/skills/refactor"),
+            Some("github/awesome-copilot/skills/refactor".to_string())
+        );
+        assert_eq!(
+            normalize_repo_source("github/awesome-copilot/skills/refactor"),
+            Some("github/awesome-copilot/skills/refactor".to_string())
+        );
+        assert_eq!(
             normalize_repo_source("https://github.com/vercel-labs/agent-skills/tree/main"),
-            None
+            Some("vercel-labs/agent-skills".to_string())
         );
         assert_eq!(
             normalize_repo_source("https://example.com/vercel-labs/agent-skills"),
@@ -298,6 +338,7 @@ mod tests {
             &physical_dir,
             "local-skill",
             SkillSourceKind::FallbackDirectory,
+            None,
             None,
         )
         .unwrap();

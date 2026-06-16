@@ -1,4 +1,10 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
@@ -354,16 +360,16 @@ describe('App skills mutation flows', () => {
     const nameInput =
       within(dialog).getByPlaceholderText('例如：开发规范、Vercel 技能集');
     const repoInput = within(dialog).getByPlaceholderText(
-      '例如：vercel-labs/skills',
+      '例如：github/awesome-copilot/skills/refactor',
     );
     const submitBtn = within(dialog).getByRole('button', { name: '确定' });
 
-    await userEvent.type(nameInput, 'Vercel 技能集');
-    await userEvent.type(repoInput, 'vercel-labs/skills');
+    await userEvent.type(nameInput, 'Refactor 技能');
+    await userEvent.type(repoInput, 'github/awesome-copilot/skills/refactor');
 
     await waitFor(() => {
-      expect(nameInput).toHaveValue('Vercel 技能集');
-      expect(repoInput).toHaveValue('vercel-labs/skills');
+      expect(nameInput).toHaveValue('Refactor 技能');
+      expect(repoInput).toHaveValue('github/awesome-copilot/skills/refactor');
       expect(submitBtn).not.toBeDisabled();
     });
 
@@ -371,13 +377,111 @@ describe('App skills mutation flows', () => {
 
     await waitFor(
       () => {
-        expect(addSkillsRepository).toHaveBeenCalledWith('vercel-labs/skills');
+        expect(addSkillsRepository).toHaveBeenCalledWith(
+          'github/awesome-copilot/skills/refactor',
+        );
       },
       { timeout: 3000 },
+    );
+    expect(useAiComposeStore.getState().skillSources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'repo',
+          name: 'Refactor 技能',
+          value: 'github/awesome-copilot/skills/refactor',
+        }),
+      ]),
     );
     expect(
       useAiComposeStore.getState().skillsEditorStates.cursor.enabledSkills,
     ).toEqual([]);
+  });
+
+  test('adds a repo source immediately and keeps syncing in background', async () => {
+    vi.mocked(addSkillsRepository).mockReturnValue(
+      new Promise(() => {}) as ReturnType<typeof addSkillsRepository>,
+    );
+
+    useAiComposeStore.setState({
+      activeDomain: 'Skills',
+      activeEditorId: 'cursor',
+      editorStates: {
+        antigravity: { enabled: false, targetPath: '', enabledSkills: [] },
+        codex: { enabled: false, targetPath: '', enabledSkills: [] },
+        cursor: {
+          enabled: false,
+          targetPath: '/Users/test/.cursor/skills',
+          enabledSkills: [],
+        },
+      },
+      skillsEditorStates: {
+        antigravity: { enabled: false, targetPath: '', enabledSkills: [] },
+        codex: { enabled: false, targetPath: '', enabledSkills: [] },
+        cursor: {
+          enabled: false,
+          targetPath: '/Users/test/.cursor/skills',
+          enabledSkills: [],
+        },
+      },
+      skills: [],
+      selectedSkillId: '',
+      isHydratingEditorStates: false,
+    });
+
+    render(<App />);
+
+    await userEvent.click(screen.getByRole('button', { name: '+ 添加源' }));
+    const dialog = screen
+      .getAllByRole('dialog')
+      .find((el) => el.textContent?.includes('添加技能源'))!;
+
+    fireEvent.change(
+      within(dialog).getByPlaceholderText('例如：开发规范、Vercel 技能集'),
+      {
+        target: { value: 'Refactor Skill' },
+      },
+    );
+    fireEvent.change(
+      within(dialog).getByPlaceholderText(
+        '例如：github/awesome-copilot/skills/refactor',
+      ),
+      {
+        target: { value: 'github/awesome-copilot/skills/refactor' },
+      },
+    );
+
+    await waitFor(() => {
+      expect(
+        within(dialog).getByPlaceholderText('例如：开发规范、Vercel 技能集'),
+      ).toHaveValue('Refactor Skill');
+      expect(
+        within(dialog).getByPlaceholderText(
+          '例如：github/awesome-copilot/skills/refactor',
+        ),
+      ).toHaveValue('github/awesome-copilot/skills/refactor');
+    });
+
+    await userEvent.click(within(dialog).getByRole('button', { name: '确定' }));
+
+    await waitFor(() => {
+      expect(
+        screen
+          .queryAllByRole('dialog')
+          .find((el) => el.textContent?.includes('添加技能源')),
+      ).toBeUndefined();
+    });
+    expect(useAiComposeStore.getState().skillSources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'repo',
+          name: 'Refactor Skill',
+          value: 'github/awesome-copilot/skills/refactor',
+        }),
+      ]),
+    );
+    expect(addSkillsRepository).toHaveBeenCalledWith(
+      'github/awesome-copilot/skills/refactor',
+    );
   });
 
   test('updates only the selected skill metadata without reloading the full skills list', async () => {

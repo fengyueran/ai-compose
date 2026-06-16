@@ -95,15 +95,11 @@ pub fn npx_command_name() -> &'static str {
 }
 
 pub fn is_safe_repo_source(repo: &str) -> bool {
-    let mut parts = repo.split('/');
-    let owner = parts.next().unwrap_or_default();
-    let name = parts.next().unwrap_or_default();
-
-    !owner.is_empty()
-        && !name.is_empty()
-        && parts.next().is_none()
-        && owner.chars().all(is_safe_cli_identifier_char)
-        && name.chars().all(is_safe_cli_identifier_char)
+    let parts = repo.split('/').collect::<Vec<_>>();
+    parts.len() >= 2
+        && parts
+            .iter()
+            .all(|segment| !segment.is_empty() && segment.chars().all(is_safe_cli_identifier_char))
 }
 
 pub fn is_safe_external_url(url: &str) -> bool {
@@ -129,10 +125,6 @@ pub fn is_safe_local_path(path: &str) -> bool {
 
 pub fn normalize_repo_source(repo: &str) -> Option<String> {
     let trimmed = repo.trim().trim_end_matches('/');
-    if is_safe_repo_source(trimmed) {
-        return Some(trimmed.to_string());
-    }
-
     let without_scheme = trimmed
         .strip_prefix("https://")
         .or_else(|| trimmed.strip_prefix("http://"))
@@ -140,7 +132,13 @@ pub fn normalize_repo_source(repo: &str) -> Option<String> {
     let without_www = without_scheme
         .strip_prefix("www.")
         .unwrap_or(without_scheme);
-    let github_path = without_www.strip_prefix("github.com/")?;
+    let github_path = if let Some(path) = without_www.strip_prefix("github.com/") {
+        path
+    } else if is_safe_repo_source(trimmed) {
+        return Some(trimmed.to_string());
+    } else {
+        return None;
+    };
     let github_path = github_path.split(['?', '#']).next().unwrap_or(github_path);
     let path_without_suffix = github_path.trim_end_matches('/');
     let path_without_suffix = path_without_suffix
@@ -148,14 +146,25 @@ pub fn normalize_repo_source(repo: &str) -> Option<String> {
         .unwrap_or(path_without_suffix)
         .trim_end_matches('/');
 
-    let mut parts = path_without_suffix.split('/');
-    let owner = parts.next().unwrap_or_default();
-    let name = parts.next().unwrap_or_default();
-    if owner.is_empty() || name.is_empty() || parts.next().is_some() {
+    let parts = path_without_suffix
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>();
+    if parts.len() < 2 {
         return None;
     }
 
-    let normalized = format!("{owner}/{name}");
+    let normalized = if parts.len() >= 4 && parts[2] == "tree" {
+        if parts.len() == 4 {
+            format!("{}/{}", parts[0], parts[1])
+        } else {
+            let subpath = parts[4..].join("/");
+            format!("{}/{}/{}", parts[0], parts[1], subpath)
+        }
+    } else {
+        parts.join("/")
+    };
+
     is_safe_repo_source(&normalized).then_some(normalized)
 }
 
