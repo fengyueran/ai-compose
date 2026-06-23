@@ -106,6 +106,7 @@ pub struct CodexHooksFile {
 const ANTIGRAVITY_TOOL_MATCHER: &str = "*";
 const CURSOR_WRITE_TOOL_MATCHER: &str = "Write";
 const CODEX_TOOL_MATCHER: &str = "apply_patch|Edit|Write|Bash";
+#[allow(dead_code)]
 const FORMAT_CURRENT_FILE_PLACEHOLDER: &str = "{{current_file}}";
 
 pub fn resolve_hooks_workbench_path() -> Result<PathBuf, String> {

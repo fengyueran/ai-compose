@@ -299,6 +299,7 @@ pub fn load_single_skill(
     })
 }
 
+#[allow(dead_code)]
 pub fn extract_skill_source_entries(value: &serde_json::Value) -> Vec<(String, PathBuf)> {
     let items: Vec<&serde_json::Value> = if let Some(arr) = value.as_array() {
         arr.iter().collect()
