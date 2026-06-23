@@ -29,9 +29,9 @@ export function AccountSwitcher({
   const [saving, setSaving] = useState(false);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
 
-  const [usages, setUsages] = useState<Record<string, EditorUsageInfo | null>>(
-    {},
-  );
+  const [usages, setUsages] = useState<
+    Record<string, (EditorUsageInfo & { error?: string }) | null>
+  >({});
   const [usageLoading, setUsageLoading] = useState<Record<string, boolean>>({});
 
   const loadUsages = useCallback(
@@ -48,7 +48,13 @@ export function AccountSwitcher({
           setUsages((prev) => ({ ...prev, [cacheKey]: info }));
         } catch (err) {
           console.warn(`Failed to fetch usage for ${acct.name}:`, err);
-          setUsages((prev) => ({ ...prev, [cacheKey]: null }));
+          const errMsg = err instanceof Error ? err.message : String(err);
+          setUsages((prev) => ({
+            ...prev,
+            [cacheKey]: { error: errMsg } as unknown as EditorUsageInfo & {
+              error?: string;
+            },
+          }));
         } finally {
           setUsageLoading((prev) => ({ ...prev, [cacheKey]: false }));
         }
@@ -225,7 +231,7 @@ export function AccountSwitcher({
                         <div className="skeleton-line skeleton-progress" />
                         <div className="skeleton-line skeleton-meta" />
                       </div>
-                    ) : usages[acct.name] ? (
+                    ) : usages[acct.name] && !usages[acct.name]?.error ? (
                       (() => {
                         const usage = usages[acct.name]!;
                         if (editorId === 'cursor') {
@@ -390,6 +396,10 @@ export function AccountSwitcher({
                           );
                         }
                       })()
+                    ) : usages[acct.name]?.error ? (
+                      <div className="account-item__usage-error">
+                        {usages[acct.name]?.error}
+                      </div>
                     ) : (
                       <div className="account-item__usage-error">
                         未能拉取使用状态 (Token 已失效或网络不通)

@@ -93,6 +93,37 @@ fn resolve_auth_file_path(
     }
 }
 
+fn resolve_codex_app_support_dir(custom_home: Option<&Path>) -> Result<PathBuf, String> {
+    let home = match custom_home {
+        Some(path) => path.to_path_buf(),
+        None => get_home_dir()?,
+    };
+
+    let dir = if custom_home.is_some() {
+        home.join("Codex")
+    } else {
+        #[cfg(target_os = "macos")]
+        {
+            home.join("Library")
+                .join("Application Support")
+                .join("Codex")
+        }
+        #[cfg(target_os = "windows")]
+        {
+            let appdata = std::env::var("APPDATA")
+                .map(PathBuf::from)
+                .unwrap_or_else(|_| home.join("AppData").join("Roaming"));
+            appdata.join("Codex")
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        {
+            home.join(".config").join("Codex")
+        }
+    };
+    Ok(dir)
+}
+
+
 #[derive(Deserialize)]
 struct CodexAuthTokens {
     account_id: Option<String>,
@@ -244,6 +275,13 @@ pub async fn fetch_usage_impl(
             if !res.status().is_success() {
                 let status = res.status();
                 let err_text = res.text().await.unwrap_or_default();
+                if status == reqwest::StatusCode::UNAUTHORIZED {
+                    if name.is_some() {
+                        return Err("Token已过期 (切回该账号重新启动 Cursor 将自动恢复)".to_string());
+                    } else {
+                        return Err("Token已失效，请重新登录 Cursor。".to_string());
+                    }
+                }
                 return Err(format!("Cursor API 错误 ({}): {}", status, err_text));
             }
 
@@ -297,6 +335,13 @@ pub async fn fetch_usage_impl(
             if !res.status().is_success() {
                 let status = res.status();
                 let err_text = res.text().await.unwrap_or_default();
+                if status == reqwest::StatusCode::UNAUTHORIZED {
+                    if name.is_some() {
+                        return Err("Token已过期 (切回该账号重新启动 Codex 将自动恢复)".to_string());
+                    } else {
+                        return Err("Token已失效，请重新登录 Codex。".to_string());
+                    }
+                }
                 return Err(format!("Codex API 错误 ({}): {}", status, err_text));
             }
 
@@ -590,6 +635,19 @@ pub fn switch_account_impl(
         if wal_file.exists() { let _ = std::fs::remove_file(wal_file); }
         if shm_file.exists() { let _ = std::fs::remove_file(shm_file); }
         if journal_file.exists() { let _ = std::fs::remove_file(journal_file); }
+    }
+
+    // 特殊处理 Codex：自动清理 Cookies 和 Local Storage，防止多账号 Token/Session 交叉感染导致 Token 被服务端 Revoke
+    if editor_id == EditorId::Codex {
+        if let Ok(app_support_dir) = resolve_codex_app_support_dir(custom_home) {
+            let cookies_file = app_support_dir.join("Cookies");
+            let cookies_journal = app_support_dir.join("Cookies-journal");
+            let local_storage = app_support_dir.join("Local Storage");
+
+            if cookies_file.exists() { let _ = std::fs::remove_file(cookies_file); }
+            if cookies_journal.exists() { let _ = std::fs::remove_file(cookies_journal); }
+            if local_storage.exists() { let _ = std::fs::remove_dir_all(local_storage); }
+        }
     }
 
     Ok(())
@@ -911,6 +969,7 @@ mod tests {
             err_msg.contains("401")
                 || err_msg.contains("Unauthorized")
                 || err_msg.contains("请求 Cursor API 失败")
+                || err_msg.contains("Token已失效")
         );
 
         std::fs::remove_dir_all(root).unwrap();
@@ -933,6 +992,7 @@ mod tests {
             err_msg.contains("401")
                 || err_msg.contains("Unauthorized")
                 || err_msg.contains("请求 Codex API 失败")
+                || err_msg.contains("Token已失效")
         );
 
         std::fs::remove_dir_all(root).unwrap();
