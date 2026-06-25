@@ -178,3 +178,106 @@ pub fn is_safe_skill_id(skill_id: &str) -> bool {
 pub fn is_safe_cli_identifier_char(ch: char) -> bool {
     ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.')
 }
+
+pub fn parse_scutil_proxy_output(stdout: &str) -> Option<String> {
+    let mut https_enabled = false;
+    let mut https_proxy = None;
+    let mut https_port = None;
+
+    let mut http_enabled = false;
+    let mut http_proxy = None;
+    let mut http_port = None;
+
+    for line in stdout.lines() {
+        let line = line.trim();
+        if line.starts_with("HTTPSEnable :") {
+            if line.contains('1') {
+                https_enabled = true;
+            }
+        } else if line.starts_with("HTTPSProxy :") {
+            if let Some(val) = line.split(':').nth(1) {
+                https_proxy = Some(val.trim().to_string());
+            }
+        } else if line.starts_with("HTTPSPort :") {
+            if let Some(val) = line.split(':').nth(1) {
+                https_port = Some(val.trim().to_string());
+            }
+        } else if line.starts_with("HTTPEnable :") {
+            if line.contains('1') {
+                http_enabled = true;
+            }
+        } else if line.starts_with("HTTPProxy :") {
+            if let Some(val) = line.split(':').nth(1) {
+                http_proxy = Some(val.trim().to_string());
+            }
+        } else if line.starts_with("HTTPPort :") {
+            if let Some(val) = line.split(':').nth(1) {
+                http_port = Some(val.trim().to_string());
+            }
+        }
+    }
+
+    if https_enabled {
+        if let (Some(proxy), Some(port)) = (https_proxy, https_port) {
+            return Some(format!("http://{}:{}", proxy, port));
+        }
+    }
+    if http_enabled {
+        if let (Some(proxy), Some(port)) = (http_proxy, http_port) {
+            return Some(format!("http://{}:{}", proxy, port));
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "macos")]
+fn get_mac_system_proxy() -> Option<String> {
+    use std::process::Command;
+    let output = Command::new("scutil").arg("--proxy").output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    parse_scutil_proxy_output(&stdout)
+}
+
+pub fn get_proxy_url() -> Option<String> {
+    if let Ok(proxy) = std::env::var("HTTPS_PROXY") {
+        return Some(proxy);
+    }
+    if let Ok(proxy) = std::env::var("https_proxy") {
+        return Some(proxy);
+    }
+    if let Ok(proxy) = std::env::var("HTTP_PROXY") {
+        return Some(proxy);
+    }
+    if let Ok(proxy) = std::env::var("http_proxy") {
+        return Some(proxy);
+    }
+    if let Ok(proxy) = std::env::var("ALL_PROXY") {
+        return Some(proxy);
+    }
+    if let Ok(proxy) = std::env::var("all_proxy") {
+        return Some(proxy);
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        get_mac_system_proxy()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        None
+    }
+}
+
+pub fn create_client() -> Result<reqwest::Client, String> {
+    let mut builder = reqwest::Client::builder();
+    if let Some(proxy_url) = get_proxy_url() {
+        if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
+            builder = builder.proxy(proxy);
+        }
+    }
+    builder.build().map_err(|e| format!("创建 HTTP 客户端失败: {}", e))
+}
+

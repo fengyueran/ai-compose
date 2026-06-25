@@ -79,6 +79,7 @@ mod tests {
     use utils::{
         get_home_dir, is_safe_repo_source, is_safe_external_url,
         is_safe_local_path, normalize_repo_source, is_safe_skill_id,
+        parse_scutil_proxy_output,
     };
 
     fn unique_test_dir(name: &str) -> PathBuf {
@@ -409,5 +410,39 @@ mod tests {
         assert_eq!(skills[0].name, "test-skill-one");
 
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn test_parse_scutil_proxy_output() {
+        let sample = "
+<dictionary> {
+  ExceptionsList : <array> {
+    0 : *.local
+    1 : 169.254/16
+  }
+  HTTPEnable : 1
+  HTTPPort : 7890
+  HTTPProxy : 127.0.0.1
+  HTTPSEnable : 1
+  HTTPSPort : 7890
+  HTTPSProxy : 127.0.0.1
+}
+        ";
+        let res = parse_scutil_proxy_output(sample);
+        assert_eq!(res, Some("http://127.0.0.1:7890".to_string()));
+    }
+
+    #[test]
+    fn test_parse_scutil_proxy_output_disabled() {
+        let sample = "
+<dictionary> {
+  ExceptionsList : <array> {
+    0 : *.local
+    1 : 169.254/16
+  }
+}
+        ";
+        let res = parse_scutil_proxy_output(sample);
+        assert_eq!(res, None);
     }
 }

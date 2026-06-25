@@ -261,7 +261,7 @@ pub async fn fetch_usage_impl(
         EditorId::Cursor => {
             let (token, email) = read_token_and_email_from_db(&file_path)?;
 
-            let client = reqwest::Client::new();
+            let client = crate::utils::create_client()?;
             let res = client
                 .post("https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage")
                 .header("Authorization", format!("Bearer {}", token))
@@ -323,7 +323,7 @@ pub async fn fetch_usage_impl(
                 .and_then(|t| t.access_token)
                 .ok_or_else(|| "未在凭证文件中找到 access_token，请先在 Codex 中登录。".to_string())?;
 
-            let client = reqwest::Client::new();
+            let client = crate::utils::create_client()?;
             let res = client
                 .get("https://chatgpt.com/backend-api/wham/usage")
                 .header("Authorization", format!("Bearer {}", token))
