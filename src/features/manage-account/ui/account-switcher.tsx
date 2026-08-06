@@ -290,8 +290,12 @@ export function AccountSwitcher({
                               label.toLowerCase().includes('h') &&
                               !label.toLowerCase().includes('month');
                             try {
+                              // Hour-based windows (e.g. 5h / 168h) can span midnight or multiple days,
+                              // so always include month/day alongside time.
                               if (isShort) {
-                                return new Date(ms).toLocaleTimeString([], {
+                                return new Date(ms).toLocaleString([], {
+                                  month: 'numeric',
+                                  day: 'numeric',
                                   hour: '2-digit',
                                   minute: '2-digit',
                                   hour12: false,

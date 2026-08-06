@@ -184,6 +184,64 @@ describe('AccountSwitcher Component', () => {
 
     expect(screen.getByText(/已用 60.0%/)).toBeInTheDocument();
     expect(screen.getByText(/已用 30.0%/)).toBeInTheDocument();
+
+    // Hour-based window reset must include date (month/day), not only HH:mm
+    const shortReset = new Date(1781330313000).toLocaleString([], {
+      month: 'numeric',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+    expect(screen.getByText(`${shortReset} 重置`)).toBeInTheDocument();
+
+    // Weekly window still shows date-only style
+    const weeklyReset = new Date(1781330313000).toLocaleDateString([], {
+      month: 'short',
+      day: 'numeric',
+    });
+    expect(screen.getByText(`${weeklyReset} 重置`)).toBeInTheDocument();
+  });
+
+  test('shows date and time for 168h codex reset window', async () => {
+    const mockAccounts: api.EditorAccountInfo[] = [
+      { name: 'apple', isActive: false, lastModified: 1716889900 },
+    ];
+    vi.mocked(api.loadEditorAccounts).mockResolvedValue(mockAccounts);
+    // 2026-08-06 12:26 local-ish epoch for deterministic formatting via toLocaleString
+    const resetAt = new Date(2026, 7, 6, 12, 26, 0).getTime();
+    vi.mocked(api.fetchEditorAccountUsage).mockResolvedValue({
+      email: 'jwhfzj2mwm@privaterel...',
+      codexUsage: {
+        primaryUsedPercent: 100.0,
+        primaryResetAt: resetAt,
+        primaryWindowLabel: '168h',
+      },
+    });
+
+    render(
+      <AccountSwitcher
+        editorId="codex"
+        editorName="Codex"
+        messageApi={mockMessageApi}
+      />,
+    );
+
+    const expected = new Date(resetAt).toLocaleString([], {
+      month: 'numeric',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('168h 额度')).toBeInTheDocument();
+      expect(screen.getByText(`${expected} 重置`)).toBeInTheDocument();
+    });
+
+    // Must not be time-only (e.g. "12:26 重置")
+    expect(screen.queryByText(/^12:26 重置$/)).not.toBeInTheDocument();
   });
 
   test('renders usage rows for codex free accounts (single window)', async () => {
