@@ -160,6 +160,102 @@ describe('AccountSwitcher Component', () => {
     );
   });
 
+  test('renders cursor total-only usage when pool split is absent', async () => {
+    const mockAccounts: api.EditorAccountInfo[] = [
+      { name: 'work', isActive: true, lastModified: 1716889900 },
+    ];
+    vi.mocked(api.loadEditorAccounts).mockResolvedValue(mockAccounts);
+
+    render(
+      <AccountSwitcher
+        editorId="cursor"
+        editorName="Cursor"
+        messageApi={mockMessageApi}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('test@domain.com')).toBeInTheDocument();
+      expect(screen.getByText(/已用 42.5%/)).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText('API 额度')).not.toBeInTheDocument();
+    expect(screen.queryByText('Auto 额度')).not.toBeInTheDocument();
+  });
+
+  test('renders cursor API split; Auto uses included total, ignores autoPercent=0', async () => {
+    const mockAccounts: api.EditorAccountInfo[] = [
+      { name: 'school', isActive: true, lastModified: 1716889900 },
+    ];
+    vi.mocked(api.loadEditorAccounts).mockResolvedValue(mockAccounts);
+    // Mirrors real GetCurrentPeriodUsage: autoPercentUsed is often 0 while
+    // Auto mode is actually measured by totalPercentUsed (~51%).
+    vi.mocked(api.fetchEditorAccountUsage).mockResolvedValue({
+      email: 'g0235357@umn.edu',
+      billingCycleEnd: 1781330313000,
+      totalPercentUsed: 50.5,
+      apiPercentUsed: 100,
+      autoPercentUsed: 0,
+      limit: 2000,
+    });
+
+    render(
+      <AccountSwitcher
+        editorId="cursor"
+        editorName="Cursor"
+        messageApi={mockMessageApi}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('API 额度')).toBeInTheDocument();
+      expect(screen.getByText('包含用量')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText(/指定模型用尽，请用 Auto/)).toBeInTheDocument();
+    expect(screen.getByText(/已用 50.5%/)).toBeInTheDocument();
+    const cursorReset = new Date(1781330313000).toLocaleString([], {
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+    expect(screen.getByText(`${cursorReset} 重置`)).toBeInTheDocument();
+    // Do not show a misleading "Auto 0%" bar when API reports 0
+    expect(screen.queryByText('Auto 池')).not.toBeInTheDocument();
+    expect(screen.queryByText(/已用 0.0%/)).not.toBeInTheDocument();
+  });
+
+  test('renders dedicated Auto pool only when autoPercentUsed > 0', async () => {
+    const mockAccounts: api.EditorAccountInfo[] = [
+      { name: 'school', isActive: true, lastModified: 1716889900 },
+    ];
+    vi.mocked(api.loadEditorAccounts).mockResolvedValue(mockAccounts);
+    vi.mocked(api.fetchEditorAccountUsage).mockResolvedValue({
+      email: 'user@example.com',
+      billingCycleEnd: 1781330313000,
+      totalPercentUsed: 40,
+      apiPercentUsed: 80,
+      autoPercentUsed: 12.3,
+      limit: 2000,
+    });
+
+    render(
+      <AccountSwitcher
+        editorId="cursor"
+        editorName="Cursor"
+        messageApi={mockMessageApi}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Auto 池')).toBeInTheDocument();
+      expect(screen.getByText(/已用 12.3%/)).toBeInTheDocument();
+    });
+  });
+
   test('renders usage rows for codex accounts', async () => {
     const mockAccounts: api.EditorAccountInfo[] = [
       { name: 'codex-work', isActive: true, lastModified: 1716889900 },

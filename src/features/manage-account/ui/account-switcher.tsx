@@ -235,12 +235,70 @@ export function AccountSwitcher({
                       (() => {
                         const usage = usages[acct.name]!;
                         if (editorId === 'cursor') {
-                          const percent = usage.totalPercentUsed ?? 0;
+                          const totalPercent = usage.totalPercentUsed ?? 0;
+                          const apiPercent = usage.apiPercentUsed;
+                          // Cursor often reports autoPercentUsed=0 even when Auto is active;
+                          // Auto mode is measured against totalPercentUsed (see autoModelSelectedDisplayMessage).
+                          // Only surface a dedicated Auto pool bar when the API returns a real value.
+                          const autoPoolPercent =
+                            usage.autoPercentUsed != null &&
+                            usage.autoPercentUsed > 0
+                              ? usage.autoPercentUsed
+                              : null;
+                          const hasApiSplit = apiPercent != null;
                           const resetStr = usage.billingCycleEnd
-                            ? new Date(
-                                usage.billingCycleEnd,
-                              ).toLocaleDateString()
+                            ? new Date(usage.billingCycleEnd).toLocaleString(
+                                [],
+                                {
+                                  year: 'numeric',
+                                  month: 'numeric',
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  hour12: false,
+                                },
+                              )
                             : '--';
+                          const formatPoolStatus = (
+                            percent: number,
+                            exhaustedHint?: string,
+                          ) => {
+                            if (percent >= 100) {
+                              return exhaustedHint ?? '额度用尽';
+                            }
+                            return `剩余 ${(100 - percent).toFixed(1)}%`;
+                          };
+                          const renderPoolRow = (
+                            label: string,
+                            percent: number,
+                            barClass: string,
+                            exhaustedHint?: string,
+                            title?: string,
+                          ) => (
+                            <div
+                              className="account-item__codex-row"
+                              key={label}
+                              title={title}
+                            >
+                              <div className="account-item__codex-row-header">
+                                <span className="account-item__codex-row-label">
+                                  {label}
+                                </span>
+                              </div>
+                              <div className="account-item__codex-progress-container">
+                                <div
+                                  className={`account-item__codex-progress-bar ${barClass}`}
+                                  style={{
+                                    width: `${Math.min(100, percent)}%`,
+                                  }}
+                                />
+                              </div>
+                              <div className="account-item__codex-row-status">
+                                已用 {percent.toFixed(1)}% (
+                                {formatPoolStatus(percent, exhaustedHint)})
+                              </div>
+                            </div>
+                          );
                           return (
                             <div className="account-item__usage-detail">
                               <div className="account-item__usage-meta">
@@ -254,21 +312,47 @@ export function AccountSwitcher({
                                   {resetStr} 重置
                                 </span>
                               </div>
-                              <div className="account-item__usage-progress-container">
-                                <div
-                                  className="account-item__usage-progress-bar"
-                                  style={{
-                                    width: `${Math.min(100, percent)}%`,
-                                  }}
-                                />
-                              </div>
-                              <div className="account-item__usage-status">
-                                已用 {percent.toFixed(1)}% (
-                                {percent >= 100
-                                  ? '额度用尽'
-                                  : `剩余 ${(100 - percent).toFixed(1)}%`}
-                                )
-                              </div>
+                              {hasApiSplit ? (
+                                <div className="account-item__codex-rows">
+                                  {renderPoolRow(
+                                    'API 额度',
+                                    apiPercent,
+                                    'account-item__codex-progress-bar--primary',
+                                    '指定模型用尽，请用 Auto',
+                                    '手动选择 Claude/GPT 等模型时消耗；用尽后只能切 Auto',
+                                  )}
+                                  {autoPoolPercent != null &&
+                                    renderPoolRow(
+                                      'Auto 池',
+                                      autoPoolPercent,
+                                      'account-item__codex-progress-bar--secondary',
+                                      undefined,
+                                      '独立 Auto/Composer 池（仅当接口返回有效占用时显示）',
+                                    )}
+                                  {renderPoolRow(
+                                    '包含用量',
+                                    totalPercent,
+                                    'account-item__codex-progress-bar--total',
+                                    undefined,
+                                    '套餐包含总进度；Cursor 在 Auto 模式下显示的就是这项',
+                                  )}
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="account-item__usage-progress-container">
+                                    <div
+                                      className="account-item__usage-progress-bar"
+                                      style={{
+                                        width: `${Math.min(100, totalPercent)}%`,
+                                      }}
+                                    />
+                                  </div>
+                                  <div className="account-item__usage-status">
+                                    已用 {totalPercent.toFixed(1)}% (
+                                    {formatPoolStatus(totalPercent)})
+                                  </div>
+                                </>
+                              )}
                             </div>
                           );
                         } else {

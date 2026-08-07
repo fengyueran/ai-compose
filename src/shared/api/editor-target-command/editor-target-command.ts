@@ -16,10 +16,7 @@ export type EditorTargetState = {
 };
 
 export type HookTrigger =
-  | 'before-run'
-  | 'after-run'
-  | 'after-failure'
-  | 'before-commit';
+  'before-run' | 'after-run' | 'after-failure' | 'before-commit';
 
 export type HookMode = 'raw' | 'format-template';
 
@@ -354,6 +351,10 @@ export interface EditorUsageInfo {
   email: string;
   billingCycleEnd?: number;
   totalPercentUsed?: number;
+  /** API / premium model pool — exhausted when Cursor forces "Switch to Auto" */
+  apiPercentUsed?: number;
+  /** Auto + Composer pool */
+  autoPercentUsed?: number;
   limit?: number;
   codexUsage?: CodexUsageInfo;
 }

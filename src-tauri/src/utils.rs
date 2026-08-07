@@ -94,6 +94,130 @@ pub fn npx_command_name() -> &'static str {
     }
 }
 
+pub fn get_extra_path_dirs() -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+
+    if let Ok(home_path) = get_home_dir() {
+        let nvm_node_dir = home_path.join(".nvm").join("versions").join("node");
+        if nvm_node_dir.exists() && nvm_node_dir.is_dir() {
+            if let Ok(entries) = std::fs::read_dir(&nvm_node_dir) {
+                let mut version_dirs = Vec::new();
+                for entry in entries.filter_map(Result::ok) {
+                    let bin_dir = entry.path().join("bin");
+                    if bin_dir.exists() && bin_dir.is_dir() {
+                        version_dirs.push(bin_dir);
+                    }
+                }
+                version_dirs.sort_by(|a, b| b.cmp(a));
+                dirs.extend(version_dirs);
+            }
+        }
+
+        let fnm_multishells_dir = home_path.join(".fnm").join("multishells");
+        if fnm_multishells_dir.exists() && fnm_multishells_dir.is_dir() {
+            if let Ok(entries) = std::fs::read_dir(&fnm_multishells_dir) {
+                for entry in entries.filter_map(Result::ok) {
+                    let bin_dir = entry.path().join("bin");
+                    if bin_dir.exists() && bin_dir.is_dir() {
+                        dirs.push(bin_dir);
+                    }
+                }
+            }
+        }
+
+        dirs.push(home_path.join(".fnm").join("current").join("bin"));
+        dirs.push(home_path.join(".volta").join("bin"));
+        dirs.push(home_path.join(".asdf").join("shims"));
+        dirs.push(home_path.join(".bun").join("bin"));
+        dirs.push(home_path.join(".pnpm"));
+        dirs.push(home_path.join(".local").join("share").join("pnpm"));
+        dirs.push(home_path.join(".cargo").join("bin"));
+        dirs.push(home_path.join(".local").join("bin"));
+
+        dirs.push(home_path.join("AppData").join("Roaming").join("npm"));
+        dirs.push(home_path.join("AppData").join("Local").join("Programs").join("node"));
+    }
+
+    dirs.push(PathBuf::from("/opt/homebrew/bin"));
+    dirs.push(PathBuf::from("/opt/homebrew/sbin"));
+    dirs.push(PathBuf::from("/usr/local/bin"));
+    dirs.push(PathBuf::from("/usr/local/sbin"));
+    dirs.push(PathBuf::from("/home/linuxbrew/.linuxbrew/bin"));
+    dirs.push(PathBuf::from("/usr/bin"));
+    dirs.push(PathBuf::from("/bin"));
+    dirs.push(PathBuf::from("/usr/sbin"));
+    dirs.push(PathBuf::from("/sbin"));
+    dirs.push(PathBuf::from(r"C:\Program Files\nodejs"));
+    dirs.push(PathBuf::from(r"C:\Program Files (x86)\nodejs"));
+
+    dirs.into_iter().filter(|d| d.exists() && d.is_dir()).collect()
+}
+
+pub fn get_augmented_path() -> String {
+    let system_path = std::env::var("PATH").unwrap_or_default();
+    let current_parts: Vec<PathBuf> = std::env::split_paths(&system_path).collect();
+
+    let extra_dirs = get_extra_path_dirs();
+    let mut all_paths = Vec::new();
+
+    for dir in extra_dirs {
+        if !all_paths.contains(&dir) {
+            all_paths.push(dir);
+        }
+    }
+
+    for dir in current_parts {
+        if !all_paths.contains(&dir) {
+            all_paths.push(dir);
+        }
+    }
+
+    match std::env::join_paths(all_paths) {
+        Ok(os_str) => os_str.to_string_lossy().to_string(),
+        Err(_) => system_path,
+    }
+}
+
+pub fn resolve_executable_path(bin_name: &str) -> PathBuf {
+    let augmented_path = get_augmented_path();
+    let paths = std::env::split_paths(&augmented_path);
+
+    let candidates = if cfg!(target_os = "windows") {
+        if bin_name.ends_with(".cmd") || bin_name.ends_with(".exe") || bin_name.ends_with(".bat") {
+            vec![bin_name.to_string()]
+        } else {
+            vec![
+                format!("{}.cmd", bin_name),
+                format!("{}.exe", bin_name),
+                format!("{}.bat", bin_name),
+                bin_name.to_string(),
+            ]
+        }
+    } else {
+        vec![bin_name.to_string()]
+    };
+
+    for path_dir in paths {
+        for candidate in &candidates {
+            let full_path = path_dir.join(candidate);
+            if full_path.is_file() {
+                return full_path;
+            }
+        }
+    }
+
+    PathBuf::from(npx_command_name())
+}
+
+pub fn create_async_npx_command() -> tokio::process::Command {
+    let npx_path = resolve_executable_path("npx");
+    let augmented_path = get_augmented_path();
+    let mut cmd = tokio::process::Command::new(npx_path);
+    cmd.env("PATH", augmented_path);
+    cmd
+}
+
+
 pub fn is_safe_repo_source(repo: &str) -> bool {
     let parts = repo.split('/').collect::<Vec<_>>();
     parts.len() >= 2
@@ -280,4 +404,22 @@ pub fn create_client() -> Result<reqwest::Client, String> {
     }
     builder.build().map_err(|e| format!("创建 HTTP 客户端失败: {}", e))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn get_augmented_path_includes_system_and_extra_dirs() {
+        let path = get_augmented_path();
+        assert!(!path.is_empty());
+    }
+
+    #[test]
+    fn resolve_executable_path_returns_valid_path_or_fallback() {
+        let npx_path = resolve_executable_path("npx");
+        assert!(!npx_path.as_os_str().is_empty());
+    }
+}
+
 

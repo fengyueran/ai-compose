@@ -294,6 +294,10 @@ export const AccountSwitcherWrapper = styled.div`
     background: linear-gradient(90deg, #2196f3, #00bcd4);
   }
 
+  .account-item__codex-progress-bar--total {
+    background: linear-gradient(90deg, #9e9e9e, #bdbdbd);
+  }
+
   .account-item__codex-row-status {
     font-size: 0.65rem;
     color: var(--text-soft, #888888);

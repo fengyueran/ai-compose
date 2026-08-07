@@ -175,6 +175,10 @@ pub struct EditorUsageInfo {
     // Cursor 专属
     pub billing_cycle_end: Option<u64>,
     pub total_percent_used: Option<f64>,
+    /// API / premium model pool (drives "Switch to Auto" when exhausted)
+    pub api_percent_used: Option<f64>,
+    /// Auto + Composer pool
+    pub auto_percent_used: Option<f64>,
     pub limit: Option<u64>,
     // Codex 专属
     pub codex_usage: Option<CodexUsageInfo>,
@@ -201,8 +205,10 @@ enum StringOrNumber {
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ApiPlanUsage {
-    limit: u64,
-    total_percent_used: f64,
+    limit: Option<u64>,
+    total_percent_used: Option<f64>,
+    auto_percent_used: Option<f64>,
+    api_percent_used: Option<f64>,
 }
 
 #[derive(serde::Deserialize)]
@@ -296,16 +302,24 @@ pub async fn fetch_usage_impl(
                 None => 0,
             };
 
-            let (limit, total_percent_used) = if let Some(usage) = api_res.plan_usage {
-                (usage.limit, usage.total_percent_used)
-            } else {
-                (0, 0.0)
-            };
+            let (limit, total_percent_used, api_percent_used, auto_percent_used) =
+                if let Some(usage) = api_res.plan_usage {
+                    (
+                        usage.limit.unwrap_or(0),
+                        usage.total_percent_used.unwrap_or(0.0),
+                        usage.api_percent_used,
+                        usage.auto_percent_used,
+                    )
+                } else {
+                    (0, 0.0, None, None)
+                };
 
             Ok(EditorUsageInfo {
                 email,
                 billing_cycle_end: Some(billing_cycle_end),
                 total_percent_used: Some(total_percent_used),
+                api_percent_used,
+                auto_percent_used,
                 limit: Some(limit),
                 codex_usage: None,
             })
@@ -392,6 +406,8 @@ pub async fn fetch_usage_impl(
                 email: api_res.email,
                 billing_cycle_end: None,
                 total_percent_used: None,
+                api_percent_used: None,
+                auto_percent_used: None,
                 limit: None,
                 codex_usage: Some(codex_usage),
             })
@@ -952,6 +968,42 @@ mod tests {
         assert_eq!(email, "test-email@domain.com");
 
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn test_parse_cursor_plan_usage_with_api_auto_split() {
+        let json = r#"{
+            "billingCycleEnd": "1781330313000",
+            "planUsage": {
+                "limit": 2000,
+                "totalPercentUsed": 50.5,
+                "apiPercentUsed": 100.0,
+                "autoPercentUsed": 12.3
+            }
+        }"#;
+        let parsed: ApiUsageResponse = serde_json::from_str(json).unwrap();
+        let usage = parsed.plan_usage.unwrap();
+        assert_eq!(usage.limit, Some(2000));
+        assert_eq!(usage.total_percent_used, Some(50.5));
+        assert_eq!(usage.api_percent_used, Some(100.0));
+        assert_eq!(usage.auto_percent_used, Some(12.3));
+    }
+
+    #[test]
+    fn test_parse_cursor_plan_usage_without_pool_split() {
+        let json = r#"{
+            "billingCycleEnd": 1781330313000,
+            "planUsage": {
+                "limit": 2000,
+                "totalPercentUsed": 42.5
+            }
+        }"#;
+        let parsed: ApiUsageResponse = serde_json::from_str(json).unwrap();
+        let usage = parsed.plan_usage.unwrap();
+        assert_eq!(usage.limit, Some(2000));
+        assert_eq!(usage.total_percent_used, Some(42.5));
+        assert_eq!(usage.api_percent_used, None);
+        assert_eq!(usage.auto_percent_used, None);
     }
 
     #[tokio::test]

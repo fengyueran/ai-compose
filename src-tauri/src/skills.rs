@@ -1,13 +1,12 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
-use tokio::process::Command as AsyncCommand;
 use crate::editor::{
     EditorId, resolve_editor_skills_path, is_editor_skills_target_path,
 };
 use crate::utils::{
-    ApplyAction, current_timestamp, get_home_dir, is_safe_skill_id,
-    npx_command_name, normalize_repo_source,
+    create_async_npx_command, current_timestamp, get_home_dir, is_safe_skill_id,
+    normalize_repo_source, ApplyAction,
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -724,7 +723,7 @@ pub async fn add_skills_repository(repo: String) -> Result<Vec<SkillInfo>, Strin
         );
     };
 
-    let output = AsyncCommand::new(npx_command_name())
+    let output = create_async_npx_command()
         .args(["skills", "add", &repo_trimmed, "-g", "-y"])
         .output()
         .await;
@@ -757,7 +756,7 @@ pub async fn add_skills_repository(repo: String) -> Result<Vec<SkillInfo>, Strin
 pub async fn update_skill(skill_id: String) -> Result<String, String> {
     let skill_id_trimmed = skill_id.trim().to_string();
     let output = if skill_id_trimmed.is_empty() {
-        AsyncCommand::new(npx_command_name())
+        create_async_npx_command()
             .args(["skills", "update", "-g", "-y"])
             .output()
             .await
@@ -765,7 +764,7 @@ pub async fn update_skill(skill_id: String) -> Result<String, String> {
         if !is_safe_skill_id(&skill_id_trimmed) {
             return Err("技能 ID 只能包含字母、数字、点、下划线和短横线。".to_string());
         }
-        AsyncCommand::new(npx_command_name())
+        create_async_npx_command()
             .args(["skills", "update", &skill_id_trimmed, "-g", "-y"])
             .output()
             .await
@@ -797,7 +796,7 @@ pub async fn remove_skill(skill_id: String) -> Result<String, String> {
         return Err("技能 ID 只能包含字母、数字、点、下划线和短横线。".to_string());
     }
 
-    let output = AsyncCommand::new(npx_command_name())
+    let output = create_async_npx_command()
         .args(["skills", "remove", &skill_id_trimmed, "-g", "-y"])
         .output()
         .await;
