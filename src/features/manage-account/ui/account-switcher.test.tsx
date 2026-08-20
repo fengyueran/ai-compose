@@ -371,4 +371,124 @@ describe('AccountSwitcher Component', () => {
     expect(screen.queryByText('Weekly 额度')).not.toBeInTheDocument();
     expect(screen.getByText(/已用 43.0%/)).toBeInTheDocument();
   });
+
+  test('allows refreshing individual account usage', async () => {
+    const mockAccounts: api.EditorAccountInfo[] = [
+      { name: 'personal', isActive: false, lastModified: 1716889200 },
+      { name: 'work', isActive: true, lastModified: 1716889900 },
+    ];
+    vi.mocked(api.loadEditorAccounts).mockResolvedValue(mockAccounts);
+    vi.mocked(api.fetchEditorAccountUsage).mockResolvedValue({
+      email: 'work@example.com',
+      totalPercentUsed: 20.0,
+      billingCycleEnd: 1781330313000,
+    });
+
+    render(
+      <AccountSwitcher
+        editorId="cursor"
+        editorName="Cursor"
+        messageApi={mockMessageApi}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('work')).toBeInTheDocument();
+    });
+
+    const refreshButtons = screen.getAllByRole('button', { name: '刷新' });
+    expect(refreshButtons.length).toBe(2);
+
+    // Mock new data for refresh
+    vi.mocked(api.fetchEditorAccountUsage).mockResolvedValueOnce({
+      email: 'personal@example.com',
+      totalPercentUsed: 75.0,
+      billingCycleEnd: 1781330313000,
+    });
+
+    await userEvent.click(refreshButtons[0]);
+
+    await waitFor(() => {
+      expect(api.fetchEditorAccountUsage).toHaveBeenCalledWith(
+        'cursor',
+        'personal',
+      );
+      expect(mockMessageApi.success).toHaveBeenCalledWith(
+        '已刷新 [personal] 额度',
+      );
+    });
+  });
+
+  test('allows refreshing all accounts usage at once', async () => {
+    const mockAccounts: api.EditorAccountInfo[] = [
+      { name: 'personal', isActive: false, lastModified: 1716889200 },
+      { name: 'work', isActive: true, lastModified: 1716889900 },
+    ];
+    vi.mocked(api.loadEditorAccounts).mockResolvedValue(mockAccounts);
+
+    render(
+      <AccountSwitcher
+        editorId="cursor"
+        editorName="Cursor"
+        messageApi={mockMessageApi}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('work')).toBeInTheDocument();
+    });
+
+    const refreshAllBtn = screen.getByRole('button', { name: '刷新全部额度' });
+    expect(refreshAllBtn).toBeInTheDocument();
+
+    await userEvent.click(refreshAllBtn);
+
+    await waitFor(() => {
+      expect(mockMessageApi.success).toHaveBeenCalledWith('已刷新所有账号额度');
+    });
+  });
+
+  test('refreshes active account with queryName undefined and handles error gracefully', async () => {
+    const mockAccounts: api.EditorAccountInfo[] = [
+      { name: 'work', isActive: true, lastModified: 1716889900 },
+    ];
+    vi.mocked(api.loadEditorAccounts).mockResolvedValue(mockAccounts);
+    vi.mocked(api.fetchEditorAccountUsage).mockResolvedValue({
+      email: 'work@example.com',
+      totalPercentUsed: 20.0,
+      billingCycleEnd: 1781330313000,
+    });
+
+    render(
+      <AccountSwitcher
+        editorId="cursor"
+        editorName="Cursor"
+        messageApi={mockMessageApi}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('work')).toBeInTheDocument();
+    });
+
+    const refreshBtn = screen.getByRole('button', { name: '刷新' });
+
+    // Mock failure
+    vi.mocked(api.fetchEditorAccountUsage).mockRejectedValueOnce(
+      new Error('Network timeout'),
+    );
+
+    await userEvent.click(refreshBtn);
+
+    await waitFor(() => {
+      expect(api.fetchEditorAccountUsage).toHaveBeenCalledWith(
+        'cursor',
+        undefined,
+      );
+      expect(mockMessageApi.error).toHaveBeenCalledWith(
+        '刷新 [work] 额度失败: Network timeout',
+      );
+      expect(screen.getByText('Network timeout')).toBeInTheDocument();
+    });
+  });
 });

@@ -10,6 +10,20 @@ export const AccountSwitcherWrapper = styled.div`
   border-radius: 12px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
 
+  .account-switcher__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .account-switcher__header-info {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+  }
+
   .account-switcher__title {
     font-size: 1.1rem;
     font-weight: 600;
@@ -22,6 +36,13 @@ export const AccountSwitcherWrapper = styled.div`
     color: var(--text-soft);
     margin: 0 0 4px 0;
     line-height: 1.4;
+  }
+
+  .account-switcher__refresh-all-btn {
+    height: 32px;
+    padding: 0 12px;
+    font-size: 0.8rem;
+    flex-shrink: 0;
   }
 
   .account-switcher__input-group {

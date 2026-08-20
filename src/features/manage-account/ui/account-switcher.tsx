@@ -153,17 +153,79 @@ export function AccountSwitcher({
     }
   };
 
+  const handleRefresh = async (acct: EditorAccountInfo) => {
+    if (editorId !== 'cursor' && editorId !== 'codex') return;
+    const queryName = acct.isActive ? undefined : acct.name;
+    const cacheKey = acct.name;
+
+    setUsageLoading((prev) => ({ ...prev, [cacheKey]: true }));
+    try {
+      const info = await fetchEditorAccountUsage(editorId, queryName);
+      setUsages((prev) => ({ ...prev, [cacheKey]: info }));
+      messageApi.success(`已刷新 [${acct.name}] 额度`);
+    } catch (err) {
+      console.warn(`Failed to fetch usage for ${acct.name}:`, err);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      setUsages((prev) => ({
+        ...prev,
+        [cacheKey]: { error: errMsg } as unknown as EditorUsageInfo & {
+          error?: string;
+        },
+      }));
+      messageApi.error(`刷新 [${acct.name}] 额度失败: ${errMsg}`);
+    } finally {
+      setUsageLoading((prev) => ({ ...prev, [cacheKey]: false }));
+    }
+  };
+
+  const isRefreshingAll =
+    accounts.length > 0 &&
+    accounts.some((acct) => Boolean(usageLoading[acct.name]));
+
+  const handleRefreshAll = async () => {
+    if (editorId !== 'cursor' && editorId !== 'codex') return;
+    if (accounts.length === 0) return;
+    try {
+      await loadUsages(accounts);
+      messageApi.success('已刷新所有账号额度');
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      messageApi.error(`刷新额度失败: ${errMsg}`);
+    }
+  };
+
   if (editorId === 'antigravity') {
     return null;
   }
 
   return (
     <AccountSwitcherWrapper className="account-switcher">
-      <h3 className="account-switcher__title">{editorName} 多账号管理</h3>
-      <p className="account-switcher__desc">
-        将当前编辑器的登录态（Access Token /
-        Session）保存为备份，以便在多个账号间快速一键切换。
-      </p>
+      <div className="account-switcher__header">
+        <div className="account-switcher__header-info">
+          <h3 className="account-switcher__title">{editorName} 多账号管理</h3>
+          <p className="account-switcher__desc">
+            将当前编辑器的登录态（Access Token /
+            Session）保存为备份，以便在多个账号间快速一键切换。
+          </p>
+        </div>
+        {(editorId === 'cursor' || editorId === 'codex') &&
+          accounts.length > 0 && (
+            <Button
+              type="button"
+              className="account-switcher__refresh-all-btn"
+              disabled={
+                saving ||
+                loading ||
+                actionInProgress !== null ||
+                isRefreshingAll
+              }
+              loading={isRefreshingAll}
+              onClick={handleRefreshAll}
+            >
+              刷新全部额度
+            </Button>
+          )}
+      </div>
 
       <div className="account-switcher__input-group">
         <input
@@ -501,6 +563,22 @@ export function AccountSwitcher({
                 </span>
               </div>
               <div className="account-item__actions">
+                {(editorId === 'cursor' || editorId === 'codex') && (
+                  <Button
+                    type="button"
+                    className="account-item__btn"
+                    disabled={
+                      saving ||
+                      loading ||
+                      actionInProgress !== null ||
+                      Boolean(usageLoading[acct.name])
+                    }
+                    loading={Boolean(usageLoading[acct.name])}
+                    onClick={() => handleRefresh(acct)}
+                  >
+                    刷新
+                  </Button>
+                )}
                 <Button
                   type="button"
                   className="account-item__btn"
