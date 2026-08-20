@@ -134,7 +134,7 @@ mod tests {
     fn test_resolve_antigravity_skills_path() {
         let path = resolve_editor_skills_path(EditorId::Antigravity).unwrap();
         assert!(path.to_string_lossy().contains(".gemini"));
-        assert!(path.to_string_lossy().contains("antigravity"));
+        assert!(path.to_string_lossy().contains("config"));
         assert!(path.to_string_lossy().ends_with("skills"));
     }
 
@@ -142,7 +142,7 @@ mod tests {
     fn test_build_antigravity_skills_state() {
         let state = build_editor_skills_state(EditorId::Antigravity).unwrap();
         assert!(state.target_path.contains(".gemini"));
-        assert!(state.target_path.contains("antigravity"));
+        assert!(state.target_path.contains("config"));
         assert!(state.target_path.ends_with("skills"));
     }
 

@@ -363,7 +363,7 @@ describe('App skills browse flows', () => {
       editorStates: {
         antigravity: {
           enabled: false,
-          targetPath: '~/.gemini/antigravity/skills',
+          targetPath: '~/.gemini/config/skills',
           enabledSkills: [],
         },
         codex: {
@@ -376,7 +376,7 @@ describe('App skills browse flows', () => {
       skillsEditorStates: {
         antigravity: {
           enabled: false,
-          targetPath: '/Users/test/.gemini/antigravity/skills',
+          targetPath: '/Users/test/.gemini/config/skills',
           enabledSkills: [],
         },
         codex: {

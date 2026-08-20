@@ -43,7 +43,7 @@ pub fn resolve_editor_hooks_path(editor_id: EditorId) -> Result<PathBuf, String>
 pub fn resolve_editor_skills_path(editor_id: EditorId) -> Result<PathBuf, String> {
     let home = get_home_dir()?;
     match editor_id {
-        EditorId::Antigravity => Ok(home.join(".gemini").join("antigravity").join("skills")),
+        EditorId::Antigravity => Ok(home.join(".gemini").join("config").join("skills")),
         EditorId::Codex => Ok(home.join(".codex").join("skills")),
         EditorId::Cursor => Ok(home.join(".cursor").join("skills")),
     }
@@ -57,7 +57,7 @@ pub fn is_editor_skills_target_path(path: &Path) -> bool {
     let target_roots = [
         home.join(".codex").join("skills"),
         home.join(".cursor").join("skills"),
-        home.join(".gemini").join("antigravity").join("skills"),
+        home.join(".gemini").join("config").join("skills"),
     ];
 
     target_roots.iter().any(|target_root| {
