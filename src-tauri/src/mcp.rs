@@ -27,6 +27,7 @@ pub struct EditorTargetStates {
     pub antigravity: EditorTargetState,
     pub codex: EditorTargetState,
     pub cursor: EditorTargetState,
+    pub grok: EditorTargetState,
 }
 
 #[tauri::command]
@@ -35,6 +36,7 @@ pub async fn load_editor_mcp_states() -> Result<EditorTargetStates, String> {
         antigravity: build_editor_mcp_state(EditorId::Antigravity)?,
         codex: build_editor_mcp_state(EditorId::Codex)?,
         cursor: build_editor_mcp_state(EditorId::Cursor)?,
+        grok: build_editor_mcp_state(EditorId::Grok)?,
     })
 }
 

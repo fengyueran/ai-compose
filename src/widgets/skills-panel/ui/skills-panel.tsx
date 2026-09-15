@@ -38,6 +38,9 @@ const editorMeta: Record<
   cursor: {
     title: 'Cursor',
   },
+  grok: {
+    title: 'Grok',
+  },
 };
 
 const editorIds = Object.keys(editorMeta) as EditorId[];
@@ -272,7 +275,7 @@ export function SkillsPanel({ messageApi }: SkillsPanelProps) {
   };
 
   const isSkillLinkedToEditor = (editorId: EditorId, skillId: string) =>
-    skillsEditorStates[editorId]?.enabledSkills.includes(skillId) ?? false;
+    skillsEditorStates[editorId]?.enabledSkills?.includes(skillId) ?? false;
 
   const isSkillToggleReadOnly = (skill: SkillInfo) =>
     skill.sourceKind === 'fallbackDirectory';

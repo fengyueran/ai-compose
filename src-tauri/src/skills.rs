@@ -51,6 +51,7 @@ pub struct EditorSkillsStates {
     pub antigravity: EditorSkillsState,
     pub codex: EditorSkillsState,
     pub cursor: EditorSkillsState,
+    pub grok: EditorSkillsState,
 }
 
 #[derive(Deserialize)]
@@ -491,6 +492,7 @@ pub async fn load_editor_skills_states() -> Result<EditorSkillsStates, String> {
         antigravity: build_editor_skills_state(EditorId::Antigravity)?,
         codex: build_editor_skills_state(EditorId::Codex)?,
         cursor: build_editor_skills_state(EditorId::Cursor)?,
+        grok: build_editor_skills_state(EditorId::Grok)?,
     })
 }
 

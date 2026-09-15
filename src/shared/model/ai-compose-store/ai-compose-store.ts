@@ -210,12 +210,14 @@ const initialEditorStates = {
   antigravity: { enabled: false },
   codex: { enabled: false },
   cursor: { enabled: false },
+  grok: { enabled: false },
 };
 
 const initialMcpEditorStates = {
   antigravity: { enabled: false, targetPath: '' },
   codex: { enabled: false, targetPath: '' },
   cursor: { enabled: false, targetPath: '' },
+  grok: { enabled: false, targetPath: '' },
 };
 
 const initialMcpEnabledServerIdsByEditor = {
@@ -228,12 +230,16 @@ const initialMcpEnabledServerIdsByEditor = {
   cursor: presetMcpServers
     .filter((server) => server.enabled)
     .map((server) => server.id),
+  grok: presetMcpServers
+    .filter((server) => server.enabled)
+    .map((server) => server.id),
 };
 
 const initialHooksEditorStates = {
   antigravity: { enabled: false },
   codex: { enabled: false },
   cursor: { enabled: false },
+  grok: { enabled: false },
 };
 
 const initialHooksState: HooksDomainState = {
@@ -243,6 +249,7 @@ const initialHooksState: HooksDomainState = {
     antigravity: '',
     codex: '',
     cursor: '',
+    grok: '',
   },
   validationErrors: [],
 };
@@ -258,6 +265,9 @@ const buildHookSummaryStates = (
   },
   cursor: {
     enabled: hooks.some((hook) => hook.enabledEditors.cursor),
+  },
+  grok: {
+    enabled: hooks.some((hook) => hook.enabledEditors.grok),
   },
 });
 
@@ -276,6 +286,7 @@ const createDefaultHook = (index: number): HookDefinition => ({
     antigravity: false,
     codex: true,
     cursor: false,
+    grok: false,
   },
 });
 
@@ -283,6 +294,7 @@ const initialSkillsEditorStates = {
   antigravity: { enabled: false, targetPath: '', enabledSkills: [] },
   codex: { enabled: false, targetPath: '', enabledSkills: [] },
   cursor: { enabled: false, targetPath: '', enabledSkills: [] },
+  grok: { enabled: false, targetPath: '', enabledSkills: [] },
 };
 
 const resolveMcpServerIdsFromManaged = (
@@ -319,6 +331,10 @@ const buildEnabledServerIdsByEditor = (
     ),
     cursor: resolveMcpServerIdsFromManaged(
       nextMcpStates.cursor.managedMcpServers,
+      updatedServers,
+    ),
+    grok: resolveMcpServerIdsFromManaged(
+      nextMcpStates.grok.managedMcpServers,
       updatedServers,
     ),
   };
@@ -394,6 +410,7 @@ export const useAiComposeStore = create<AiComposeState>((set, get) => ({
       antigravity: { enabled: editorStates.antigravity.enabled },
       codex: { enabled: editorStates.codex.enabled },
       cursor: { enabled: editorStates.cursor.enabled },
+      grok: { enabled: editorStates.grok.enabled },
     };
     set((state) => ({
       promptEditorStates: nextPromptStates,
@@ -409,6 +426,7 @@ export const useAiComposeStore = create<AiComposeState>((set, get) => ({
       antigravity: { ...editorStates.antigravity },
       codex: { ...editorStates.codex },
       cursor: { ...editorStates.cursor },
+      grok: { ...editorStates.grok },
     };
 
     // Recompute the top-level toggle based on valid enabled config inside the managed block.
@@ -471,6 +489,7 @@ export const useAiComposeStore = create<AiComposeState>((set, get) => ({
       antigravity: { ...editorStates.antigravity },
       codex: { ...editorStates.codex },
       cursor: { ...editorStates.cursor },
+      grok: { ...editorStates.grok },
     };
     set((state) => ({
       skillsEditorStates: nextSkillsStates,
@@ -789,6 +808,9 @@ export const useAiComposeStore = create<AiComposeState>((set, get) => ({
           (serverId) => serverId !== id,
         ),
         cursor: get().mcpEnabledServerIdsByEditor.cursor.filter(
+          (serverId) => serverId !== id,
+        ),
+        grok: get().mcpEnabledServerIdsByEditor.grok.filter(
           (serverId) => serverId !== id,
         ),
       },

@@ -32,6 +32,11 @@ pub fn delete_editor_account(editor_id: EditorId, name: String) -> Result<(), St
     delete_account_impl(editor_id, name, None)
 }
 
+#[tauri::command]
+pub fn prepare_new_account_login(editor_id: EditorId) -> Result<(), String> {
+    prepare_new_account_login_impl(editor_id, None)
+}
+
 // 辅助函数：校验账号名称是否安全
 fn is_safe_account_name(name: &str) -> bool {
     if name.is_empty() || name.contains("..") {
@@ -88,6 +93,10 @@ fn resolve_auth_file_path(
                 }
             };
             Ok((db_dir.join("state.vscdb"), "state".to_string(), "vscdb".to_string()))
+        }
+        EditorId::Grok => {
+            let grok_dir = home.join(".grok");
+            Ok((grok_dir.join("auth.json"), "auth".to_string(), "json".to_string()))
         }
         EditorId::Antigravity => Err("Antigravity 暂不支持账号管理".to_string()),
     }
@@ -412,6 +421,7 @@ pub async fn fetch_usage_impl(
                 codex_usage: Some(codex_usage),
             })
         }
+        EditorId::Grok => Err("Grok 暂不支持获取额度信息。".to_string()),
         EditorId::Antigravity => Err("Antigravity 不支持获取额度信息。".to_string()),
     }
 }
@@ -693,6 +703,64 @@ pub fn delete_account_impl(
     if let Ok(current) = std::fs::read_to_string(&marker) {
         if current.trim().split_once(':').map(|(n, _)| n).unwrap_or(current.trim()) == name {
             let _ = std::fs::remove_file(&marker);
+        }
+    }
+
+    Ok(())
+}
+
+pub fn prepare_new_account_login_impl(
+    editor_id: EditorId,
+    custom_home: Option<&Path>,
+) -> Result<(), String> {
+    let (auth_file, prefix, ext) = resolve_auth_file_path(editor_id, custom_home)?;
+    let parent_dir = auth_file.parent().ok_or_else(|| "无法获取凭证文件目录。".to_string())?;
+
+    // 1. 如果当前存在活跃账号标记，且对应的原凭据存在，自动将当前最新凭证（如刷新后的 Token）静默同步归档回其对应的备份中
+    let marker_path = active_marker_path(parent_dir, &prefix);
+    if marker_path.exists() && auth_file.exists() {
+        if let Ok(marker_content) = std::fs::read_to_string(&marker_path) {
+            let marker_content = marker_content.trim();
+            if let Some((active_name, _)) = marker_content.split_once(':') {
+                if is_safe_account_name(active_name) {
+                    let active_backup = parent_dir.join(format!("{}-{}.{}", prefix, active_name, ext));
+                    if active_backup.exists() {
+                        let _ = std::fs::copy(&auth_file, &active_backup);
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. 清理当前登录凭证原文件（不触发服务端注销请求）
+    if auth_file.exists() {
+        std::fs::remove_file(&auth_file)
+            .map_err(|err| format!("清除当前凭据文件失败: {}", err))?;
+    }
+
+    // 3. 清理活跃标记
+    if marker_path.exists() {
+        let _ = std::fs::remove_file(&marker_path);
+    }
+
+    // 4. 编辑器特定清理
+    if editor_id == EditorId::Cursor {
+        let wal_file = parent_dir.join("state.vscdb-wal");
+        let shm_file = parent_dir.join("state.vscdb-shm");
+        let journal_file = parent_dir.join("state.vscdb-journal");
+
+        if wal_file.exists() { let _ = std::fs::remove_file(wal_file); }
+        if shm_file.exists() { let _ = std::fs::remove_file(shm_file); }
+        if journal_file.exists() { let _ = std::fs::remove_file(journal_file); }
+    } else if editor_id == EditorId::Codex {
+        if let Ok(app_support_dir) = resolve_codex_app_support_dir(custom_home) {
+            let cookies_file = app_support_dir.join("Cookies");
+            let cookies_journal = app_support_dir.join("Cookies-journal");
+            let local_storage = app_support_dir.join("Local Storage");
+
+            if cookies_file.exists() { let _ = std::fs::remove_file(cookies_file); }
+            if cookies_journal.exists() { let _ = std::fs::remove_file(cookies_journal); }
+            if local_storage.exists() { let _ = std::fs::remove_dir_all(local_storage); }
         }
     }
 
@@ -1048,6 +1116,155 @@ mod tests {
         );
 
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn test_grok_account_switching_flow() {
+        let root = unique_test_dir("grok");
+        let grok_dir = root.join(".grok");
+        fs::create_dir_all(&grok_dir).unwrap();
+
+        // 1. 当没有 auth.json 时，尝试备份应该返回错误
+        assert!(save_current_account_impl(EditorId::Grok, "work".to_string(), Some(&root)).is_err());
+
+        // 2. 写入模拟的 auth.json
+        let auth_path = grok_dir.join("auth.json");
+        fs::write(&auth_path, "grok-token-work-123").unwrap();
+
+        // 3. 备份为 "work"
+        save_current_account_impl(EditorId::Grok, "work".to_string(), Some(&root)).unwrap();
+        assert!(grok_dir.join("auth-work.json").exists());
+
+        // 4. 加载账号列表，应该发现 "work" 且 isActive 为 true
+        let accounts = load_accounts_impl(EditorId::Grok, Some(&root)).unwrap();
+        assert_eq!(accounts.len(), 1);
+        assert_eq!(accounts[0].name, "work");
+        assert!(accounts[0].is_active);
+
+        // 5. 修改当前登录的 auth.json，模拟登录了新账号
+        fs::write(&auth_path, "grok-token-personal-456").unwrap();
+
+        // 6. 再次加载账号列表，由于 auth.json 内容已改变，"work" 应该变为非 active
+        let accounts = load_accounts_impl(EditorId::Grok, Some(&root)).unwrap();
+        assert_eq!(accounts.len(), 1);
+        assert!(!accounts[0].is_active);
+
+        // 7. 备份新账号为 "personal"
+        save_current_account_impl(EditorId::Grok, "personal".to_string(), Some(&root)).unwrap();
+
+        // 8. 列表加载，应该有两个账号，且 "personal" 是激活的，"work" 是非激活的
+        let accounts = load_accounts_impl(EditorId::Grok, Some(&root)).unwrap();
+        assert_eq!(accounts.len(), 2);
+        let work_acct = accounts.iter().find(|a| a.name == "work").unwrap();
+        let pers_acct = accounts.iter().find(|a| a.name == "personal").unwrap();
+        assert!(!work_acct.is_active);
+        assert!(pers_acct.is_active);
+
+        // 9. 切换回 "work"
+        switch_account_impl(EditorId::Grok, "work".to_string(), Some(&root)).unwrap();
+        let current_token = fs::read_to_string(&auth_path).unwrap();
+        assert_eq!(current_token, "grok-token-work-123");
+
+        // 10. 验证切换后列表里 "work" 重新变成活跃
+        let accounts = load_accounts_impl(EditorId::Grok, Some(&root)).unwrap();
+        let work_acct = accounts.iter().find(|a| a.name == "work").unwrap();
+        assert!(work_acct.is_active);
+
+        // 11. 删除 "personal" 账号
+        delete_account_impl(EditorId::Grok, "personal".to_string(), Some(&root)).unwrap();
+        assert!(!grok_dir.join("auth-personal.json").exists());
+        let accounts = load_accounts_impl(EditorId::Grok, Some(&root)).unwrap();
+        assert_eq!(accounts.len(), 1);
+        assert_eq!(accounts[0].name, "work");
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn test_prepare_new_account_login_codex() {
+        let root = unique_test_dir("prepare-codex");
+        let codex_dir = root.join(".codex");
+        let app_support_dir = root.join("Codex");
+        fs::create_dir_all(&codex_dir).unwrap();
+        fs::create_dir_all(&app_support_dir).unwrap();
+
+        let auth_path = codex_dir.join("auth.json");
+        fs::write(&auth_path, "token-work-original").unwrap();
+
+        // 备份当前账号为 work
+        save_current_account_impl(EditorId::Codex, "work".to_string(), Some(&root)).unwrap();
+        assert!(codex_dir.join("auth-work.json").exists());
+
+        // 写入模拟的 Cookies 和 Local Storage
+        let cookies_file = app_support_dir.join("Cookies");
+        let local_storage_dir = app_support_dir.join("Local Storage");
+        fs::write(&cookies_file, "mock-cookie-data").unwrap();
+        fs::create_dir_all(&local_storage_dir).unwrap();
+        fs::write(local_storage_dir.join("data.ldb"), "mock-storage").unwrap();
+
+        // 模拟运行期间 Token 刷新变动
+        fs::write(&auth_path, "token-work-refreshed").unwrap();
+
+        // 执行“准备登录新账号”
+        prepare_new_account_login_impl(EditorId::Codex, Some(&root)).unwrap();
+
+        // 验证当前凭证与活跃标记均已被安全移除
+        assert!(!auth_path.exists());
+        assert!(!codex_dir.join(".auth.active").exists());
+
+        // 验证 Cookies 和 Local Storage 已被清理
+        assert!(!cookies_file.exists());
+        assert!(!local_storage_dir.exists());
+
+        // 验证备份文件仍然存在，且自动同步保存了刷新后的凭证
+        let work_backup = codex_dir.join("auth-work.json");
+        assert!(work_backup.exists());
+        assert_eq!(fs::read_to_string(&work_backup).unwrap(), "token-work-refreshed");
+
+        // 验证账号列表加载，work 依然在，但处于非激活状态（未登录）
+        let accounts = load_accounts_impl(EditorId::Codex, Some(&root)).unwrap();
+        assert_eq!(accounts.len(), 1);
+        assert_eq!(accounts[0].name, "work");
+        assert!(!accounts[0].is_active);
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn test_prepare_new_account_login_cursor() {
+        let root = unique_test_dir("prepare-cursor");
+        let db_dir = root.join("Cursor").join("User").join("globalStorage");
+        fs::create_dir_all(&db_dir).unwrap();
+
+        let db_path = db_dir.join("state.vscdb");
+        fs::write(&db_path, "mock-sqlite-db").unwrap();
+
+        // 备份当前账号为 work
+        save_current_account_impl(EditorId::Cursor, "work".to_string(), Some(&root)).unwrap();
+        assert!(db_dir.join("state-work.vscdb").exists());
+
+        // 创建临时 WAL 文件
+        let wal_path = db_dir.join("state.vscdb-wal");
+        fs::write(&wal_path, "mock-wal").unwrap();
+
+        // 执行“准备登录新账号”
+        prepare_new_account_login_impl(EditorId::Cursor, Some(&root)).unwrap();
+
+        // 验证 state.vscdb 和 wal 均被清除
+        assert!(!db_path.exists());
+        assert!(!wal_path.exists());
+        assert!(!db_dir.join(".state.active").exists());
+
+        // 备份仍然完好
+        assert!(db_dir.join("state-work.vscdb").exists());
+
+        // 账号列表正常且未激活
+        let accounts = load_accounts_impl(EditorId::Cursor, Some(&root)).unwrap();
+        assert_eq!(accounts.len(), 1);
+        assert_eq!(accounts[0].name, "work");
+        assert!(!accounts[0].is_active);
+
+        fs::remove_dir_all(root).unwrap();
     }
 }
 

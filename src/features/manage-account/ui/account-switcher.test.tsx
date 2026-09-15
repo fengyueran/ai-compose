@@ -14,6 +14,7 @@ vi.mock('../../../shared', async () => {
     switchEditorAccount: vi.fn(),
     deleteEditorAccount: vi.fn(),
     fetchEditorAccountUsage: vi.fn(),
+    prepareNewAccountLogin: vi.fn(),
   };
 });
 
@@ -489,6 +490,156 @@ describe('AccountSwitcher Component', () => {
         '刷新 [work] 额度失败: Network timeout',
       );
       expect(screen.getByText('Network timeout')).toBeInTheDocument();
+    });
+  });
+
+  test('supports grok account listing, saving, switching, and deletion', async () => {
+    const mockAccounts: api.EditorAccountInfo[] = [
+      { name: 'grok-work', isActive: true, lastModified: 1716889900 },
+      { name: 'grok-personal', isActive: false, lastModified: 1716889200 },
+    ];
+    vi.mocked(api.loadEditorAccounts).mockResolvedValue(mockAccounts);
+
+    render(
+      <AccountSwitcher
+        editorId="grok"
+        editorName="Grok"
+        messageApi={mockMessageApi}
+      />,
+    );
+
+    expect(screen.getByText('Grok 多账号管理')).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByText('grok-work')).toBeInTheDocument();
+      expect(screen.getByText('grok-personal')).toBeInTheDocument();
+    });
+
+    // 1. 保存新 Grok 账号
+    const input = screen.getByPlaceholderText('例如: work, user@gmail.com');
+    const saveBtn = screen.getByRole('button', { name: '备份当前登录态' });
+    await userEvent.type(input, 'grok-new');
+    vi.mocked(api.saveCurrentEditorAccount).mockResolvedValue(undefined);
+    await userEvent.click(saveBtn);
+
+    expect(api.saveCurrentEditorAccount).toHaveBeenCalledWith(
+      'grok',
+      'grok-new',
+    );
+    expect(mockMessageApi.success).toHaveBeenCalledWith(
+      '当前 Grok 账号已备份为: grok-new',
+    );
+
+    // 2. 切换账号
+    const switchButtons = screen.getAllByRole('button', { name: '切换' });
+    const inactiveSwitchBtn = switchButtons.find(
+      (btn) => !btn.hasAttribute('disabled'),
+    );
+    expect(inactiveSwitchBtn).toBeDefined();
+
+    vi.mocked(api.switchEditorAccount).mockResolvedValue(undefined);
+    await userEvent.click(inactiveSwitchBtn!);
+
+    expect(api.switchEditorAccount).toHaveBeenCalledWith(
+      'grok',
+      'grok-personal',
+    );
+    expect(mockMessageApi.success).toHaveBeenCalledWith(
+      '已切换到账号 [grok-personal]！请确保完全退出并重启 Grok 生效。',
+    );
+
+    // 3. 删除账号
+    const deleteButtons = screen.getAllByRole('button', { name: '删除' });
+    vi.mocked(api.deleteEditorAccount).mockResolvedValue(undefined);
+    await userEvent.click(deleteButtons[1]);
+
+    expect(api.deleteEditorAccount).toHaveBeenCalledWith(
+      'grok',
+      'grok-personal',
+    );
+    expect(mockMessageApi.success).toHaveBeenCalledWith(
+      '已删除账号备份: grok-personal',
+    );
+  });
+
+  test('opens prepare new account modal, cancels, and confirms cleanup', async () => {
+    vi.mocked(api.loadEditorAccounts).mockResolvedValue([
+      { name: 'work', isActive: true, lastModified: 1716918700 },
+    ]);
+    vi.mocked(api.prepareNewAccountLogin).mockResolvedValue(undefined);
+
+    render(
+      <AccountSwitcher
+        editorId="codex"
+        editorName="Codex"
+        messageApi={mockMessageApi}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('work')).toBeInTheDocument();
+    });
+
+    const prepareBtn = screen.getByRole('button', { name: '准备登录新账号' });
+    expect(prepareBtn).toBeInTheDocument();
+
+    // 1. 点击打开弹窗
+    await userEvent.click(prepareBtn);
+    expect(screen.getByText('准备登录新的 Codex 账号')).toBeInTheDocument();
+    expect(screen.getByText(/此操作将在/i)).toBeInTheDocument();
+
+    // 2. 点击取消关闭弹窗
+    const cancelBtn = screen.getByRole('button', { name: '取消' });
+    await userEvent.click(cancelBtn);
+    await waitFor(() => {
+      expect(
+        screen.queryByText('准备登录新的 Codex 账号'),
+      ).not.toBeInTheDocument();
+    });
+    expect(api.prepareNewAccountLogin).not.toHaveBeenCalled();
+
+    // 3. 再次打开并确认清理
+    await userEvent.click(prepareBtn);
+    const confirmBtn = screen.getByRole('button', {
+      name: '确认清理并准备登录',
+    });
+    await userEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(api.prepareNewAccountLogin).toHaveBeenCalledWith('codex');
+      expect(mockMessageApi.success).toHaveBeenCalledWith(
+        '已安全清理 Codex 本地登录态！请启动 Codex 登录新账号后，再来此处备份。',
+      );
+    });
+  });
+
+  test('handles prepare new account login failure gracefully', async () => {
+    vi.mocked(api.loadEditorAccounts).mockResolvedValue([]);
+    vi.mocked(api.prepareNewAccountLogin).mockRejectedValue(
+      new Error('Permission denied'),
+    );
+
+    render(
+      <AccountSwitcher
+        editorId="cursor"
+        editorName="Cursor"
+        messageApi={mockMessageApi}
+      />,
+    );
+
+    const prepareBtn = screen.getByRole('button', { name: '准备登录新账号' });
+    await userEvent.click(prepareBtn);
+
+    const confirmBtn = screen.getByRole('button', {
+      name: '确认清理并准备登录',
+    });
+    await userEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(api.prepareNewAccountLogin).toHaveBeenCalledWith('cursor');
+      expect(mockMessageApi.error).toHaveBeenCalledWith(
+        '准备登录新账号失败: Permission denied',
+      );
     });
   });
 });

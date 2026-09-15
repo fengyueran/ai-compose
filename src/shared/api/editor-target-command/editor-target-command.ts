@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 
-export type EditorId = 'antigravity' | 'codex' | 'cursor';
+export type EditorId = 'antigravity' | 'codex' | 'cursor' | 'grok';
 
 type ApplyPromptPayload = {
   editorId: EditorId;
@@ -336,6 +336,10 @@ export function deleteEditorAccount(
   name: string,
 ): Promise<void> {
   return invoke<void>('delete_editor_account', { editorId, name });
+}
+
+export function prepareNewAccountLogin(editorId: EditorId): Promise<void> {
+  return invoke<void>('prepare_new_account_login', { editorId });
 }
 
 export interface CodexUsageInfo {

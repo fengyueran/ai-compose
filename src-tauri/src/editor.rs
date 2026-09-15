@@ -8,6 +8,7 @@ pub enum EditorId {
     Antigravity,
     Codex,
     Cursor,
+    Grok,
 }
 
 pub fn resolve_editor_agents_path(editor_id: EditorId) -> Result<PathBuf, String> {
@@ -15,6 +16,7 @@ pub fn resolve_editor_agents_path(editor_id: EditorId) -> Result<PathBuf, String
         EditorId::Antigravity => resolve_antigravity_agents_path(),
         EditorId::Codex => resolve_codex_agents_path(),
         EditorId::Cursor => resolve_cursor_agents_path(),
+        EditorId::Grok => resolve_grok_agents_path(),
     }
 }
 
@@ -28,6 +30,7 @@ pub fn resolve_editor_mcp_path(editor_id: EditorId) -> Result<PathBuf, String> {
             .join("mcp_config.json")),
         EditorId::Codex => Ok(home_path.join(".codex").join("config.toml")),
         EditorId::Cursor => Ok(home_path.join(".cursor").join("mcp.json")),
+        EditorId::Grok => Ok(home_path.join(".grok").join("config.toml")),
     }
 }
 
@@ -37,6 +40,7 @@ pub fn resolve_editor_hooks_path(editor_id: EditorId) -> Result<PathBuf, String>
         EditorId::Antigravity => Ok(home.join(".gemini").join("config").join("hooks.json")),
         EditorId::Codex => Ok(home.join(".codex").join("hooks.json")),
         EditorId::Cursor => Ok(home.join(".cursor").join("hooks.json")),
+        EditorId::Grok => Ok(home.join(".grok").join("hooks.json")),
     }
 }
 
@@ -46,6 +50,7 @@ pub fn resolve_editor_skills_path(editor_id: EditorId) -> Result<PathBuf, String
         EditorId::Antigravity => Ok(home.join(".gemini").join("config").join("skills")),
         EditorId::Codex => Ok(home.join(".codex").join("skills")),
         EditorId::Cursor => Ok(home.join(".cursor").join("skills")),
+        EditorId::Grok => Ok(home.join(".grok").join("skills")),
     }
 }
 
@@ -58,6 +63,7 @@ pub fn is_editor_skills_target_path(path: &Path) -> bool {
         home.join(".codex").join("skills"),
         home.join(".cursor").join("skills"),
         home.join(".gemini").join("config").join("skills"),
+        home.join(".grok").join("skills"),
     ];
 
     target_roots.iter().any(|target_root| {
@@ -79,4 +85,9 @@ fn resolve_codex_agents_path() -> Result<PathBuf, String> {
 fn resolve_cursor_agents_path() -> Result<PathBuf, String> {
     let home_directory = get_home_dir()?;
     Ok(home_directory.join(".cursor").join("AGENTS.md"))
+}
+
+fn resolve_grok_agents_path() -> Result<PathBuf, String> {
+    let home_directory = get_home_dir()?;
+    Ok(home_directory.join(".grok").join("AGENTS.md"))
 }

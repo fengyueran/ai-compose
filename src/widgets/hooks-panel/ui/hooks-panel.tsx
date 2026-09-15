@@ -25,6 +25,7 @@ const editorMeta: Record<EditorId, { title: string }> = {
   antigravity: { title: 'Antigravity' },
   codex: { title: 'Codex' },
   cursor: { title: 'Cursor' },
+  grok: { title: 'Grok' },
 };
 
 const triggerOptions = [
@@ -245,6 +246,7 @@ export function HooksPanel({ messageApi }: HooksPanelProps) {
           antigravity: activeEditorId === 'antigravity',
           codex: activeEditorId === 'codex',
           cursor: activeEditorId === 'cursor',
+          grok: activeEditorId === 'grok',
         },
       };
 

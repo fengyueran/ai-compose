@@ -127,7 +127,7 @@ pub async fn load_editor_hooks_states() -> Result<HooksConfigState, String> {
     }
 
     let mut target_paths = std::collections::HashMap::new();
-    for editor_id in &[EditorId::Antigravity, EditorId::Codex, EditorId::Cursor] {
+    for editor_id in &[EditorId::Antigravity, EditorId::Codex, EditorId::Cursor, EditorId::Grok] {
         let path = resolve_editor_hooks_path(*editor_id)?;
         target_paths.insert(*editor_id, path.display().to_string());
     }
@@ -155,7 +155,7 @@ pub async fn apply_hooks_to_editor_target(
         .map_err(|error| format!("保存 Hooks 共享数据失败：{error}"))?;
 
     // 2. Synchronize configuration files to target directories for enabled editors
-    for editor_id in &[EditorId::Antigravity, EditorId::Codex, EditorId::Cursor] {
+    for editor_id in &[EditorId::Antigravity, EditorId::Codex, EditorId::Cursor, EditorId::Grok] {
         let target_path = resolve_editor_hooks_path(*editor_id)?;
 
         let enabled_hooks: Vec<&HookDefinition> = payload
@@ -235,7 +235,7 @@ pub async fn apply_hooks_to_editor_target(
                     fs::write(&target_path, serialized_file)
                         .map_err(|error| format!("写入 Codex Hooks 配置文件失败：{error}"))?;
                 }
-                EditorId::Antigravity | EditorId::Cursor => {
+                EditorId::Antigravity | EditorId::Cursor | EditorId::Grok => {
                     let hook_value = if *editor_id == EditorId::Antigravity {
                         build_named_hooks_value(&enabled_hooks, ANTIGRAVITY_TOOL_MATCHER)
                     } else {

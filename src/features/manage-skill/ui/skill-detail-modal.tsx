@@ -35,6 +35,9 @@ const editorMeta: Record<
   cursor: {
     title: 'Cursor',
   },
+  grok: {
+    title: 'Grok',
+  },
 };
 
 const editorIds = Object.keys(editorMeta) as EditorId[];

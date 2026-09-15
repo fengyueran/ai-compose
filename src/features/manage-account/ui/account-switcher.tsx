@@ -1,4 +1,4 @@
-import { Button, Message } from '@xinghunm/compass-ui';
+import { Button, Message, Modal } from '@xinghunm/compass-ui';
 import { useEffect, useState, useCallback } from 'react';
 import {
   type EditorId,
@@ -9,8 +9,51 @@ import {
   switchEditorAccount,
   deleteEditorAccount,
   fetchEditorAccountUsage,
+  prepareNewAccountLogin,
 } from '../../../shared';
 import { AccountSwitcherWrapper } from './account-switcher.styles';
+
+function UserPlusIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <line x1="19" y1="8" x2="19" y2="14" />
+      <line x1="22" y1="11" x2="16" y2="11" />
+    </svg>
+  );
+}
+
+function RefreshIcon() {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M21 2v6h-6" />
+      <path d="M3 12a9 9 0 0 1 15.5-6.36L21 8" />
+      <path d="M3 22v-6h6" />
+      <path d="M21 12a9 9 0 0 1-15.5 6.36L3 16" />
+    </svg>
+  );
+}
 
 interface AccountSwitcherProps {
   editorId: EditorId;
@@ -28,6 +71,8 @@ export function AccountSwitcher({
   const [newAccountName, setNewAccountName] = useState('');
   const [saving, setSaving] = useState(false);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
+  const [isPrepareModalOpen, setIsPrepareModalOpen] = useState(false);
+  const [preparing, setPreparing] = useState(false);
 
   const [usages, setUsages] = useState<
     Record<string, (EditorUsageInfo & { error?: string }) | null>
@@ -194,6 +239,25 @@ export function AccountSwitcher({
     }
   };
 
+  const handlePrepareNewAccount = async () => {
+    setPreparing(true);
+    try {
+      await prepareNewAccountLogin(editorId);
+      messageApi.success(
+        `已安全清理 ${editorName} 本地登录态！请启动 ${editorName} 登录新账号后，再来此处备份。`,
+      );
+      setIsPrepareModalOpen(false);
+      await fetchAccounts();
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      messageApi.error(`准备登录新账号失败: ${errMsg}`);
+    } finally {
+      setPreparing(false);
+    }
+  };
+
+  const activeAccount = accounts.find((acct) => acct.isActive);
+
   if (editorId === 'antigravity') {
     return null;
   }
@@ -208,23 +272,50 @@ export function AccountSwitcher({
             Session）保存为备份，以便在多个账号间快速一键切换。
           </p>
         </div>
-        {(editorId === 'cursor' || editorId === 'codex') &&
-          accounts.length > 0 && (
+        <div className="account-switcher__header-actions">
+          {(editorId === 'cursor' || editorId === 'codex') && (
             <Button
               type="button"
-              className="account-switcher__refresh-all-btn"
+              className="account-switcher__prepare-new-btn"
               disabled={
                 saving ||
                 loading ||
                 actionInProgress !== null ||
-                isRefreshingAll
+                isRefreshingAll ||
+                preparing
               }
-              loading={isRefreshingAll}
-              onClick={handleRefreshAll}
+              onClick={() => setIsPrepareModalOpen(true)}
             >
-              刷新全部额度
+              <span className="btn-icon">
+                <UserPlusIcon />
+              </span>
+              <span>准备登录新账号</span>
             </Button>
           )}
+          {(editorId === 'cursor' || editorId === 'codex') &&
+            accounts.length > 0 && (
+              <Button
+                type="button"
+                className="account-switcher__refresh-all-btn"
+                disabled={
+                  saving ||
+                  loading ||
+                  actionInProgress !== null ||
+                  isRefreshingAll ||
+                  preparing
+                }
+                loading={isRefreshingAll}
+                onClick={handleRefreshAll}
+              >
+                {!isRefreshingAll && (
+                  <span className="btn-icon">
+                    <RefreshIcon />
+                  </span>
+                )}
+                <span>刷新全部额度</span>
+              </Button>
+            )}
+        </div>
       </div>
 
       <div className="account-switcher__input-group">
@@ -249,20 +340,18 @@ export function AccountSwitcher({
       </div>
 
       <div className="account-switcher__warning">
-        <strong>⚠️ 切换注意事项：</strong>
-        <ul>
-          <li>切换前请确保已**完全关闭** {editorName}。</li>
-          <li>
-            切换后必须**重新启动** {editorName}{' '}
-            才能使新账号的登录凭据和云端历史记录生效。
-          </li>
+        <span className="account-switcher__warning-icon" aria-hidden="true">
+          ⚠️
+        </span>
+        <span className="account-switcher__warning-text">
+          <strong>切换须知：</strong>
+          切换前请确保已完全退出 {editorName}，切换后重新启动即可使新账号生效。
           {editorId === 'cursor' && (
-            <li>
-              Cursor 的切换是整体替换其本地全局配置，各账号的聊天记录 (Chat) 和
-              Composer 状态会自动隔离。
-            </li>
+            <span className="account-switcher__warning-sub">
+              （各账号 Chat 与 Composer 状态已自动隔离）
+            </span>
           )}
-        </ul>
+        </span>
       </div>
 
       <div className="account-switcher__list">
@@ -273,25 +362,77 @@ export function AccountSwitcher({
             暂无已备份账号。在上方输入备注名即可备份。
           </div>
         ) : (
-          accounts.map((acct) => (
-            <div
-              key={acct.name}
-              className={`account-item${acct.isActive ? ' account-item--active' : ''}`}
-            >
-              <div className="account-item__info">
-                <div className="account-item__name-row">
-                  <span className="account-item__name">{acct.name}</span>
-                  {acct.isActive && (
-                    <span className="account-item__active-badge">当前激活</span>
-                  )}
+          accounts.map((acct) => {
+            const usageInfo = usages[acct.name];
+            const accountEmail =
+              usageInfo && !usageInfo.error ? usageInfo.email : undefined;
+
+            return (
+              <div
+                key={acct.name}
+                className={`account-item${acct.isActive ? ' account-item--active' : ''}`}
+              >
+                <div className="account-item__header">
+                  <div className="account-item__title-group">
+                    <span className="account-item__name">{acct.name}</span>
+                    {acct.isActive && (
+                      <span className="account-item__active-badge">
+                        <span
+                          className="account-item__active-dot"
+                          aria-hidden="true"
+                        />
+                        当前激活
+                      </span>
+                    )}
+                  </div>
+                  <div className="account-item__actions">
+                    {(editorId === 'cursor' || editorId === 'codex') && (
+                      <Button
+                        type="button"
+                        className="account-item__btn"
+                        disabled={
+                          saving ||
+                          loading ||
+                          actionInProgress !== null ||
+                          Boolean(usageLoading[acct.name])
+                        }
+                        loading={Boolean(usageLoading[acct.name])}
+                        onClick={() => handleRefresh(acct)}
+                      >
+                        刷新
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      className="account-item__btn"
+                      disabled={
+                        saving ||
+                        loading ||
+                        actionInProgress !== null ||
+                        acct.isActive
+                      }
+                      loading={actionInProgress === acct.name}
+                      onClick={() => handleSwitch(acct.name)}
+                    >
+                      切换
+                    </Button>
+                    <Button
+                      type="button"
+                      className="account-item__btn"
+                      danger
+                      disabled={saving || loading || actionInProgress !== null}
+                      onClick={() => handleDelete(acct.name)}
+                    >
+                      删除
+                    </Button>
+                  </div>
                 </div>
+
                 {(editorId === 'cursor' || editorId === 'codex') && (
                   <div className="account-item__usage-zone">
                     {usageLoading[acct.name] ? (
                       <div className="account-item__usage-skeleton">
-                        <div className="skeleton-line skeleton-email" />
                         <div className="skeleton-line skeleton-progress" />
-                        <div className="skeleton-line skeleton-meta" />
                       </div>
                     ) : usages[acct.name] && !usages[acct.name]?.error ? (
                       (() => {
@@ -299,9 +440,6 @@ export function AccountSwitcher({
                         if (editorId === 'cursor') {
                           const totalPercent = usage.totalPercentUsed ?? 0;
                           const apiPercent = usage.apiPercentUsed;
-                          // Cursor often reports autoPercentUsed=0 even when Auto is active;
-                          // Auto mode is measured against totalPercentUsed (see autoModelSelectedDisplayMessage).
-                          // Only surface a dedicated Auto pool bar when the API returns a real value.
                           const autoPoolPercent =
                             usage.autoPercentUsed != null &&
                             usage.autoPercentUsed > 0
@@ -336,6 +474,7 @@ export function AccountSwitcher({
                             barClass: string,
                             exhaustedHint?: string,
                             title?: string,
+                            resetText?: string,
                           ) => (
                             <div
                               className="account-item__codex-row"
@@ -346,6 +485,11 @@ export function AccountSwitcher({
                                 <span className="account-item__codex-row-label">
                                   {label}
                                 </span>
+                                {resetText && (
+                                  <span className="account-item__codex-row-reset">
+                                    {resetText} 重置
+                                  </span>
+                                )}
                               </div>
                               <div className="account-item__codex-progress-container">
                                 <div
@@ -361,60 +505,56 @@ export function AccountSwitcher({
                               </div>
                             </div>
                           );
-                          return (
-                            <div className="account-item__usage-detail">
-                              <div className="account-item__usage-meta">
-                                <span
-                                  className="account-item__usage-email"
-                                  title={usage.email}
-                                >
-                                  {usage.email}
-                                </span>
-                                <span className="account-item__usage-reset">
-                                  {resetStr} 重置
-                                </span>
-                              </div>
-                              {hasApiSplit ? (
-                                <div className="account-item__codex-rows">
-                                  {renderPoolRow(
-                                    'API 额度',
-                                    apiPercent,
-                                    'account-item__codex-progress-bar--primary',
-                                    '指定模型用尽，请用 Auto',
-                                    '手动选择 Claude/GPT 等模型时消耗；用尽后只能切 Auto',
-                                  )}
-                                  {autoPoolPercent != null &&
-                                    renderPoolRow(
-                                      'Auto 池',
-                                      autoPoolPercent,
-                                      'account-item__codex-progress-bar--secondary',
-                                      undefined,
-                                      '独立 Auto/Composer 池（仅当接口返回有效占用时显示）',
-                                    )}
-                                  {renderPoolRow(
-                                    '包含用量',
-                                    totalPercent,
-                                    'account-item__codex-progress-bar--total',
-                                    undefined,
-                                    '套餐包含总进度；Cursor 在 Auto 模式下显示的就是这项',
-                                  )}
-                                </div>
-                              ) : (
-                                <>
-                                  <div className="account-item__usage-progress-container">
-                                    <div
-                                      className="account-item__usage-progress-bar"
-                                      style={{
-                                        width: `${Math.min(100, totalPercent)}%`,
-                                      }}
-                                    />
-                                  </div>
-                                  <div className="account-item__usage-status">
-                                    已用 {totalPercent.toFixed(1)}% (
-                                    {formatPoolStatus(totalPercent)})
-                                  </div>
-                                </>
+                          return hasApiSplit ? (
+                            <div className="account-item__codex-rows">
+                              {renderPoolRow(
+                                'API 额度',
+                                apiPercent,
+                                'account-item__codex-progress-bar--primary',
+                                '指定模型用尽，请用 Auto',
+                                '手动选择 Claude/GPT 等模型时消耗；用尽后只能切 Auto',
+                                resetStr,
                               )}
+                              {autoPoolPercent != null &&
+                                renderPoolRow(
+                                  'Auto 池',
+                                  autoPoolPercent,
+                                  'account-item__codex-progress-bar--secondary',
+                                  undefined,
+                                  '独立 Auto/Composer 池（仅当接口返回有效占用时显示）',
+                                )}
+                              {renderPoolRow(
+                                '包含用量',
+                                totalPercent,
+                                'account-item__codex-progress-bar--total',
+                                undefined,
+                                '套餐包含总进度；Cursor 在 Auto 模式下显示的就是这项',
+                              )}
+                            </div>
+                          ) : (
+                            <div className="account-item__codex-rows">
+                              <div className="account-item__codex-row">
+                                <div className="account-item__codex-row-header">
+                                  <span className="account-item__codex-row-label">
+                                    包含用量
+                                  </span>
+                                  <span className="account-item__codex-row-reset">
+                                    {resetStr} 重置
+                                  </span>
+                                </div>
+                                <div className="account-item__codex-progress-container">
+                                  <div
+                                    className="account-item__codex-progress-bar account-item__codex-progress-bar--total"
+                                    style={{
+                                      width: `${Math.min(100, totalPercent)}%`,
+                                    }}
+                                  />
+                                </div>
+                                <div className="account-item__codex-row-status">
+                                  已用 {totalPercent.toFixed(1)}% (
+                                  {formatPoolStatus(totalPercent)})
+                                </div>
+                              </div>
                             </div>
                           );
                         } else {
@@ -436,8 +576,6 @@ export function AccountSwitcher({
                               label.toLowerCase().includes('h') &&
                               !label.toLowerCase().includes('month');
                             try {
-                              // Hour-based windows (e.g. 5h / 168h) can span midnight or multiple days,
-                              // so always include month/day alongside time.
                               if (isShort) {
                                 return new Date(ms).toLocaleString([], {
                                   month: 'numeric',
@@ -457,91 +595,78 @@ export function AccountSwitcher({
                           };
 
                           return (
-                            <div className="account-item__usage-detail">
-                              <div
-                                className="account-item__usage-meta"
-                                style={{ marginBottom: '2px' }}
-                              >
-                                <span
-                                  className="account-item__usage-email"
-                                  title={usage.email}
-                                >
-                                  {usage.email}
-                                </span>
-                              </div>
-                              <div className="account-item__codex-rows">
-                                <div className="account-item__codex-row">
-                                  <div className="account-item__codex-row-header">
-                                    <span className="account-item__codex-row-label">
-                                      {codexUsage.primaryWindowLabel} 额度
-                                    </span>
-                                    <span className="account-item__codex-row-reset">
-                                      {formatResetTime(
-                                        codexUsage.primaryResetAt,
-                                        codexUsage.primaryWindowLabel,
-                                      )}{' '}
-                                      重置
-                                    </span>
-                                  </div>
-                                  <div className="account-item__codex-progress-container">
-                                    <div
-                                      className="account-item__codex-progress-bar account-item__codex-progress-bar--primary"
-                                      style={{
-                                        width: `${Math.min(100, codexUsage.primaryUsedPercent ?? 0)}%`,
-                                      }}
-                                    />
-                                  </div>
-                                  <div className="account-item__codex-row-status">
-                                    已用{' '}
-                                    {(
-                                      codexUsage.primaryUsedPercent ?? 0
-                                    ).toFixed(1)}
-                                    % (
-                                    {(codexUsage.primaryUsedPercent ?? 0) >= 100
-                                      ? '已受限'
-                                      : `剩余 ${(100 - (codexUsage.primaryUsedPercent ?? 0)).toFixed(1)}%`}
-                                    )
-                                  </div>
+                            <div className="account-item__codex-rows">
+                              <div className="account-item__codex-row">
+                                <div className="account-item__codex-row-header">
+                                  <span className="account-item__codex-row-label">
+                                    {codexUsage.primaryWindowLabel} 额度
+                                  </span>
+                                  <span className="account-item__codex-row-reset">
+                                    {formatResetTime(
+                                      codexUsage.primaryResetAt,
+                                      codexUsage.primaryWindowLabel,
+                                    )}{' '}
+                                    重置
+                                  </span>
                                 </div>
-                                {codexUsage.secondaryUsedPercent != null &&
-                                  codexUsage.secondaryResetAt != null &&
-                                  codexUsage.secondaryWindowLabel != null && (
-                                    <div className="account-item__codex-row">
-                                      <div className="account-item__codex-row-header">
-                                        <span className="account-item__codex-row-label">
-                                          {codexUsage.secondaryWindowLabel} 额度
-                                        </span>
-                                        <span className="account-item__codex-row-reset">
-                                          {formatResetTime(
-                                            codexUsage.secondaryResetAt,
-                                            codexUsage.secondaryWindowLabel,
-                                          )}{' '}
-                                          重置
-                                        </span>
-                                      </div>
-                                      <div className="account-item__codex-progress-container">
-                                        <div
-                                          className="account-item__codex-progress-bar account-item__codex-progress-bar--secondary"
-                                          style={{
-                                            width: `${Math.min(100, codexUsage.secondaryUsedPercent ?? 0)}%`,
-                                          }}
-                                        />
-                                      </div>
-                                      <div className="account-item__codex-row-status">
-                                        &nbsp;已用{' '}
-                                        {(
-                                          codexUsage.secondaryUsedPercent ?? 0
-                                        ).toFixed(1)}
-                                        % (
-                                        {(codexUsage.secondaryUsedPercent ??
-                                          0) >= 100
-                                          ? '已受限'
-                                          : `剩余 ${(100 - (codexUsage.secondaryUsedPercent ?? 0)).toFixed(1)}%`}
-                                        )
-                                      </div>
-                                    </div>
+                                <div className="account-item__codex-progress-container">
+                                  <div
+                                    className="account-item__codex-progress-bar account-item__codex-progress-bar--primary"
+                                    style={{
+                                      width: `${Math.min(100, codexUsage.primaryUsedPercent ?? 0)}%`,
+                                    }}
+                                  />
+                                </div>
+                                <div className="account-item__codex-row-status">
+                                  已用{' '}
+                                  {(codexUsage.primaryUsedPercent ?? 0).toFixed(
+                                    1,
                                   )}
+                                  % (
+                                  {(codexUsage.primaryUsedPercent ?? 0) >= 100
+                                    ? '已受限'
+                                    : `剩余 ${(100 - (codexUsage.primaryUsedPercent ?? 0)).toFixed(1)}%`}
+                                  )
+                                </div>
                               </div>
+                              {codexUsage.secondaryUsedPercent != null &&
+                                codexUsage.secondaryResetAt != null &&
+                                codexUsage.secondaryWindowLabel != null && (
+                                  <div className="account-item__codex-row">
+                                    <div className="account-item__codex-row-header">
+                                      <span className="account-item__codex-row-label">
+                                        {codexUsage.secondaryWindowLabel} 额度
+                                      </span>
+                                      <span className="account-item__codex-row-reset">
+                                        {formatResetTime(
+                                          codexUsage.secondaryResetAt,
+                                          codexUsage.secondaryWindowLabel,
+                                        )}{' '}
+                                        重置
+                                      </span>
+                                    </div>
+                                    <div className="account-item__codex-progress-container">
+                                      <div
+                                        className="account-item__codex-progress-bar account-item__codex-progress-bar--secondary"
+                                        style={{
+                                          width: `${Math.min(100, codexUsage.secondaryUsedPercent ?? 0)}%`,
+                                        }}
+                                      />
+                                    </div>
+                                    <div className="account-item__codex-row-status">
+                                      已用{' '}
+                                      {(
+                                        codexUsage.secondaryUsedPercent ?? 0
+                                      ).toFixed(1)}
+                                      % (
+                                      {(codexUsage.secondaryUsedPercent ?? 0) >=
+                                      100
+                                        ? '已受限'
+                                        : `剩余 ${(100 - (codexUsage.secondaryUsedPercent ?? 0)).toFixed(1)}%`}
+                                      )
+                                    </div>
+                                  </div>
+                                )}
                             </div>
                           );
                         }
@@ -557,56 +682,121 @@ export function AccountSwitcher({
                     )}
                   </div>
                 )}
-                <span className="account-item__time">
-                  备份时间:{' '}
-                  {new Date(acct.lastModified * 1000).toLocaleString()}
-                </span>
+
+                <div className="account-item__footer">
+                  <div className="account-item__footer-left">
+                    {accountEmail && (
+                      <span
+                        className="account-item__usage-email"
+                        title={accountEmail}
+                      >
+                        {accountEmail}
+                      </span>
+                    )}
+                  </div>
+                  <span className="account-item__time">
+                    备份时间:{' '}
+                    {new Date(acct.lastModified * 1000).toLocaleString()}
+                  </span>
+                </div>
               </div>
-              <div className="account-item__actions">
-                {(editorId === 'cursor' || editorId === 'codex') && (
-                  <Button
-                    type="button"
-                    className="account-item__btn"
-                    disabled={
-                      saving ||
-                      loading ||
-                      actionInProgress !== null ||
-                      Boolean(usageLoading[acct.name])
-                    }
-                    loading={Boolean(usageLoading[acct.name])}
-                    onClick={() => handleRefresh(acct)}
-                  >
-                    刷新
-                  </Button>
-                )}
-                <Button
-                  type="button"
-                  className="account-item__btn"
-                  disabled={
-                    saving ||
-                    loading ||
-                    actionInProgress !== null ||
-                    acct.isActive
-                  }
-                  loading={actionInProgress === acct.name}
-                  onClick={() => handleSwitch(acct.name)}
-                >
-                  切换
-                </Button>
-                <Button
-                  type="button"
-                  className="account-item__btn"
-                  danger
-                  disabled={saving || loading || actionInProgress !== null}
-                  onClick={() => handleDelete(acct.name)}
-                >
-                  删除
-                </Button>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
+
+      {isPrepareModalOpen && (
+        <Modal
+          isOpen={isPrepareModalOpen}
+          onCancel={() => {
+            if (!preparing) {
+              setIsPrepareModalOpen(false);
+            }
+          }}
+          title={`准备登录新的 ${editorName} 账号`}
+          width={520}
+          footer={
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: '8px',
+              }}
+            >
+              <Button
+                type="button"
+                disabled={preparing}
+                onClick={() => setIsPrepareModalOpen(false)}
+              >
+                取消
+              </Button>
+              <Button
+                type="button"
+                disabled={preparing}
+                loading={preparing}
+                onClick={handlePrepareNewAccount}
+              >
+                确认清理并准备登录
+              </Button>
+            </div>
+          }
+        >
+          <div style={{ padding: '8px 0' }}>
+            <p
+              style={{
+                margin: '0 0 12px 0',
+                fontSize: '0.9rem',
+                color: 'var(--text-main)',
+                lineHeight: 1.5,
+              }}
+            >
+              此操作将在<strong>本地静默清理</strong>
+              当前编辑器的登录凭据与缓存，使 {editorName} 恢复为
+              <strong>未登录状态</strong>。
+            </p>
+            <div
+              style={{
+                background: 'var(--bg-tag, #f5f5f5)',
+                padding: '12px 14px',
+                borderRadius: '8px',
+                marginBottom: '14px',
+                fontSize: '0.85rem',
+                lineHeight: 1.6,
+                color: 'var(--text-soft)',
+              }}
+            >
+              <strong>💡 操作须知：</strong>
+              <ol style={{ margin: '6px 0 0 0', paddingLeft: '18px' }}>
+                <li>
+                  请确保已<strong>完全退出</strong> {editorName}（按{' '}
+                  <code>Cmd + Q</code> 完全关闭）。
+                </li>
+                <li>
+                  本操作<strong>绝不会</strong>
+                  向服务端发送注销请求，所有已备份账号在服务端的有效性
+                  <strong>完好保留</strong>。
+                </li>
+                <li>
+                  {activeAccount ? (
+                    <>
+                      当前已激活的账号 [<strong>{activeAccount.name}</strong>]
+                      会在清理前自动将最新凭据写回备份。
+                    </>
+                  ) : (
+                    <span style={{ color: 'var(--error-color, #ff4d4f)' }}>
+                      提示：若当前存在未备份的登录凭据，清理后将丢失，建议先在上方输入备注名备份。
+                    </span>
+                  )}
+                </li>
+                <li>
+                  清理完成后，重新启动 {editorName}{' '}
+                  登录您的新账号，随后返回此处输入备注并点击“备份当前登录态”。
+                </li>
+              </ol>
+            </div>
+          </div>
+        </Modal>
+      )}
     </AccountSwitcherWrapper>
   );
 }

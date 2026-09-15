@@ -23,7 +23,7 @@ use system::{
 use account::{
     load_editor_accounts, save_current_editor_account,
     switch_editor_account, delete_editor_account,
-    fetch_editor_account_usage,
+    fetch_editor_account_usage, prepare_new_account_login,
 };
 
 fn main() {
@@ -54,6 +54,7 @@ fn main() {
             save_current_editor_account,
             switch_editor_account,
             delete_editor_account,
+            prepare_new_account_login,
             fetch_editor_account_usage,
             export_configuration,
             import_configuration

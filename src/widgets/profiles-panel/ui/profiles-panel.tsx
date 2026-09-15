@@ -1,18 +1,24 @@
-import { useState } from "react";
-import { Message } from "@xinghunm/compass-ui";
-import { useAiComposeStore, type EditorId, EditorToggleIcon } from "../../../shared";
-import { AccountSwitcher } from "../../../features/manage-account";
-import { ProfilesPanelRoot } from "./profiles-panel.styles";
+import { useState } from 'react';
+import { Message } from '@xinghunm/compass-ui';
+import {
+  useAiComposeStore,
+  type EditorId,
+  EditorToggleIcon,
+} from '../../../shared';
+import { AccountSwitcher } from '../../../features/manage-account';
+import { ProfilesPanelRoot } from './profiles-panel.styles';
 
 const supportedEditors: { id: EditorId; label: string }[] = [
-  { id: "codex", label: "Codex" },
-  { id: "cursor", label: "Cursor" },
+  { id: 'codex', label: 'Codex' },
+  { id: 'cursor', label: 'Cursor' },
+  { id: 'grok', label: 'Grok' },
 ];
 
 const editorMeta: Record<EditorId, { title: string }> = {
-  antigravity: { title: "Antigravity" },
-  codex: { title: "Codex" },
-  cursor: { title: "Cursor" },
+  antigravity: { title: 'Antigravity' },
+  codex: { title: 'Codex' },
+  cursor: { title: 'Cursor' },
+  grok: { title: 'Grok' },
 };
 
 interface ProfilesPanelProps {
@@ -21,11 +27,11 @@ interface ProfilesPanelProps {
 
 export function ProfilesPanel({ messageApi }: ProfilesPanelProps) {
   const { activeEditorId, selectEditor } = useAiComposeStore();
-  const [activeTab, setActiveTab] = useState("accounts");
+  const [activeTab, setActiveTab] = useState('accounts');
 
   // 若当前是 antigravity，默认展示 codex
   const displayEditorId: EditorId =
-    activeEditorId === "antigravity" ? "codex" : activeEditorId;
+    activeEditorId === 'antigravity' ? 'codex' : activeEditorId;
 
   return (
     <ProfilesPanelRoot>
@@ -33,8 +39,8 @@ export function ProfilesPanel({ messageApi }: ProfilesPanelProps) {
         <aside className="profiles-sidebar" aria-label="Profiles 子导航">
           <button
             type="button"
-            className={`sidebar-item${activeTab === "accounts" ? " sidebar-item--active" : ""}`}
-            onClick={() => setActiveTab("accounts")}
+            className={`sidebar-item${activeTab === 'accounts' ? ' sidebar-item--active' : ''}`}
+            onClick={() => setActiveTab('accounts')}
           >
             账号管理
           </button>
@@ -52,7 +58,7 @@ export function ProfilesPanel({ messageApi }: ProfilesPanelProps) {
                 role="tab"
                 type="button"
                 aria-selected={displayEditorId === id}
-                className={`content-editor-tab${displayEditorId === id ? " content-editor-tab--active" : ""}`}
+                className={`content-editor-tab${displayEditorId === id ? ' content-editor-tab--active' : ''}`}
                 onClick={() => selectEditor(id)}
               >
                 <span className="content-editor-tab__icon">
@@ -62,7 +68,7 @@ export function ProfilesPanel({ messageApi }: ProfilesPanelProps) {
               </button>
             ))}
           </div>
-          {activeTab === "accounts" && (
+          {activeTab === 'accounts' && (
             <AccountSwitcher
               editorId={displayEditorId}
               editorName={editorMeta[displayEditorId].title}

@@ -1,4 +1,4 @@
-import styled from "@emotion/styled";
+import styled from '@emotion/styled';
 
 export const ProfilesPanelRoot = styled.div`
   display: flex;
@@ -113,8 +113,7 @@ export const ProfilesPanelRoot = styled.div`
       flex: 1;
       overflow-y: auto;
       min-height: 0;
-      padding: 20px 24px;
+      padding: 16px 20px;
     }
   }
 `;
-
